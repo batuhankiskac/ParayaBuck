@@ -924,7 +924,7 @@ def test_terminal_fill_invalidates_cached_account_snapshot(tmp_path) -> None:
         maximum_account_age_for_entry_seconds=30.0,
     )
     runtime._persist_risk_state = lambda *_args, **_kwargs: None
-    runtime._advance_portfolio_rebalance = lambda _market: None
+    runtime._advance_portfolio_rebalance = lambda _market, **_kwargs: None
     update = TradeUpdate(
         event="fill",
         client_order_id="buy-1",

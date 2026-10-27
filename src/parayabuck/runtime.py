@@ -27,7 +27,7 @@ from parayabuck.core.models import (
     PositionSnapshot,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
-from parayabuck.data.adjustment import adequate_coverage, covers_session
+from parayabuck.data.adjustment import adequate_coverage, covers_session, split_continuity_breach
 from parayabuck.data.alpaca import BatchOutcome
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
@@ -67,6 +67,7 @@ from parayabuck.markets.timeframes import (
     NEW_YORK,
     bars_to_calendar_days,
     is_session_open,
+    provider_day_bar_is_final,
     session_close_utc,
 )
 from parayabuck.monitoring import alerts
@@ -2962,12 +2963,16 @@ class EngineRuntime:
         market: Market,
         *,
         account: AccountSnapshot | None = None,
+        cached_basis_only: bool = False,
     ) -> Any:
         """Advance the persisted two-phase rebalance for one market.
 
         Called from trade-update callbacks, the bar decision loop and engine
         startup. A blocked rebalance (ambiguous SELL outcome) halts market
-        entries until a verified reconciliation clears it.
+        entries until a verified reconciliation clears it. ``cached_basis_only``
+        (the trade-update path) evaluates the equity basis from cached state
+        and never calls the provider; the signal monitor resumes the deferred
+        BUY once the basis verifies again.
         """
         # A halt must not be the one moment the engine INCREASES risk: the
         # trade-update path still runs the rebalance's terminal bookkeeping
@@ -2982,10 +2987,17 @@ class EngineRuntime:
         # not yet confirmed) latches entries on the decision and catch-up
         # paths; the same latch gates the deferred BUY here so the fill-driven,
         # startup and reset resumes cannot size it off an unverified basis.
-        # Checked last: its verification may hit the provider (deduplicated).
-        submit_buys = self.trading_state(market) is TradingState.ACTIVE and (
-            market != Market.EQUITY or self._equity_signal_basis_latch() is None
-        )
+        # Checked last. The trade-update path passes ``cached_basis_only``: a
+        # synchronous provider call there would delay every serial fill
+        # (T2-7-1), so it reads the cached verifier state only.
+        basis_latch = self._equity_signal_basis_cached_latch if cached_basis_only else self._equity_signal_basis_latch
+        active = self.trading_state(market) is TradingState.ACTIVE
+        basis_held = active and market == Market.EQUITY and basis_latch() is not None
+        if basis_held and cached_basis_only:
+            # The fill path deferred a BUY on the basis: the signal monitor
+            # resumes it once the basis verifies (see _signal_adjustment_monitor_pass).
+            self._basis_buy_deferred = True
+        submit_buys = active and not basis_held
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
                 continue
@@ -3269,7 +3281,7 @@ class EngineRuntime:
             # waiting for the next bar. A legacy crypto order row has no
             # runtime to advance.
             if not is_crypto(update.symbol):
-                await asyncio.to_thread(self._advance_portfolio_rebalance, Market.EQUITY)
+                await asyncio.to_thread(self._advance_portfolio_rebalance, Market.EQUITY, cached_basis_only=True)
             return
         # Never adopt orders from the retired signal engine. Broker/local
         # reconciliation reports them as unmanaged drift.
@@ -4820,8 +4832,8 @@ class EngineRuntime:
 
         Any inadequate symbol fails the WHOLE check closed (no partial
         adoption, no cross-symbol watermark). Returns True only when every
-        required symbol is provider-verified; callers must then block new
-        equity entries on False while risk-reducing exits keep flowing.
+        required symbol is provider-verified; callers must then hold the
+        whole equity book on False, exits included (T2-8-3).
 
         Hardening (per-symbol trailing-window, watermark, retries, dedup):
         * Per-symbol trailing window — ``required_oldest_by_symbol`` is
@@ -4829,6 +4841,13 @@ class EngineRuntime:
           or ``series[0]`` for new listings with short history, or a
           calendar fallback), so a newly listed 5-day symbol does not inherit
           a 300-bar global requirement and does not fail verification.
+        * Final-only coverage — a partial provider bar (a session still inside
+          the SIP embargo) is neither coverage nor watermark: the watermark
+          names the newest FINAL bar, so a decision on a later session forces
+          a fresh verification (T2-8-2).
+        * Split continuity — a provider newest close that sits at a standard
+          split ratio from the stored tail, while every prior session still
+          carries the pre-split basis, fails closed (T2-8-1).
         * Verified-through watermark — per-symbol ``verified_through_by_symbol``
           is monotonic (``max`` timestamp, updated only on adequate coverage)
           and restored only via ``adopt_authoritative_signal_history``; a
@@ -4968,12 +4987,22 @@ class EngineRuntime:
         # A provider window with a missing session or a dropped row is never
         # adopted, even when the stored series is empty and so cannot show the
         # hole: warmup refused to seed such a symbol, and so must the verifier.
+        # Only FINAL provider bars are authority. A partial newest session
+        # (still inside the SIP embargo) is answered to callers but never
+        # adopted, so it must not count as coverage or as the watermark
+        # either: a watermark on it would let a decision run on the stream
+        # bar for a session whose final close was never adopted (T2-8-2).
+        embargo = self._signal_cross_check_coordinator().sip_embargo
+        final = {
+            symbol: [bar for bar in adjusted.get(symbol, ()) if provider_day_bar_is_final(bar.timestamp, end, embargo)]
+            for symbol in symbols
+        }
         inadequate = [
             symbol
             for symbol in symbols
             if symbol in outcome.incomplete
             or not adequate_coverage(
-                adjusted.get(symbol, ()),
+                final.get(symbol, ()),
                 required_oldest=required_oldest_by_symbol.get(symbol, fallback_oldest),
                 required_newest=required_through,
                 stored=_stored_signal_series(runtimes, symbol),
@@ -4982,9 +5011,22 @@ class EngineRuntime:
         if inadequate:
             self._record_signal_adjustment_failure("provider coverage incomplete for symbols: " + ",".join(inadequate))
             return False
-        verified_through_by_symbol = {
-            symbol: max(bar.timestamp for bar in adjusted.get(symbol, ())) for symbol in symbols
-        }
+        # A provider window whose newest close sits at a standard split ratio
+        # from the stored tail, while its prior sessions still carry the
+        # pre-split basis, is a split the provider has not rebased yet.
+        # Adopting it would pair post-split closes with pre-split history.
+        discontinuous = [
+            symbol
+            for symbol in symbols
+            if split_continuity_breach(final.get(symbol, ()), _stored_signal_series(runtimes, symbol))
+        ]
+        if discontinuous:
+            self._record_signal_adjustment_failure(
+                "split continuity unverified (newest provider close is a split ratio from the stored tail; "
+                "prior sessions unrebased) for symbols: " + ",".join(discontinuous)
+            )
+            return False
+        verified_through_by_symbol = {symbol: max(bar.timestamp for bar in final[symbol]) for symbol in symbols}
         try:
             changed_total = 0
             # ``adopt_authoritative_signal_history`` REPLACES the per-symbol
@@ -4996,7 +5038,7 @@ class EngineRuntime:
             with getattr(self, "_portfolio_lock", threading.RLock()):
                 for runtime in runtimes:
                     changed_total += runtime.adopt_authoritative_signal_history(
-                        {symbol: adjusted.get(symbol, []) for symbol in runtime.symbols},
+                        {symbol: final.get(symbol, []) for symbol in runtime.symbols},
                         verified_through_by_symbol,
                     )
         except Exception as exc:
@@ -5030,6 +5072,10 @@ class EngineRuntime:
             retry_window=timedelta(minutes=config.retry_window_minutes),
             retry_interval=timedelta(seconds=config.retry_interval_seconds),
             close_divergence_bps=config.close_divergence_bps,
+            session_deadline=lambda session: self._decision_session_close(session) + self._decision_retry_settings()[1],
+            rebalance_band=getattr(
+                getattr(getattr(self, "app_config", None), "execution", None), "rebalance_band_pct", None
+            ),
         )
         self._signal_cross_check = coordinator
         return coordinator
@@ -5096,6 +5142,8 @@ class EngineRuntime:
                 fields["reason"] = outcome.reason
             elif outcome.close_divergence:
                 category = "close_divergence"
+            elif outcome.weight_divergence:
+                category = "weight_divergence"
             else:
                 log.info(
                     "Signal cross-check %s: sources agree (close gaps bps %s)",
@@ -5104,6 +5152,7 @@ class EngineRuntime:
                 )
                 return
             fields["close_divergence"] = outcome.close_divergence
+            fields["weight_gap"] = outcome.weight_gap
             log.warning("%s", outcome.summary())
             alerts.emit("signal_source_mismatch", message=outcome.summary(), category=category, **fields)
         except Exception:
@@ -5180,9 +5229,11 @@ class EngineRuntime:
         invariant: a new-equity-entry decision may only pass when
         ``signal_verified_through_by_symbol[s]`` covers the decision
         timestamp's New York session for EVERY required equity signal
-        symbol. Unverifiable basis FAILS CLOSED for entries; risk-reducing
-        exits keep flowing because callers only cap targets at current
-        weights.
+        symbol. An unverifiable basis FAILS CLOSED: the latch holds the whole
+        equity book, risk-reducing exits included, until the basis verifies
+        again (runtime_service holds every target, because a pre-split close
+        looks like a crash and a SELL on it is as wrong as a BUY; owner
+        decision 8.3).
 
         Alerts once per transition into the latch (D7-3); the latch itself is
         re-evaluated on every call.
@@ -5197,12 +5248,25 @@ class EngineRuntime:
             alerts.emit(
                 "risk_incident",
                 message=(
-                    "Equity entries latched: signal basis unverified; new entries wait, "
-                    "risk-reducing exits keep flowing"
+                    "Equity book held: signal basis unverified; new entries and risk-reducing "
+                    "exits both wait until the basis verifies again"
                 ),
                 reason=latch,
             )
         return latch
+
+    def _equity_signal_basis_cached_latch(self) -> str | None:
+        """Latch reason from the CACHED verifier state only; never calls the provider.
+
+        For the trade-update path, which must not block on a provider call
+        (T2-7-1). A stale or unverified cache answers with the latch reason,
+        so the deferred BUY waits for the signal monitor to verify again.
+        """
+        if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
+            return None
+        if self._equity_signal_basis_verified():
+            return None
+        return "signal_adjustment_unverified"
 
     def _equity_signal_basis_check(self, decision_timestamp: datetime | None = None) -> str | None:
         """The unlatched evaluation behind ``_equity_signal_basis_latch``."""
@@ -5219,7 +5283,8 @@ class EngineRuntime:
                 return "signal_adjustment_unverified"
         except Exception as exc:
             # An unexpected verifier failure must not crash the decision
-            # thread: entries fail closed, risk-reducing exits keep flowing.
+            # thread: the equity book is held (entries and exits) until the
+            # basis verifies again.
             log.warning("Equity signal-basis verification raised; entries fail closed: %s", exc, exc_info=True)
             return "signal_adjustment_unverified"
         return None
@@ -5249,7 +5314,15 @@ class EngineRuntime:
             # history until it completes (startup-race guard).
             return
         try:
-            self.verify_equity_signal_basis()
+            if self.verify_equity_signal_basis() and getattr(self, "_basis_buy_deferred", False):
+                # The trade-update path only reads the cache (T2-7-1), so a BUY
+                # it deferred on the basis resumes here, off the fill path. Its
+                # own failure must not stop the monitor; the flag then stays set.
+                try:
+                    self._advance_portfolio_rebalance(Market.EQUITY)
+                    self._basis_buy_deferred = False
+                except Exception:
+                    log.warning("Deferred equity BUY resume after basis verification failed", exc_info=True)
             self._check_market_data_feed()
         except Exception as exc:  # defensive: never kill the monitor
             worker.last_error = str(exc)
@@ -5281,7 +5354,18 @@ class EngineRuntime:
             # changed size during iteration" (CC-10); the copy is taken under
             # the state lock and is a snapshot for the rest of this pass.
             histories = [(runtime, dict(runtime.history)) for runtime in runtimes]
+            # A managed equity pin outside the strategy universe is only held
+            # for its exit. A pin with NO provider history can never become
+            # ready, so it must not pin the engine in warming_up or block the
+            # safety-lock reset (T2-5-2). A pin that has history is still gated.
+            universe = getattr(getattr(getattr(self, "app_config", None), "universe", None), "equity", None)
+            references = set(getattr(universe, "symbols", ()) or ())
+            pin_only = set(getattr(self, "_managed_pin_symbols", ()) or ()) - references
+            exempt = {symbol for symbol in pin_only if not any(symbol in history for _runtime, history in histories)}
+            self._not_ready_symbols.difference_update(exempt)
             for symbol in required_symbols:
+                if symbol in exempt:
+                    continue
                 relevant = [(runtime, history) for runtime, history in histories if symbol in history]
                 ready = bool(relevant)
                 for runtime, history in relevant:
@@ -5977,7 +6061,10 @@ class EngineRuntime:
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
         if self._not_ready_symbols:
-            raise ValueError("All symbol data must be ready before resetting the safety lock")
+            raise ValueError(
+                "All symbol data must be ready before resetting the safety lock (not ready: "
+                f"{','.join(sorted(self._not_ready_symbols))})"
+            )
         with self._reconcile_lock:
             try:
                 report = ReconciliationReport.from_result(self.broker.reconcile())

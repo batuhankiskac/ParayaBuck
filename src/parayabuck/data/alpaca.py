@@ -46,10 +46,12 @@ MIN_CACHE_COVERAGE_PCT = 0.60
 # rows are split into multiple time-bounded requests.
 _MAX_ROWS_PER_REQUEST = 10_000
 
-# A configured SIP feed that the account is not entitled to answers 401/403.
-# Anything else — a DNS failure, a timeout, a 5xx — is a transport error and
-# must NOT downgrade history for the life of the process.
-_ENTITLEMENT_STATUS_CODES = frozenset({401, 403})
+# A configured SIP feed that the account is not entitled to answers 403. A
+# 401 means the key itself was rejected: a credential failure is not a missing
+# entitlement and must surface, not downgrade history to IEX. Anything else —
+# a DNS failure, a timeout, a 5xx — is a transport error and must NOT downgrade
+# history for the life of the process either.
+_ENTITLEMENT_STATUS_CODES = frozenset({403})
 
 # Explicit entitlement sentences in the RESPONSE BODY only. Bare words like
 # "sip" are deliberately absent: a transport error's message embeds the
@@ -573,7 +575,12 @@ class AlpacaHistoricalData:
         outcome = outcome if outcome is not None else BatchOutcome()
         self._reprobe_sip_if_due()
         end_at = self._clamp_recent_end(end_at)
-        feed_name = self._effective_stock_feed_name
+        # One read of the feed for this request. The cache label, the cache
+        # write and the request must name the same feed: a concurrent SIP ->
+        # IEX downgrade between a label read and the request would store IEX
+        # rows under 'sip', and replace_window would delete the real SIP rows.
+        request_feed = self._stock_feed
+        feed_name = str(request_feed).lower().split(".")[-1]
         cached = {
             symbol: self._cached_window(self._cache, symbol, timeframe, feed_name, adjustment, start_at, end_at)
             for symbol in symbols
@@ -610,7 +617,7 @@ class AlpacaHistoricalData:
                     start=start_at,
                     end=end_at,
                     limit=_MAX_ROWS_PER_REQUEST,
-                    feed=self._stock_feed,
+                    feed=request_feed,
                     adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
                 )
             )

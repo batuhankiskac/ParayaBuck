@@ -2183,6 +2183,8 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
     # A latched decision is risk-reducing only: the cap drops the MSFT entry entirely.
     after = runtime.process_closed_bars(next_batch, entry_latch="daily_loss_limit")
     assert after.status != "rebalance_in_progress"
+    # Q2-1-4: the all() checks below pass vacuously on an empty result.
+    assert after.orders
     assert all(order.side == PortfolioOrderSide.SELL for order in after.orders)
     assert all(order.symbol != "MSFT" for order in after.orders)
 

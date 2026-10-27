@@ -1204,11 +1204,11 @@ class PortfolioStateRepository:
         cash_headroom: float,
         admitted_batch_notional: float,
     ) -> None:
-        """Mirror final BUY headroom without affecting the order authority.
+        """Mirror the BUY headroom observed at admission without affecting the order authority.
 
         One observation per (decision, order). The id is derived from that pair
         and the insert ignores duplicates, so a retried or repeated write keeps
-        the first observation instead of adding a second row for the order.
+        the first observation and never replaces it with a later one (P7-5).
         """
         observed_at = datetime.now(UTC).isoformat()
         with self.store.lock, self.store.connection:

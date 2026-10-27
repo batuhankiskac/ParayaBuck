@@ -320,7 +320,7 @@ def test_reconcile_scope_accepts_empty_positions_while_owning(tmp_path: Path) ->
         broker.account()  # the scope ends with the reconcile call
 
 
-def test_reconcile_still_clears_stale_ownership_on_flat_broker(tmp_path: Path) -> None:
+def test_reconcile_refuses_stale_ownership_clear_on_flat_broker(tmp_path: Path) -> None:
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     session = repo.begin_session("acct", "digest", "paper")
     assert _book(repo, session, client_order_id="b1", side="buy", quantity=0.5, price=100, fee=0, at=_at(1))
@@ -341,8 +341,8 @@ def test_reconcile_still_clears_stale_ownership_on_flat_broker(tmp_path: Path) -
     with pytest.raises(EmptyPositionsReadError):
         broker.account()
 
-    broker.reconcile()
+    categories = broker.reconcile()
 
-    assert repo.owned_quantities("acct") == {}
-    with flat_broker_reconcile_scope():
-        assert broker.account().positions == ()
+    # No local exit explains the flat broker: the 0.5 AAPL stays owned and drifts.
+    assert repo.owned_quantities("acct") == {"AAPL": 0.5}
+    assert categories["LOCAL_STALE"] == ["AAPL"]

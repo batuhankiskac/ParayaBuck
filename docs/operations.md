@@ -31,7 +31,9 @@ deliberately held weight as a failed order (an exit to zero still alarms).
 Exits, entries, up-resizes and any reduction the risk layer produced are never
 deferred, and an unavailable NYSE calendar falls back to the ordinary rule. A fresh deployment makes one
 startup catch-up decision on the latest completed bars; a restart never
-duplicates a decision.
+duplicates a decision. A first start or a restart that missed a close during
+regular market hours sends that catch-up as a DAY market order, which fills
+intraday rather than at the next open (see `docs/live_readiness_v1.md`, Timing).
 
 
 ## One runner per account
@@ -490,7 +492,7 @@ decision.
 | Path | What | If lost |
 |---|---|---|
 | `data/runtime/parayabuck.sqlite3` | Decisions, orders, fills, rebalance phases, risk state, safety incidents | **Critical** — restore from backup; broker positions survive but decision lineage does not |
-| `data/runtime/paper_equity_peak.json` | Drawdown peak + epoch | Missing → bootstraps at 0; corrupt → fail-closed |
+| `data/runtime/paper_equity_peak.json` | Drawdown peak + epoch | Missing → bootstraps from the persisted high-water when one exists, otherwise from the first observed equity (alert `peak_bootstrap`); corrupt → fail-closed |
 | `config/settings.yaml`, `.env` | Config (tracked in git), secrets | Restore from git / your secret store |
 | `data/runtime/observability.sqlite3`, `health_snapshot.json`, `data/cache/` | Journal, snapshot, warmup bars | Regenerated |
 | `data/backups/` | Backups | — |
@@ -539,6 +541,9 @@ sudo -u "$PB_USER" cp -a data/runtime/parayabuck.sqlite3* "$EVIDENCE"/   # keep 
 sudo -u "$PB_USER" .venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
 sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
 sudo -u "$PB_USER" rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
+# Peak sidecars from the same set, when it has them (<file>.paper_equity_peak.json,
+# <file>.live_equity_peak.json). Without them the peak bootstraps from the first observed equity.
+sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.paper_equity_peak.json data/runtime/paper_equity_peak.json
 sudo systemctl start parayabuck
 sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
@@ -646,6 +651,16 @@ actionable incident for the rest:
   foreign sell) → ownership is reduced to the broker count and an audited
   `foreign_sell_reduction` adjustment is written. Adopting a smaller count can
   never over-claim a share.
+- A standard reverse ratio whose broker average entry price neither
+  corroborates a split nor stays at our own cost (for example a cash-in-lieu
+  fraction removed from the broker cost) is **not** booked as a sale → the
+  runtime halts.
+- A **flat broker** with a residue of our own shares and no open exit at the
+  broker: a residue of at most 1e-6 shares (dust) is cleared. A larger residue
+  is cleared only when a local SELL order submitted after the latest BUY
+  explains it. Otherwise nothing is cleared, the symbol stays in drift, the
+  runtime halts and the alert `ownership_stale_uncorroborated` names the
+  rebase command below.
 - Anything else (a non-standard ratio, a share count with an unchanged cost
   basis that would mean claiming shares we never bought) → the runtime halts.
   Verify the real position on the Alpaca dashboard and adopt it explicitly:

@@ -231,7 +231,9 @@ def load_csv_corporate_actions(path: str | Path) -> list[CorporateAction]:
     action file and the bars are one snapshot (no split in the file that the
     bar download predates). Stock dividends are not applied, and the
     cash_dividends row v5 repeats for each of them (rate = share ratio) is
-    dropped. The legacy dividend-only schema carries no split or
+    dropped. The live runtime halts on a stock dividend (fail-closed) instead
+    of following it, so a backtest that spans one is not a live-parity result.
+    The legacy dividend-only schema carries no split or
     stock-dividend rows and is passed through unadjusted.
     """
     actions: list[CorporateAction] = []

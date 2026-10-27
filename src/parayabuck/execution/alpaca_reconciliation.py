@@ -20,7 +20,9 @@ Responsibility:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import isfinite
@@ -83,6 +85,26 @@ COST_BASIS_DRIFT_KEY = "COST_BASIS_DRIFT"
 # never be canceled under it. Younger rows keep failing closed as drift.
 UNKNOWN_ORDER_CANCEL_AGE_SECONDS = 600.0
 _UNKNOWN_ORDER_CANCELABLE_STATUSES = frozenset({"submitting", "reconciliation_required"})
+
+# Set only by the startup reconcile (see ``startup_reconcile_scope``). At
+# startup no submit of this process is in flight, so a young unknown row is
+# a crash leftover and the age gate would only wedge the engine.
+_STARTUP_RECONCILE: ContextVar[bool] = ContextVar("parayabuck_startup_reconcile", default=False)
+
+
+@contextmanager
+def startup_reconcile_scope() -> Iterator[None]:
+    """Let the startup reconcile close young unknown portfolio orders.
+
+    Only for the reconcile that runs before the decision and trade-update
+    threads start; the periodic reconcile keeps the age gate.
+    """
+    token = _STARTUP_RECONCILE.set(True)
+    try:
+        yield
+    finally:
+        _STARTUP_RECONCILE.reset(token)
+
 
 RECONCILIATION_CATEGORIES: tuple[str, ...] = (
     "MATCH",
@@ -335,7 +357,7 @@ class ReconciliationService:
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=UTC)
         age = (datetime.now(UTC) - updated_at).total_seconds()
-        if age < UNKNOWN_ORDER_CANCEL_AGE_SECONDS:
+        if age < UNKNOWN_ORDER_CANCEL_AGE_SECONDS and not _STARTUP_RECONCILE.get():
             return
         callback(
             client_id,

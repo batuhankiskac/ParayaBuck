@@ -716,11 +716,11 @@ def test_start_route_maps_refusals_to_400_and_other_failures_to_a_generic_500(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _Refusing:
-        def start_engine(self) -> None:
+        def start_engine(self, **_kwargs: object) -> None:
             raise ValueError("Engine is already running")
 
     class _Crashing:
-        def start_engine(self) -> None:
+        def start_engine(self, **_kwargs: object) -> None:
             raise RuntimeError("secret-leak-marker from the SDK")
 
     manager: Any = _Refusing()

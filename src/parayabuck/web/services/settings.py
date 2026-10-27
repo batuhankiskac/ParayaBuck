@@ -172,7 +172,7 @@ async def _best_effort_restart(manager: Any, reason: str) -> None:
     """
     manager.end_settings_write()
     try:
-        await asyncio.to_thread(manager.start_engine)
+        await asyncio.to_thread(manager.start_engine, settings_restart=True)
     except Exception as exc:
         log.warning("%s: best-effort engine restart did not succeed: %s", reason, exc)
 
@@ -396,6 +396,11 @@ class SettingsService:
             manager.begin_settings_write()
             was_stopped_for_restart = False
             try:
+                # The runtime check above ran before the window opened, so a start
+                # in that gap would write config under a running engine. Starts are
+                # refused from here on: re-check, and refuse if the state moved.
+                if await asyncio.to_thread(manager.has_active_runtime) != active_runtime:
+                    raise ValueError("Motor durumu kayıt sırasında değişti; ayarları tekrar kaydedin.")
                 if restart_engine:
                     await asyncio.to_thread(manager.stop_engine)
                     was_stopped_for_restart = True
@@ -414,8 +419,8 @@ class SettingsService:
                     if latest3 != payload.expected_config_digest:
                         raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
-                try:
-                    await asyncio.to_thread(
+                write = asyncio.ensure_future(
+                    asyncio.to_thread(
                         _write_settings_files,
                         manager,
                         cfg_raw,
@@ -423,6 +428,17 @@ class SettingsService:
                         secret_key,
                         has_credential_change,
                     )
+                )
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    # The worker thread cannot be stopped by a cancel. Wait for it
+                    # so the window closes only after the files are final, and
+                    # put a stopped engine back as the failure path does.
+                    await asyncio.wait({write})
+                    if was_stopped_for_restart:
+                        await _best_effort_restart(manager, "Settings save cancelled")
+                    raise
                 except Exception as exc:
                     # Never strand a stopped engine: put it back, then report the
                     # original failure.
@@ -441,7 +457,7 @@ class SettingsService:
             restart_error: str | None = None
             if restart_engine:
                 try:
-                    await asyncio.to_thread(manager.start_engine)
+                    await asyncio.to_thread(manager.start_engine, settings_restart=True)
                 except Exception as exc:
                     restart_error = str(exc)
                     log.warning("Settings saved, but automatic engine restart failed: %s", exc)

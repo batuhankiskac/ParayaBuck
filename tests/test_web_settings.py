@@ -45,13 +45,13 @@ class _CountingEngineManager(EngineManager):
         self.stop_calls += 1
         self.engine_state = "stopped"
 
-    def start_engine(self) -> None:
+    def start_engine(self, **_kwargs: object) -> None:
         self.start_calls += 1
         self.engine_state = "running"
 
 
 class _RestartFailureManagerStub(_CountingEngineManager):
-    def start_engine(self) -> None:
+    def start_engine(self, **_kwargs: object) -> None:
         self.start_calls += 1
         self.engine_state = "error"
         raise TimeoutError("Alpaca timed out")
@@ -70,7 +70,7 @@ def test_control_token_and_index_are_not_cached() -> None:
 
 
 class _RestartFailureManagerStub(_CountingEngineManager):
-    def start_engine(self) -> None:
+    def start_engine(self, **_kwargs: object) -> None:
         self.start_calls += 1
         self.engine_state = "error"
         raise TimeoutError("Alpaca timed out")
@@ -368,7 +368,7 @@ def test_application_lifespan_auto_starts_paper_engine(monkeypatch: Any) -> None
         async def auto_start_engine(self) -> None:
             self.start_engine()
 
-        def start_engine(self) -> None:
+        def start_engine(self, **_kwargs: object) -> None:
             self.start_calls += 1
 
         def stop_engine(self) -> None:

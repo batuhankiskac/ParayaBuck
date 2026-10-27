@@ -3227,7 +3227,9 @@ class PortfolioRuntime:
             self._hold_unsettled_sell_leg(decision_id, symbol, "replan_sell_dropped")
         if not valid:
             return self._close_unsettled_sell_legs(decision_id, dropped)
-        submitted = self._submit_orders(valid, rules, submit_gate=submit_gate)
+        # The phase flips before the POST: a crash after the SELL is sent but
+        # before the flip would let a restart at BUY_READY send the BUYs while
+        # the SELL is still unsettled.
         self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_SELL_PENDING)
         _emit_rebalance_phase_safe(
             decision_id,
@@ -3237,6 +3239,7 @@ class PortfolioRuntime:
             account_id=self.account_id,
             session_id=self.session_id,
         )
+        submitted = self._submit_orders(valid, rules, submit_gate=submit_gate)
         for order in valid:
             log.warning(
                 "Re-planned SELL submitted; BUYs held until it settles: market=%s decision=%s client_order_id=%s qty=%s",

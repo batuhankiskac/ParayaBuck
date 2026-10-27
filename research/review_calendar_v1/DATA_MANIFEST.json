@@ -1,0 +1,164 @@
+{
+ "code_hashing": "screen.py, PREREGISTRATION.md and engine/fe_*.py are hashed into RESULTS.json provenance at run time; data hashes come from research/gates_v1/provenance.stamp.",
+ "inputs": {
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "bytes": 172726,
+   "content": "USD-TRY (CBRT)",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "bytes": 17845,
+   "content": "Turkish YI-UFE index (TCMB), indexation rule of the progressive tax engine",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c"
+  },
+  "data/historical/ewma_band_v1_gspc.csv": {
+   "bytes": 1145471,
+   "content": "^GSPC daily 1950-1999 (Yahoo chart API), OOS window GSPC_1957_1999",
+   "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be"
+  },
+  "data/historical/ewma_band_v1_index.csv": {
+   "bytes": 4114163,
+   "content": "^IXIC and the M1-M5 OOS index windows (Yahoo chart API); fe_config.MARKETS",
+   "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c"
+  },
+  "data/historical/ewma_band_v1_tb3ms.csv": {
+   "bytes": 4439,
+   "content": "3-month T-bill monthly (FRED TB3MS), rate history for the OOS windows",
+   "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf"
+  },
+  "data/historical/range_vol_v1_dia.csv": {
+   "bytes": 697668,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e"
+  },
+  "data/historical/range_vol_v1_iwm.csv": {
+   "bytes": 655363,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580"
+  },
+  "data/historical/range_vol_v1_spy.csv": {
+   "bytes": 776843,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4"
+  },
+  "data/historical/range_vol_v2_eem.csv": {
+   "bytes": 596570,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99"
+  },
+  "data/historical/range_vol_v2_efa.csv": {
+   "bytes": 628462,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d"
+  },
+  "data/historical/range_vol_v2_ewa.csv": {
+   "bytes": 722723,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187"
+  },
+  "data/historical/range_vol_v2_ewc.csv": {
+   "bytes": 720836,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e"
+  },
+  "data/historical/range_vol_v2_ewg.csv": {
+   "bytes": 726336,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5"
+  },
+  "data/historical/range_vol_v2_ewh.csv": {
+   "bytes": 723938,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee"
+  },
+  "data/historical/range_vol_v2_ewj.csv": {
+   "bytes": 709683,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457"
+  },
+  "data/historical/range_vol_v2_ewl.csv": {
+   "bytes": 722468,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780"
+  },
+  "data/historical/range_vol_v2_ews.csv": {
+   "bytes": 723102,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e"
+  },
+  "data/historical/range_vol_v2_ewu.csv": {
+   "bytes": 719067,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8"
+  },
+  "data/historical/range_vol_v2_xlb.csv": {
+   "bytes": 695202,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a"
+  },
+  "data/historical/range_vol_v2_xle.csv": {
+   "bytes": 686299,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1"
+  },
+  "data/historical/range_vol_v2_xlf.csv": {
+   "bytes": 719917,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e"
+  },
+  "data/historical/range_vol_v2_xli.csv": {
+   "bytes": 681238,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8"
+  },
+  "data/historical/range_vol_v2_xlk.csv": {
+   "bytes": 683909,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61"
+  },
+  "data/historical/range_vol_v2_xlp.csv": {
+   "bytes": 682473,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670"
+  },
+  "data/historical/range_vol_v2_xlu.csv": {
+   "bytes": 694082,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421"
+  },
+  "data/historical/range_vol_v2_xlv.csv": {
+   "bytes": 682218,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7"
+  },
+  "data/historical/range_vol_v2_xly.csv": {
+   "bytes": 688977,
+   "content": "range-volatility ETF bars restored from the archive tag; loaded only by the published engine's instrument stages (parity --quick), not by this study's screen",
+   "sha256": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6"
+  },
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "bytes": 2671225,
+   "content": "QQQ, SPY, QLD daily bars with dividends (Yahoo chart API, 1999-03-10 onward)",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "bytes": 301157,
+   "content": "3-month T-bill daily (FRED DTB3), base financing",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  }
+ },
+ "new_market_data_downloaded": false,
+ "restored_from": {
+  "harness_engine_and_inputs": "git checkout archive/research/slow-vol-blend-v1-2026-10 -- research data/historical (research/fast_engine, research/band_h2_combo_v1, research/gates_v1 and the inputs). The engine copy in research/review_calendar_v1/engine is research/fast_engine with the fe_config path depth changed and one kernel option added (see PREREGISTRATION.md).",
+  "removed_from_worktree_not_used": "research/gates_v2, research/trend_robustness_v2, research/vol_regime_leverage_v1, research/slow_vol_blend_v1, data/historical/equity_* (3 files)"
+ },
+ "sealed_window": "No input has data after 2026-09-29; the harness asserts the last QQQ session is 2026-09-29 (sealed window: never read data after 2026-10-30).",
+ "study": "review_calendar_v1",
+ "windows": {
+  "bootstrap_calendar": "2015-09-01 to 2026-09-30 (fe_config.TAX_BOOT_LO/HI), paths of 253 + 2,520 sessions",
+  "calibration_s3": "sessions 2000-03-09 to 2009-12-31 only (vote-on days)",
+  "main": "2000-03-09 to 2026-09-29 (QQQ calendar from 1999-03-10, measured from session START)",
+  "oos": "GSPC 1957-01-02 to 1999-12-31; M1 ^IXIC; M2 ^GSPC 1934-1956; M3 ^N225; M4 ^GDAXI; M5 ^FTSE (fe_config.MARKETS)",
+  "slow_vol_history": "EW-sigma and the 2,520-session mean start at the first QQQ (or OOS index) session; no pre-QQQ splice is used"
+ }
+}

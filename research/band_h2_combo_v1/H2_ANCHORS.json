@@ -1,0 +1,86 @@
+{
+ "campaign": "tax_harvest_v2",
+ "note": "H2's (and R2's) published cells, copied verbatim from the tagged campaign results, used as the --harness anchors of the H2 arm. pre_tax_main is th2's *liquidated* convention (v3's pre_stats reports unliquidated; both engines liquidate at the window end, so the difference is the final cost only).",
+ "source": "tag archive/research/tax-harvest-v2-2026-10 : research/tax_harvest_v2/RESULTS.json",
+ "source_sha256": "aea7f3807830578c43afa1eaf60923a5a22f3f7ea8cecf723c8d0d842f231117",
+ "pre_tax_main": {
+  "base": {
+   "m1": {
+    "R2": {"cagr": 0.157521, "max_dd": 0.464143, "turnover_annual": 5.991522, "deferrals": 0},
+    "H2": {"cagr": 0.157907, "max_dd": 0.459169, "turnover_annual": 5.948224, "deferrals": 51}
+   },
+   "m2": {
+    "R2": {"cagr": 0.154732, "max_dd": 0.467584, "turnover_annual": 5.991522, "deferrals": 0},
+    "H2": {"cagr": 0.155137, "max_dd": 0.462542, "turnover_annual": 5.948224, "deferrals": 51}
+   }
+  },
+  "calibrated": {
+   "m1": {
+    "R2": {"cagr": 0.151702, "max_dd": 0.465364, "turnover_annual": 5.991496, "deferrals": 0},
+    "H2": {"cagr": 0.152081, "max_dd": 0.460420, "turnover_annual": 5.948199, "deferrals": 51}
+   },
+   "m2": {
+    "R2": {"cagr": 0.148927, "max_dd": 0.468797, "turnover_annual": 5.991496, "deferrals": 0},
+    "H2": {"cagr": 0.149325, "max_dd": 0.463786, "turnover_annual": 5.948199, "deferrals": 51}
+   }
+  }
+ },
+ "after_tax_windows_100k": {
+  "2000_03_to_2026_09": {
+   "R2": {"pre_tax_cagr": 0.154732, "after_tax_cagr": 0.101600, "max_dd_after_tax": 0.467584, "deferrals": 0},
+   "H2": {"pre_tax_cagr": 0.155137, "after_tax_cagr": 0.103033, "max_dd_after_tax": 0.462542, "deferrals": 53}
+  },
+  "2010_01_to_end": {
+   "R2": {"pre_tax_cagr": 0.221587, "after_tax_cagr": 0.147059, "max_dd_after_tax": 0.437839, "deferrals": 0},
+   "H2": {"pre_tax_cagr": 0.221284, "after_tax_cagr": 0.148395, "max_dd_after_tax": 0.440722, "deferrals": 32}
+  },
+  "2017_01_to_end": {
+   "R2": {"pre_tax_cagr": 0.325330, "after_tax_cagr": 0.228861, "max_dd_after_tax": 0.362426, "deferrals": 0},
+   "H2": {"pre_tax_cagr": 0.325680, "after_tax_cagr": 0.231609, "max_dd_after_tax": 0.348630, "deferrals": 19}
+  }
+ },
+ "cost_stress_m4_100k": {
+  "2000_03_to_2026_09": {
+   "R2": {"pre_tax_cagr": 0.149173, "after_tax_cagr": 0.097295, "max_dd_after_tax": 0.474400, "turnover_annual": 5.991522},
+   "H2": {"pre_tax_cagr": 0.149616, "after_tax_cagr": 0.098745, "max_dd_after_tax": 0.469228, "turnover_annual": 5.948224}
+  },
+  "2010_01_to_end": {
+   "R2": {"pre_tax_cagr": 0.215485, "after_tax_cagr": 0.142289, "max_dd_after_tax": 0.445613, "turnover_annual": 6.196626},
+   "H2": {"pre_tax_cagr": 0.215202, "after_tax_cagr": 0.143628, "max_dd_after_tax": 0.448450, "turnover_annual": 6.177655}
+  },
+  "2017_01_to_end": {
+   "R2": {"pre_tax_cagr": 0.320864, "after_tax_cagr": 0.225425, "max_dd_after_tax": 0.367208, "turnover_annual": 4.116333},
+   "H2": {"pre_tax_cagr": 0.321239, "after_tax_cagr": 0.228183, "max_dd_after_tax": 0.353408, "turnover_annual": 4.092221}
+  }
+ },
+ "bootstrap_clean_seed20261011": {
+  "100k": {
+   "progressive": {
+    "n_paths": 1000, "seed": 20261011, "block": 20,
+    "R2_cagr_median": 0.035155, "H2_cagr_median": 0.036013,
+    "H2_vs_R2": {"median_delta_cagr_pp": 0.054900, "mean_delta_cagr_pp": 0.103269, "share_gt_0": 0.674,
+                 "p05_delta_cagr_pp": -0.310754, "p95_delta_cagr_pp": 0.607977}
+   },
+   "flat": {
+    "n_paths": 1000, "seed": 20261011, "block": 20,
+    "R2_cagr_median": 0.039678, "H2_cagr_median": 0.039682,
+    "H2_vs_R2": {"median_delta_cagr_pp": 0.045437, "mean_delta_cagr_pp": 0.069256, "share_gt_0": 0.644,
+                 "p05_delta_cagr_pp": -0.369712, "p95_delta_cagr_pp": 0.533736}
+   }
+  },
+  "1M": {
+   "progressive": {
+    "n_paths": 1000, "seed": 20261011, "block": 20,
+    "R2_cagr_median": 0.023516, "H2_cagr_median": 0.024611,
+    "H2_vs_R2": {"median_delta_cagr_pp": 0.071127, "mean_delta_cagr_pp": 0.123532, "share_gt_0": 0.697,
+                 "p05_delta_cagr_pp": -0.280642, "p95_delta_cagr_pp": 0.647016}
+   },
+   "flat": {
+    "n_paths": 1000, "seed": 20261011, "block": 20,
+    "R2_cagr_median": 0.039678, "H2_cagr_median": 0.039682,
+    "H2_vs_R2": {"median_delta_cagr_pp": 0.045437, "mean_delta_cagr_pp": 0.069256, "share_gt_0": 0.644,
+                 "p05_delta_cagr_pp": -0.369712, "p95_delta_cagr_pp": 0.533736}
+   }
+  }
+ }
+}

@@ -177,7 +177,12 @@ def test_missing_snapshot_does_not_block(repair, offline) -> None:
     assert repair.check_engine_not_running() is True
 
 
-def test_stopped_snapshot_does_not_block(repair, offline) -> None:
+def test_stopped_snapshot_does_not_block_when_systemd_confirms_inactive(
+    repair, offline, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Changed for S2-7-3: a 'stopped' snapshot clears the engine only when systemd
+    # confirms the unit inactive. Without systemctl it no longer does (see M2).
+    monkeypatch.setattr(repair, "_systemd_unit_state", lambda: "inactive")
     _write_snapshot(offline.snapshot_path, "stopped")
 
     assert repair.check_engine_not_running() is True

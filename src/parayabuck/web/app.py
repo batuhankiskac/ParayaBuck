@@ -103,6 +103,9 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
     manager, alerting and metrics all resolve the very same settings file
     instead of silently falling back to the default one.
     """
+    # Every file the web process creates is owner-only whatever the caller's
+    # umask, including a plain `python -m parayabuck` (S2-4-2).
+    os.umask(0o077)
     if config_path is not None:
         os.environ["CONFIG_PATH"] = str(config_path)
     settings_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")

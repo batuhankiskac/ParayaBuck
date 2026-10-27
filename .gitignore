@@ -163,6 +163,10 @@ activemq-data/
 
 # Environments
 .env
+# Temp files of atomic_write (.env.<8 random chars>) and of the settings validate
+# step (.env.validate): a crash can leave one holding the full credential set (S2-4-3).
+.env.????????
+.env.validate
 data/runtime/
 data/cache/
 data/research/

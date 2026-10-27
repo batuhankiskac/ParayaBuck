@@ -997,6 +997,18 @@ def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
     return checked, differences
 
 
+def _tracked_repository_files() -> list[str]:
+    """Every tracked path of the repository, relative to its top level.
+
+    ``ls-files`` lists only the subtree of the directory it runs in, so a doctor
+    run from a subdirectory would miss a tracked ``.env`` elsewhere. The ``:/``
+    pathspec (the top of the repository) with ``--full-name`` lists the whole
+    tree from any directory (S2-7-6). Raises when git cannot run.
+    """
+    result = subprocess.run(["git", "ls-files", "--full-name", "-z", ":/"], capture_output=True, check=True, timeout=5)
+    return result.stdout.decode(errors="ignore").split("\0")
+
+
 def _credential_permission_row(warning: str | None, *, strict: bool) -> tuple[str, str] | None:
     """(status, detail) for the credential file mode, None when owner-only.
 
@@ -1220,8 +1232,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
         else:
             add("universe equity disabled", True, "skipped")
         try:
-            result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True, timeout=5)
-            tracked = result.stdout.decode(errors="ignore").split("\0")
+            tracked = _tracked_repository_files()
             has_env = any(t == ".env" or t.endswith("/.env") for t in tracked)
             add("no tracked .env", not has_env, "tracked .env found" if has_env else "clean")
         except Exception as exc:

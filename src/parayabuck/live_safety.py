@@ -12,7 +12,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from parayabuck.config import DrawdownLiquidationConfig, read_credential
+from dotenv import dotenv_values
+
+from parayabuck.config import DrawdownLiquidationConfig, dotenv_path, read_credential
 
 
 class LiveApprovalError(RuntimeError):
@@ -64,10 +66,25 @@ def mode_credentials(*, live: bool, env: Mapping[str, str | None] | None = None)
     """The stripped (key, secret) pair of one mode.
 
     Each name is read from ``$CREDENTIALS_DIRECTORY/<name>`` (systemd
-    credentials) first and from ``env`` (default os.environ) second.
+    credentials) first and from ``env`` second. With no ``env`` the process
+    environment is read together with the credential file (``dotenv_path()``),
+    in the engine's order: the file wins over the process environment. When the
+    two hold different values for the same name the pair is refused (empty),
+    because a stale exported key would otherwise give the CLI and the engine
+    different answers (S2-7-7).
     """
-    source: Mapping[str, str | None] = os.environ if env is None else env
     key_name, secret_name = credential_env_names(live=live)
+    if env is not None:
+        return read_credential(key_name, env), read_credential(secret_name, env)
+    credential_file = dotenv_path()
+    raw_values = dotenv_values(credential_file) if credential_file.exists() else {}
+    file_values = {name: value for name, value in raw_values.items() if value is not None}
+    for name in (key_name, secret_name):
+        file_value = str(file_values.get(name) or "").strip()
+        process_value = str(os.environ.get(name) or "").strip()
+        if file_value and process_value and file_value != process_value:
+            return "", ""
+    source: Mapping[str, str | None] = {**os.environ, **file_values}
     return read_credential(key_name, source), read_credential(secret_name, source)
 
 

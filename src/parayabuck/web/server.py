@@ -9,11 +9,17 @@ that need an isolated app call ``create_app(WebState(...))`` instead.
 
 from __future__ import annotations
 
+import os
+
 from parayabuck.web.application import create_app
 from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.managers.websocket import ticket_store
 from parayabuck.web.state import WebState, set_web_state
+
+# A direct `uvicorn parayabuck.web.server:app` launch skips web.app.main, so the
+# owner-only umask is set here too (S2-4-2).
+os.umask(0o077)
 
 manager = EngineManager()
 backtest_manager = BacktestManager(engine_state_provider=manager.current_engine_state)

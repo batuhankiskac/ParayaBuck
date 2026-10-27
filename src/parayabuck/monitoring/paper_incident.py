@@ -27,6 +27,7 @@ from parayabuck.monitoring.incident import (
     IncidentRecord,
     create_incident,
 )
+from parayabuck.utils.io import atomic_write
 
 log = logging.getLogger("parayabuck.monitoring.paper_incident")
 
@@ -284,10 +285,9 @@ class PaperIncidentReconciler:
 def write_anonymized_fixture(path: str | Path, payload: dict[str, object]) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, default=str),
-        encoding="utf-8",
-    )
+    # Owner-only whatever the caller's umask: the fixture holds ledger-derived
+    # detail even after anonymisation (S2-4-1).
+    atomic_write(destination, json.dumps(payload, indent=2, sort_keys=True, default=str), 0o600)
 
 
 def _read_local_ledger(

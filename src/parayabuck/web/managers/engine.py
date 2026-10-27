@@ -417,7 +417,8 @@ class EngineManager:
     def _warn_loose_credential_file(self) -> None:
         """Log (once per path and mode) a group/other-readable credential file.
 
-        A warning only, never a refusal: the VM must not fail to start on it.
+        A warning only in the engine itself. Under systemd the unit's ExecStartPre
+        `doctor --strict` turns the same finding into a FAIL and refuses the start.
         """
         warning = credential_file_mode_warning(self.env_path)
         if warning is None:
@@ -2070,13 +2071,18 @@ def _scan_tracked_secrets(root: Path) -> str | None:
             capture_output=True,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        # The secret scan cannot prove anything when git is unavailable; the
-        # failure must be loud so the operator knows the block was skipped.
+        # Fail closed: without the tracked-file list the secret scan proves
+        # nothing, so the start gate refuses (and so does the LIVE gate, which
+        # reads the same warning). The container image has no git and no .git,
+        # so it cannot pass this gate (S2-7-2).
         log.critical(
-            "SECURITY CHECK FAILED: cannot list tracked files for secret scan (%s); the secret-key guard is inactive",
+            "SECURITY CHECK FAILED: cannot list tracked files for secret scan (%s); engine starts are refused",
             exc,
         )
-        return None
+        return (
+            "GÜVENLİK ENGELİ: izlenen dosyalar listelenemedi, gizli anahtar taraması yapılamadı "
+            "(git yok veya bu bir git deposu değil). Motor başlatılmaz; taramanın çalışabildiği bir depo kopyasından başlatın."
+        )
     for relative in result.stdout.decode(errors="ignore").split("\0"):
         if not relative:
             continue

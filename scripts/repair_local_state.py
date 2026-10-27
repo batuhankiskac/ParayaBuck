@@ -129,7 +129,10 @@ def _engine_is_active(config: Any) -> bool:
     snapshot = read_snapshot(path)
     if not snapshot:
         return True  # present but unreadable: cannot prove the engine is down
-    if str(snapshot.get("runtime_state") or "").lower() == "stopped":
+    # A "stopped" snapshot proves the engine is down only when systemd confirmed
+    # the unit inactive. Without systemctl it is just a file that a crashed or
+    # stale writer may have left, so the heartbeat age below decides (S2-7-3).
+    if unit_state is not None and str(snapshot.get("runtime_state") or "").lower() == "stopped":
         return False
     try:
         written_at = datetime.fromisoformat(str(snapshot["written_at"]))
@@ -567,6 +570,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Quarantined copies of the ledger and the reports are owner-only whatever
+    # the shell umask (S2-4-1).
+    os.umask(0o077)
     args = _parse_args(argv)
     confirm = bool(args.confirm) and not bool(args.dry_run)
     try:

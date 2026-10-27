@@ -173,12 +173,14 @@ def test_nonfinite_bot_position_mark_fails_closed(tmp_path: Path, value: str) ->
         _account_broker(tmp_path, fake, {"QLD": 10.0}).account()
 
 
-def test_nonfinite_foreign_position_mark_reads_zero(tmp_path: Path) -> None:
+def test_nonfinite_foreign_position_mark_reads_cost_basis(tmp_path: Path) -> None:
+    # D8-10: a foreign position with no usable mark is valued at cost basis
+    # (fake avg_entry_price 100), not at zero.
     fake = FakeTradingClient()
     fake.set_position("XYZ", qty=3)
     fake.positions[0].current_price = "nan"
     (position,) = _account_broker(tmp_path, fake, {}).account().positions
-    assert position.current_price == 0.0
+    assert position.current_price == 100.0
 
 
 def test_negative_qty_available_falls_back_to_full_quantity(tmp_path: Path) -> None:

@@ -313,7 +313,9 @@ def test_reconcile_scope_accepts_empty_positions_while_owning(tmp_path: Path) ->
 
     with flat_broker_reconcile_scope():
         assert broker.account().positions == ()
-    assert len(reads) == 1
+    # Two empty reads are required even inside the reconcile scope (G-1): a
+    # single transient empty read must never read as a flat broker.
+    assert len(reads) == 2
     with pytest.raises(EmptyPositionsReadError):
         broker.account()  # the scope ends with the reconcile call
 

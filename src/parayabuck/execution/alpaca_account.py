@@ -32,25 +32,111 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import EmptyPositionsReadError, OwnershipDriftError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
+from parayabuck.portfolio.ownership_rebase import QUANTITY_TOLERANCE
 from parayabuck.utils import is_crypto
+from parayabuck.utils.objects import field_value
 
 log = get_logger("parayabuck.execution.alpaca_account")
 
-__all__ = ["AccountService", "flat_broker_reconcile_scope"]
+__all__ = ["AccountService", "flat_broker_reconcile_scope", "quantities_agree"]
 
 # Set only by the reconcile path (see ``flat_broker_reconcile_scope``): the
 # reconciler must read a flat broker to clear stale ownership. Every other
 # snapshot treats an empty position read while the bot owns inventory as a
 # broker fault, not as a flat account.
 _FLAT_BROKER_ALLOWED: ContextVar[bool] = ContextVar("parayabuck_flat_broker_allowed", default=False)
+
+# Alpaca reports quantities to 9 decimals: this absolute floor absorbs that
+# noise for small holdings. Drift detection and the reconcile MATCH bucket
+# share ``quantities_agree`` so a share count is classified the same way
+# everywhere.
+QUANTITY_MATCH_FLOOR = 1e-8
+
+_NEW_YORK = ZoneInfo("America/New_York")
+# Same-day external cash movements: deposits, withdrawals and journals.
+EXTERNAL_CASH_FLOW_ACTIVITY_TYPES: tuple[str, ...] = ("CSD", "CSW", "JNLC")
+_ACTIVITIES_PATH = "/account/activities"
+_CASH_FLOW_PAGE_SIZE = 100
+# Activities are re-read at most this often; a failed read is retried next poll.
+_CASH_FLOW_CACHE_SECONDS = 60.0
+
+
+def quantities_agree(owned: float, broker: float) -> bool:
+    """Whether a portfolio-owned and a broker share count are the same position.
+
+    One band for ownership drift (``AccountService.account``) and for the
+    reconcile MATCH bucket, equal to the ownership resolver's relative band,
+    so a difference is either drift or a MATCH everywhere, never both.
+    """
+    return abs(owned - broker) <= max(QUANTITY_MATCH_FLOOR, owned * QUANTITY_TOLERANCE)
+
+
+def _trading_day(now: datetime) -> date:
+    """The New York calendar date a poll belongs to."""
+    return now.astimezone(_NEW_YORK).date()
+
+
+def _account_status(account: Any) -> str | None:
+    """Upper-cased account status, or None when the broker reports none."""
+    raw = field_value(account, "status", None)
+    if raw is None:
+        return None
+    return str(getattr(raw, "value", raw)).strip().upper()
+
+
+def _read_same_day_external_flows(client: Any, trading_day: date) -> float:
+    """Net external cash moved into the account on ``trading_day``.
+
+    Deposits count positive, withdrawals negative, journals as reported.
+    Raises on any malformed row or an unfinished page so the caller keeps the
+    unadjusted behaviour instead of trusting a partial sum.
+    """
+    total = 0.0
+    seen_tokens: set[str] = set()
+    page_token: str | None = None
+    while True:
+        query: dict[str, Any] = {
+            "activity_types": ",".join(EXTERNAL_CASH_FLOW_ACTIVITY_TYPES),
+            # ``after`` is exclusive on the date: yesterday includes today.
+            "after": (trading_day - timedelta(days=1)).isoformat(),
+            "direction": "asc",
+            "page_size": _CASH_FLOW_PAGE_SIZE,
+        }
+        if page_token is not None:
+            query["page_token"] = page_token
+        page = client.get(_ACTIVITIES_PATH, query)
+        if not isinstance(page, list):
+            raise ValueError("Alpaca activities response is not a list")
+        for row in page:
+            if str(field_value(row, "date", "") or "")[:10] != trading_day.isoformat():
+                continue
+            activity_type = str(field_value(row, "activity_type", "") or "").upper()
+            raw_amount = field_value(row, "net_amount", None)
+            amount = float(raw_amount) if raw_amount is not None else math.nan
+            if not math.isfinite(amount):
+                raise ValueError(f"Alpaca {activity_type or 'cash'} activity has a non-finite amount")
+            if activity_type == "CSD":
+                total += abs(amount)
+            elif activity_type == "CSW":
+                total -= abs(amount)
+            elif activity_type == "JNLC":
+                total += amount
+        if len(page) < _CASH_FLOW_PAGE_SIZE:
+            return total
+        token = str(field_value(page[-1], "id", "") or "") if page else ""
+        if not token or token in seen_tokens:
+            raise ValueError("Alpaca activity pagination did not advance")
+        seen_tokens.add(token)
+        page_token = token
 
 
 @contextmanager
@@ -76,6 +162,31 @@ class AccountService:
 
     def __init__(self, broker: Any) -> None:
         self._broker = broker
+        # Peak sidecar write failed: retry on the next poll even if the peak
+        # itself did not move again.
+        self._peak_save_pending = False
+        # Last previous-close equity seen with its New York trading day; a
+        # missing ``last_equity`` on the same day reuses it instead of flat.
+        self._last_equity_seen: tuple[date, float] | None = None
+        # (day, net external flow, monotonic read time) of the last good read.
+        self._cash_flow_cache: tuple[date, float, float] | None = None
+
+    def _same_day_external_flows(self, client: Any, trading_day: date) -> float:
+        """Net same-day external cash flow; 0.0 (current behaviour) on failure."""
+        cached = self._cash_flow_cache
+        now = time.monotonic()
+        if cached is not None and cached[0] == trading_day and now - cached[2] <= _CASH_FLOW_CACHE_SECONDS:
+            return cached[1]
+        try:
+            flow = _read_same_day_external_flows(client, trading_day)
+        except Exception as exc:
+            log.warning(
+                "Cash-flow activities unavailable; day P&L and peak are not adjusted this poll: %s",
+                exc,
+            )
+            return 0.0
+        self._cash_flow_cache = (trading_day, flow, now)
+        return flow
 
     # -- blocked helpers -------------------------------------------------
 
@@ -251,27 +362,62 @@ class AccountService:
         # Access via property so fake injection is observed
         client = broker._client
         account: Any = client.get_account()
-        # Bind account id
-        broker._account_id = str(getattr(account, "id", "") or getattr(account, "account_number", ""))
+        # Bind account id. The id alone keys ownership and the peak sidecar:
+        # the account number is never a substitute (fail closed).
+        account_id = str(getattr(account, "id", "") or "").strip()
+        if not account_id:
+            raise ValueError("Broker account has no id; snapshot refused (no account_number fallback for the peak key)")
+        broker._account_id = account_id
         # The human account number ("PA..." on paper) classifies the account
         # environment for the PAPER/LIVE start check.
         broker._account_number = str(getattr(account, "account_number", "") or "")
         if self.is_account_blocked(account):
             raise RuntimeError("Alpaca account is blocked from trading")
+        # Only an ACTIVE account may trade. A status the broker does not report
+        # is not refused here (the field is optional in the test doubles).
+        status = _account_status(account)
+        if status is not None and status != "ACTIVE":
+            raise RuntimeError(f"Alpaca account status is {status}; snapshot refused until the account is ACTIVE")
+        trading_day = _trading_day(datetime.now(UTC))
         try:
             equity = float(account.equity)
             raw_previous = getattr(account, "last_equity", None)
-            # Alpaca types ``last_equity`` Optional: a missing previous close
-            # reads as flat on the day. Anything present must still parse.
-            previous_equity = equity if raw_previous is None else float(raw_previous)
+            # Alpaca types ``last_equity`` Optional. Anything present must
+            # parse; a missing one is handled below, never read as flat.
+            previous_equity = None if raw_previous is None else float(raw_previous)
             raw_cash = getattr(account, "cash", None)
             if raw_cash is None:
                 raise ValueError("Broker account has no cash value")
             cash = float(raw_cash)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Broker account values are not numeric: {exc}") from exc
-        if not math.isfinite(equity) or not math.isfinite(previous_equity) or not math.isfinite(cash):
+        if (
+            not math.isfinite(equity)
+            or (previous_equity is not None and not math.isfinite(previous_equity))
+            or not math.isfinite(cash)
+        ):
             raise ValueError("Broker account values are non-finite; snapshot unusable, entries refused")
+        if previous_equity is None:
+            # A missing previous close reads as flat only if no baseline is
+            # known: reuse this trading day's value seen earlier, else refuse.
+            seen = self._last_equity_seen
+            if seen is None or seen[0] != trading_day:
+                emit_execution_alert(
+                    "paper_incident",
+                    message="Broker last_equity is missing and no baseline for today is known; day P&L cannot be measured, entries refused",
+                    category="last_equity_missing",
+                    incident_id=f"last_equity_missing:{trading_day:%Y-%m-%d}",
+                )
+                raise ValueError("Broker account last_equity is missing; day P&L unknown, snapshot refused")
+            previous_equity = seen[1]
+        else:
+            self._last_equity_seen = (trading_day, previous_equity)
+        # Same-day external cash moves are not trading P&L. Off by default:
+        # the flag lives in ``risk.adjust_for_cash_flows`` and the runtime
+        # copies it onto the broker.
+        cash_flows = 0.0
+        if getattr(broker, "adjust_for_cash_flows", False) is True:
+            cash_flows = self._same_day_external_flows(client, trading_day)
         # Optional: only the LIVE gap-safe BUY cap reads it; an absent or
         # unparsable value leaves that cap on cash alone.
         non_marginable_buying_power: float | None = None
@@ -293,13 +439,15 @@ class AccountService:
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = client.get_all_positions()
-        if not raw_positions and not _FLAT_BROKER_ALLOWED.get():
+        if not raw_positions:
             held_by_bot = sorted(symbol for symbol, qty in owned_quantities.items() if float(qty) > 1e-12)
             if held_by_bot:
                 # An empty read while the bot's own ledger holds inventory is
-                # not proof of a flat account: re-read once, then fail closed.
+                # never a flat account on its own: a second read is required,
+                # inside the reconcile scope too. Only two empty reads may let
+                # reconcile see a flat broker and clear stale ownership.
                 raw_positions = client.get_all_positions()
-                if not raw_positions:
+                if not raw_positions and not _FLAT_BROKER_ALLOWED.get():
                     raise EmptyPositionsReadError(
                         f"Broker reported no positions while the portfolio still owns {held_by_bot}; "
                         "snapshot refused until a reconcile confirms the account is flat"
@@ -319,15 +467,28 @@ class AccountService:
         for raw in raw_positions:
             market = self.classify_market(raw)
             canonical = canonical_symbol(str(raw.symbol), market)
+            total_owned = float(owned_quantities.get(canonical, 0.0))
+            bot_symbol = total_owned > 1e-12 or (
+                market == Market.EQUITY and tradable_symbols is not None and canonical in tradable_symbols
+            )
             try:
                 position_unrealized = float(raw.unrealized_pl or 0)
                 position_intraday = float(raw.unrealized_intraday_pl or 0)
             except (TypeError, ValueError) as exc:
-                raise ValueError(f"Broker position {canonical} PnL is not numeric: {exc}") from exc
+                if bot_symbol:
+                    raise ValueError(f"Broker position {canonical} PnL is not numeric: {exc}") from exc
+                # A foreign position's PnL is informational: one bad field
+                # must not refuse the snapshot (and so block the bot's exits).
+                log.warning("Foreign position %s has an unparseable PnL; not counted: %s", canonical, exc)
+                position_unrealized = position_intraday = math.nan
             if not math.isfinite(position_unrealized) or not math.isfinite(position_intraday):
-                # A NaN PnL would be persisted into risk_state and served to
-                # strict-JSON readers: fail closed like non-finite equity/cash.
-                raise ValueError(f"Broker position {canonical} PnL is non-finite; snapshot unusable, entries refused")
+                if bot_symbol:
+                    # A NaN PnL would be persisted into risk_state and served to
+                    # strict-JSON readers: fail closed like non-finite equity/cash.
+                    raise ValueError(
+                        f"Broker position {canonical} PnL is non-finite; snapshot unusable, entries refused"
+                    )
+                position_unrealized = position_intraday = 0.0
             unrealized += position_unrealized
             intraday_unrealized += position_intraday
             position_key = (market, canonical)
@@ -340,10 +501,6 @@ class AccountService:
             seen_position_keys.add(position_key)
             raw_qty = float(raw.qty)
             broker_qty = abs(raw_qty)
-            total_owned = float(owned_quantities.get(canonical, 0.0))
-            bot_symbol = total_owned > 1e-12 or (
-                market == Market.EQUITY and tradable_symbols is not None and canonical in tradable_symbols
-            )
             if raw_qty < -1e-12 and bot_symbol:
                 # The bot is long-only: a short on a symbol it trades is
                 # foreign activity on the shared key. Reading it as owned
@@ -356,11 +513,11 @@ class AccountService:
                 )
             current_price = self._price(raw.current_price, symbol=canonical, tolerate_missing=not bot_symbol)
             average_price = self._price(raw.avg_entry_price, symbol=canonical, tolerate_missing=not bot_symbol)
-            if (
-                total_owned > 1e-12
-                and broker_qty > 1e-12
-                and abs(broker_qty - total_owned) > max(1e-9, total_owned * 1e-8)
-            ):
+            if not bot_symbol and current_price <= 0.0:
+                # A foreign position with no usable mark is valued at its cost
+                # basis: zero would understate the account's gross exposure.
+                current_price = average_price
+            if total_owned > 1e-12 and broker_qty > 1e-12 and not quantities_agree(total_owned, broker_qty):
                 # The share count moved without a fill of ours: a corporate
                 # action, or another consumer of the shared Alpaca key. A
                 # SELL of ours still working at the broker explains a
@@ -407,6 +564,20 @@ class AccountService:
                     managed_qty=managed_qty,
                 )
             )
+        if raw_positions and not _FLAT_BROKER_ALLOWED.get():
+            # An owned symbol the broker no longer lists, while it lists other
+            # positions, is a full-position shortfall (broker quantity 0). It is
+            # judged like a partial one, before any decision: left out, the
+            # snapshot would read "no holding" and the planner would buy the
+            # whole target again. Reconcile keeps its own classification of it.
+            for owned_symbol, owned_amount in owned_quantities.items():
+                owned_value = float(owned_amount)
+                if owned_value <= 1e-12:
+                    continue
+                owned_market = Market.CRYPTO if is_crypto(owned_symbol) else Market.EQUITY
+                owned_canonical = canonical_symbol(owned_symbol, owned_market)
+                if (owned_market, owned_canonical) not in seen_position_keys:
+                    drift_candidates.append((owned_canonical, owned_value, 0.0, owned_market))
         # Per-symbol drift lock (runtime.per_symbol_drift_lock, default off): an
         # unexplained quantity shortfall is collected instead of raised, so the
         # snapshot still builds and the other symbols keep trading. The runtime
@@ -442,27 +613,35 @@ class AccountService:
         with peak_lock:
             broker._ensure_peak_reconciled(broker._account_id or "unknown")
             old_peak = broker._peak_equity
-            broker._peak_equity = max(broker._peak_equity, equity)
+            # The high-water mark tracks equity net of today's external cash,
+            # so a same-day deposit or withdrawal never reads as a gain or loss.
+            broker._peak_equity = max(broker._peak_equity, equity - cash_flows)
             peak_equity = broker._peak_equity
-            if peak_equity != old_peak:
+            if peak_equity != old_peak or self._peak_save_pending:
                 try:
                     broker._save_peak_equity()
+                    self._peak_save_pending = False
                 except (KeyboardInterrupt, SystemExit):
                     raise
                 except Exception as exc:
                     # The account was already fetched: keep the in-memory peak
-                    # and the snapshot, retry the sidecar on the next poll.
+                    # and the snapshot, and retry the sidecar on the next poll
+                    # even if the peak does not move again.
+                    self._peak_save_pending = True
                     log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
                     emit_execution_alert(
                         "paper_incident",
                         message="Peak sidecar write failed; snapshot kept, retry next poll",
                         category="peak_sidecar_write_failed",
+                        incident_id="peak_sidecar_write_failed",
                     )
-        daily_pnl = equity - previous_equity
+        daily_pnl = equity - previous_equity - cash_flows
         snapshot = AccountSnapshot(
             cash=cash,
             equity=equity,
-            peak_equity=peak_equity,
+            # Reported against raw equity: adding today's net cash back keeps
+            # drawdown measured on trading performance, not on the transfer.
+            peak_equity=peak_equity + cash_flows,
             daily_pnl=daily_pnl,
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,

@@ -31,7 +31,7 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
-from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope
+from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope, quantities_agree
 from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -61,8 +61,8 @@ _WORKING_BROKER_STATUSES = frozenset(
     }
 )
 
-# Absolute floor for repository-vs-broker position quantity agreement.
-QUANTITY_MATCH_FLOOR = 1e-8
+# Repository-vs-broker quantity agreement is ``alpaca_account.quantities_agree``,
+# the same band the snapshot's drift detection uses.
 
 # Cost-basis drift band: the bot's average cost may differ from the broker's
 # avg_entry_price by max(relative, floor) before it is reported. Read-only.
@@ -252,7 +252,8 @@ class ReconciliationService:
                 raise ReconciliationResultError(f"Incomplete broker fill for {client_id}")
             if callback is None:
                 raise ReconciliationResultError(f"Portfolio order recovery unavailable for {client_id}")
-            timestamp_raw = self._field(order, "filled_at", None) or self._field(order, "updated_at", None)
+            # Same order as the broker-side fill timestamp: filled_at, then submitted_at.
+            timestamp_raw = self._field(order, "filled_at", None) or self._field(order, "submitted_at", None)
             timestamp = (
                 timestamp_raw
                 if isinstance(timestamp_raw, datetime)
@@ -454,6 +455,9 @@ class ReconciliationService:
                 continue
             tolerance = max(COST_BASIS_DRIFT_RELATIVE * broker_average, COST_BASIS_DRIFT_FLOOR)
             if abs(bot_average - broker_average) <= tolerance:
+                # Back in band: a later drift of this symbol is a new episode
+                # and must alert again.
+                self._cost_basis_alerted.discard(symbol)
                 continue
             drift[symbol] = {
                 "bot_average_cost": bot_average,
@@ -496,10 +500,13 @@ class ReconciliationService:
         # have updated local ownership rather than rejecting an explained fill.
         if not getattr(broker, "_account_id", ""):
             raw_account = broker._client.get_account()
-            broker._account_id = str(getattr(raw_account, "id", "") or getattr(raw_account, "account_number", ""))
-            broker._account_number = str(getattr(raw_account, "account_number", "") or "")
-            if not broker._account_id:
+            # The account id only: the account number must never key the
+            # ownership or peak state (no fallback).
+            account_id = str(getattr(raw_account, "id", "") or "").strip()
+            if not account_id:
                 raise ReconciliationResultError("Broker account has no identity")
+            broker._account_id = account_id
+            broker._account_number = str(getattr(raw_account, "account_number", "") or "")
         broker_orders = broker._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))
         self._recover_portfolio_orders(broker_orders)
         # Reconcile must see a flat broker to clear stale ownership.
@@ -547,8 +554,8 @@ class ReconciliationService:
             if local_qty > 1e-12 and abs(broker_qty) > 1e-12:
                 # Alpaca reports quantities at 9 decimals, so local quantities
                 # can differ from the broker by a few units of the 9th decimal.
-                tolerance = max(QUANTITY_MATCH_FLOOR, local_qty * 1e-8)
-                if abs(local_qty - broker_qty) <= tolerance:
+                # Same band as the snapshot's drift detection.
+                if quantities_agree(local_qty, broker_qty):
                     categories["MATCH"].append(symbol)
                 else:
                     categories["QUANTITY_MISMATCH"].append(symbol)

@@ -112,8 +112,14 @@ def test_batched_intraday_filter_matches_per_row_session_open() -> None:
     assert [stamp for stamp in stamps if _kept(stamp)] == [stamp for stamp in stamps if is_session_open(stamp)]
 
 
-def test_none_last_equity_falls_back_to_equity_with_zero_daily_pnl(tmp_path) -> None:
-    """R5B-2 follow-up: a missing last_equity reads as flat on the day."""
+def test_none_last_equity_refuses_snapshot_without_a_baseline(tmp_path) -> None:
+    """D8-5 / G-4: a missing last_equity must not read as flat on the day.
+
+    With no same-day baseline seen by this process the snapshot is refused
+    (entries cannot be sized against an unmeasured day P&L).
+    """
+    import pytest
+
     from tests.helpers import make_broker
 
     broker = make_broker(tmp_path)
@@ -129,12 +135,13 @@ def test_none_last_equity_falls_back_to_equity_with_zero_daily_pnl(tmp_path) -> 
         ),
         get_all_positions=lambda: [],
     )
-    snapshot = broker.account()
-    assert snapshot.equity == 100000.0
-    assert snapshot.daily_pnl == 0.0
+    with pytest.raises(ValueError, match="last_equity is missing"):
+        broker.account()
 
 
-def test_missing_last_equity_attribute_falls_back_to_equity(tmp_path) -> None:
+def test_missing_last_equity_attribute_refuses_snapshot_without_a_baseline(tmp_path) -> None:
+    import pytest
+
     from tests.helpers import make_broker
 
     broker = make_broker(tmp_path)
@@ -149,8 +156,8 @@ def test_missing_last_equity_attribute_falls_back_to_equity(tmp_path) -> None:
         ),
         get_all_positions=lambda: [],
     )
-    snapshot = broker.account()
-    assert snapshot.daily_pnl == 0.0
+    with pytest.raises(ValueError, match="last_equity is missing"):
+        broker.account()
 
 
 def test_non_numeric_or_nonfinite_account_values_still_raise(tmp_path) -> None:

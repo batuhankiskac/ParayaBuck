@@ -18,7 +18,7 @@ import math
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from parayabuck.tax.errors import TaxDataError
@@ -29,6 +29,12 @@ TAX_ACTIVITY_TYPES = ("DIV", "DIVNRA", "INT")
 # return of capital). The decision record has no rule for them, and a return of
 # capital also changes the cost basis, so they are reported as missing, not guessed.
 NOT_IMPORTED_INCOME_TYPES = ("DIVCGL", "DIVCGS", "DIVROC")
+# Owner-facing note: Alpaca types outside TAX_ACTIVITY_TYPES are never fetched, so other
+# withholding or fee types can be missing from the figures.
+OTHER_TYPES_NOTE = (
+    "Bu paket yalnızca DIV, DIVNRA ve INT türlerini içe aktarır; diğer Alpaca hareket türleri "
+    "(ör. başka stopaj veya ücret türleri) eksik olabilir. Yıl sonu vergi belgesini kontrol edin."
+)
 ACTIVITIES_PATH = "/account/activities"
 ACCOUNT_PATH = "/account"
 _PAGE_SIZE = 100
@@ -49,6 +55,18 @@ CREATE TABLE IF NOT EXISTS tax_activities (
     per_share_amount REAL,
     net_amount REAL NOT NULL,
     raw_json TEXT NOT NULL DEFAULT '',
+    imported_at TEXT NOT NULL
+)
+"""
+
+# One row per import: the account's activities were read for dates from ``covered_from``
+# through ``covered_through`` (inclusive). The endpoint has no end date, so an import
+# covers from its start up to the day before it ran (that day may be incomplete).
+_COVERAGE_SQL = """
+CREATE TABLE IF NOT EXISTS tax_import_coverage (
+    account_id TEXT NOT NULL,
+    covered_from TEXT NOT NULL,
+    covered_through TEXT NOT NULL,
     imported_at TEXT NOT NULL
 )
 """
@@ -105,18 +123,21 @@ def fetch_account_id(get: Get) -> str:
 
 
 def fetch_activities(get: Get, since: date, *, page_size: int = _PAGE_SIZE) -> list[Mapping[str, Any]]:
-    """Every tax-relevant activity on or after ``since``, oldest first.
+    """Every tax-relevant activity dated on or after ``since``, oldest first.
 
-    Pages through the activities endpoint with ``page_token`` (the id of the last
-    row). A page that does not advance raises instead of looping.
+    The endpoint treats ``after`` as exclusive, so ``since - 1 day`` is sent to keep
+    the activities dated on ``since`` itself. Pages through the activities endpoint
+    with ``page_token`` (the id of the last row). A page that does not advance raises
+    instead of looping.
     """
     rows: list[Mapping[str, Any]] = []
     seen_tokens: set[str] = set()
     page_token: str | None = None
+    after = since - timedelta(days=1)
     while True:
         query: dict[str, Any] = {
             "activity_types": ",".join(TAX_ACTIVITY_TYPES),
-            "after": since.isoformat(),
+            "after": after.isoformat(),
             "direction": "asc",
             "page_size": page_size,
         }
@@ -164,8 +185,38 @@ def parse_activity(raw: Mapping[str, Any], account_id: str) -> ActivityRow:
 
 
 def ensure_table(connection: sqlite3.Connection) -> None:
-    """Create ``tax_activities`` if it does not exist (idempotent)."""
+    """Create ``tax_activities`` and ``tax_import_coverage`` if they do not exist (idempotent)."""
     connection.execute(_CREATE_SQL)
+    connection.execute(_COVERAGE_SQL)
+
+
+def _same_value(stored: Any, incoming: Any) -> bool:
+    if stored is None or incoming is None:
+        return stored is None and incoming is None
+    if isinstance(incoming, float):
+        return math.isclose(float(stored), incoming, rel_tol=0.0, abs_tol=1e-9)
+    return str(stored) == str(incoming)
+
+
+def _stored_content_differs(connection: sqlite3.Connection, row: ActivityRow) -> bool:
+    """True when the id is stored with different tax-relevant content (restated or retyped)."""
+    stored = connection.execute(
+        "SELECT account_id, activity_type, activity_date, symbol, quantity, per_share_amount, net_amount "
+        "FROM tax_activities WHERE activity_id = ?",
+        (row.activity_id,),
+    ).fetchone()
+    if stored is None:
+        return False
+    incoming = (
+        row.account_id,
+        row.activity_type,
+        row.activity_date.isoformat(),
+        row.symbol,
+        row.quantity,
+        row.per_share_amount,
+        row.net_amount,
+    )
+    return not all(_same_value(old, new) for old, new in zip(stored, incoming, strict=True))
 
 
 def store_activities(
@@ -177,9 +228,17 @@ def store_activities(
 ) -> tuple[int, int]:
     """Insert activities keyed by Alpaca id; returns ``(inserted, already_present)``.
 
-    Re-importing the same window is a no-op: an existing id is never rewritten.
+    Re-importing the same content is a no-op: an existing id is never rewritten. An id
+    already stored with different content (a restated amount, or the same id under
+    another type or account) raises before anything is written, and lists the ids.
     """
     ensure_table(connection)
+    changed = [row.activity_id for row in rows if _stored_content_differs(connection, row)]
+    if changed:
+        raise TaxDataError(
+            f"{len(changed)} stored activit{'y' if len(changed) == 1 else 'ies'} changed content on re-import: "
+            f"{', '.join(changed)}; nothing was written and the stored rows were left unchanged"
+        )
     stamp = (imported_at or datetime.now(UTC)).isoformat()
     inserted = 0
     for row in rows:
@@ -204,6 +263,46 @@ def store_activities(
         )
         inserted += cursor.rowcount
     return inserted, len(rows) - inserted
+
+
+def record_coverage(
+    connection: sqlite3.Connection,
+    account_id: str,
+    since: date,
+    imported_on: date,
+    *,
+    imported_at: datetime | None = None,
+) -> date:
+    """Record that an import from ``since`` ran on ``imported_on``; returns the covered-through day.
+
+    The day before ``imported_on`` is the last day treated as complete, so an import
+    that runs on 1 January covers the whole previous year.
+    """
+    ensure_table(connection)
+    covered_through = imported_on - timedelta(days=1)
+    stamp = (imported_at or datetime.now(UTC)).isoformat()
+    connection.execute(
+        "INSERT INTO tax_import_coverage (account_id, covered_from, covered_through, imported_at) VALUES (?, ?, ?, ?)",
+        (account_id, since.isoformat(), covered_through.isoformat(), stamp),
+    )
+    return covered_through
+
+
+def coverage_spans_year(connection: sqlite3.Connection, account_id: str, year: int) -> bool:
+    """True when one import of ``account_id`` started on or before 1 January and ended on or after 31 December.
+
+    A ledger without the coverage table (imported before it existed) reports False.
+    """
+    present = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tax_import_coverage'"
+    ).fetchone()
+    if present is None:
+        return False
+    row = connection.execute(
+        "SELECT 1 FROM tax_import_coverage WHERE account_id = ? AND covered_from <= ? AND covered_through >= ? LIMIT 1",
+        (account_id, f"{year:04d}-01-01", f"{year:04d}-12-31"),
+    ).fetchone()
+    return row is not None
 
 
 def load_activities(connection: sqlite3.Connection, account_id: str, year: int | None = None) -> list[ActivityRow]:
@@ -271,12 +370,15 @@ __all__ = [
     "ActivityRow",
     "IncomeRecord",
     "NOT_IMPORTED_INCOME_TYPES",
+    "OTHER_TYPES_NOTE",
     "TAX_ACTIVITY_TYPES",
+    "coverage_spans_year",
     "ensure_table",
     "fetch_account_id",
     "fetch_activities",
     "income_records",
     "load_activities",
     "parse_activity",
+    "record_coverage",
     "store_activities",
 ]

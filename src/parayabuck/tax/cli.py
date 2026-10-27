@@ -18,10 +18,12 @@ from typing import Any
 
 from parayabuck.tax.dividends import (
     NOT_IMPORTED_INCOME_TYPES,
+    OTHER_TYPES_NOTE,
     ensure_table,
     fetch_account_id,
     fetch_activities,
     parse_activity,
+    record_coverage,
     store_activities,
 )
 from parayabuck.tax.errors import TaxDataError
@@ -46,6 +48,11 @@ def add_tax_parser(commands: Any) -> None:
     fetch.add_argument("--end", default=None, help="last day to fetch (YYYY-MM-DD, default today)")
     fetch.add_argument("--usdtry", default=str(DEFAULT_USDTRY_PATH))
     fetch.add_argument("--yiufe", default=str(DEFAULT_YIUFE_PATH))
+    fetch.add_argument(
+        "--confirm-yiufe-series",
+        action="store_true",
+        help="accept Yİ-ÜFE months that do not overlap the existing file, after checking the series code",
+    )
 
     importer = sub.add_parser("import-activities", help="store DIV/DIVNRA/INT activities from Alpaca (idempotent)")
     importer.add_argument("--since", required=True, help="first activity date to import (YYYY-MM-DD)")
@@ -92,7 +99,7 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
     PAPER ledger. A PAPER import (``writing``) into a LIVE configuration's ledger
     also refuses, for the reverse reason. Refusals raise before any network call.
     """
-    from parayabuck.config import RuntimeConfig, RuntimeMode
+    from parayabuck.config import DEFAULT_LIVE_DECISION_DB_PATH, RuntimeConfig, RuntimeMode
 
     configured = Path(runtime.decision_db_path)
     if live:
@@ -108,6 +115,11 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
             f"the config is LIVE, so its ledger {configured} is the LIVE ledger; PAPER activities are not "
             "stored there (use --live)"
         )
+    if writing and os.path.normpath(str(configured)) == os.path.normpath(DEFAULT_LIVE_DECISION_DB_PATH):
+        raise TaxDataError(
+            f"the config's ledger {configured} is the LIVE ledger path; PAPER activities must not be stored "
+            "there (use a PAPER configuration with its own ledger)"
+        )
     return configured
 
 
@@ -121,7 +133,14 @@ def _rates_fetch(args: argparse.Namespace) -> int:
         return 1
     start = date.fromisoformat(args.start)
     end = date.fromisoformat(args.end) if args.end else datetime.now(TURKEY_TIME).date()
-    counts = fetch_rates_to_files(start, end, usdtry_path=Path(args.usdtry), yiufe_path=Path(args.yiufe), api_key=key)
+    counts = fetch_rates_to_files(
+        start,
+        end,
+        usdtry_path=Path(args.usdtry),
+        yiufe_path=Path(args.yiufe),
+        api_key=key,
+        confirmed_series=bool(args.confirm_yiufe_series),
+    )
     print(json.dumps({"start": start.isoformat(), "end": end.isoformat(), **counts}, indent=2))
     return 0
 
@@ -139,6 +158,7 @@ def _import_activities(args: argparse.Namespace) -> int:
         print("tax import-activities: Alpaca credentials are not configured for this mode", file=sys.stderr)
         return 1
     since = date.fromisoformat(args.since)
+    imported_on = datetime.now(TURKEY_TIME).date()
     adapter = AlpacaClient(key, secret, paper=not args.live)
     try:
         # The wrapper has no activities call; its raw authenticated GET is used for reads only.
@@ -154,6 +174,7 @@ def _import_activities(args: argparse.Namespace) -> int:
     try:
         ensure_table(connection)
         inserted, existing = store_activities(connection, parsed, raw_by_id=raw_by_id)
+        covered_through = record_coverage(connection, account_id, since, imported_on)
         connection.commit()
     finally:
         connection.close()
@@ -161,6 +182,7 @@ def _import_activities(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "since": since.isoformat(),
+                "covered_through": covered_through.isoformat(),
                 "account_suffix": account_id[-4:],
                 "fetched": len(raw_rows),
                 "inserted": inserted,
@@ -172,6 +194,7 @@ def _import_activities(args: argparse.Namespace) -> int:
                     "capital-gain distributions and return of capital are not imported; "
                     "check the broker's year-end tax statement for them"
                 ),
+                "other_types_note": OTHER_TYPES_NOTE,
             },
             indent=2,
         )

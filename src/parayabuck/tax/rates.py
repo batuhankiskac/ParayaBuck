@@ -294,14 +294,17 @@ def fetch_rates_to_files(
     yiufe_path: Path = DEFAULT_YIUFE_PATH,
     api_key: str | None = None,
     http_get: HttpGet = default_http_get,
+    confirmed_series: bool = False,
 ) -> dict[str, int]:
     """Download both series and merge them into the CSV files.
 
     USD/TRY: existing rows are kept and a fetched rate replaces an older one for
     the same date. Yİ-ÜFE: the series code is not confirmed, so a fetched month
     that already holds a different index refuses the whole run and nothing is
-    written. Rows keep their own ``source``; only new months get the series label.
-    Returns the number of rows in each file afterwards.
+    written. When no fetched month overlaps the existing file there is nothing to
+    cross-check against, so the run refuses unless ``confirmed_series`` is set (the
+    operator has checked the series code). Rows keep their own ``source``; only new
+    months get the series label. Returns the number of rows in each file afterwards.
     """
     key = os.getenv(EVDS_KEY_ENV, "") if api_key is None else api_key
     usd: dict[date, float] = load_usdtry_csv(Path(usdtry_path)) if Path(usdtry_path).exists() else {}
@@ -313,6 +316,12 @@ def fetch_rates_to_files(
         raise TaxDataError(
             f"EVDS Yİ-ÜFE series {evds_yiufe_series()} differs from the yiufe file for {len(differing)} month(s), "
             f"e.g. {', '.join(differing[:3])}; nothing was written. Check the series code, or remove those rows first."
+        )
+    if fetched and not confirmed_series and not any(month in indices for month in fetched):
+        raise TaxDataError(
+            f"no fetched Yİ-ÜFE month overlaps the yiufe file, so EVDS series {evds_yiufe_series()} is not "
+            "cross-checked; nothing was written. Check the series code against TÜİK, then rerun with "
+            "--confirm-yiufe-series."
         )
     sources = _yiufe_sources(Path(yiufe_path))
     label = f"TCMB EVDS {evds_yiufe_series()}"

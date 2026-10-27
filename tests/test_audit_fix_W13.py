@@ -310,6 +310,7 @@ def test_fetch_keeps_the_source_label_of_existing_months(tmp_path: Path) -> None
         yiufe_path=yiufe,
         api_key="k",
         http_get=_fake_get("3050.0"),
+        confirmed_series=True,  # the operator file holds only 2025-12, which does not overlap the fetched months
     )
     with yiufe.open(encoding="utf-8", newline="") as handle:
         rows = {row["month"]: row for row in csv.DictReader(handle)}

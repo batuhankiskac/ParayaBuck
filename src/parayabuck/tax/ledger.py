@@ -143,16 +143,22 @@ def assert_no_ownership_adjustments(
     if present is None:
         return
     rows = connection.execute(
-        "SELECT symbol, COUNT(*) FROM portfolio_ownership_adjustments WHERE account_id = ? AND market = ? "
-        "GROUP BY symbol",
+        "SELECT symbol, COUNT(*), MIN(created_at), MAX(created_at) FROM portfolio_ownership_adjustments "
+        "WHERE account_id = ? AND market = ? GROUP BY symbol",
         (account_id, Market.EQUITY.value),
     ).fetchall()
-    adjusted = {str(symbol): int(count) for symbol, count in rows if symbols is None or symbol in symbols}
+    adjusted = {str(symbol): int(count) for symbol, count, *_ in rows if symbols is None or symbol in symbols}
     if adjusted:
+        # The rows carry only created_at, not the effective date of the split or rebase, so a
+        # later-recorded row still blocks an earlier year. Narrowing by created_at could let an
+        # adjustment recorded after year end slip through, so the block stays and the dates are shown.
+        recorded = ", ".join(
+            f"{symbol} {first[:10]}..{last[:10]}" for symbol, _count, first, last in rows if str(symbol) in adjusted
+        )
         raise LedgerError(
             f"ownership adjustment(s) recorded for {', '.join(sorted(adjusted))} in account {account_id} "
-            f"({sum(adjusted.values())} row(s)); the fill-based TL ledger does not model splits or rebases, "
-            "so no figure is produced for those symbols. Reconcile the lots manually first."
+            f"({sum(adjusted.values())} row(s), created {recorded}); the fill-based TL ledger does not model "
+            "splits or rebases, so no figure is produced for those symbols. Reconcile the lots manually first."
         )
 
 

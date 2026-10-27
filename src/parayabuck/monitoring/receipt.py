@@ -9,10 +9,13 @@ legacy substring probe; nothing writes V1 anymore.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 def default_receipt_dir() -> Path:
@@ -58,6 +61,15 @@ def write_decision_receipt_v2(payload: dict[str, Any], directory: str | Path) ->
             identity = ("schema_version", "receipt_id", "decision_id", "market", "origin", "configuration_digest")
             if any(existing.get(key) != payload.get(key) for key in identity):
                 raise ValueError(f"Decision receipt conflict for {decision_id}") from None
+            # Same identity retry: the first write stays on disk. A retry whose
+            # other fields differ is not written, so say which fields were dropped.
+            dropped = sorted(key for key in set(existing) | set(payload) if existing.get(key) != payload.get(key))
+            if dropped:
+                log.warning(
+                    "Decision receipt %s already exists; kept the first write, retry fields not written: %s",
+                    path.name,
+                    ", ".join(dropped),
+                )
         _fsync_directory(root)
     finally:
         Path(temp_name).unlink(missing_ok=True)

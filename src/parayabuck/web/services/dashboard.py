@@ -928,9 +928,12 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         "daily_pnl": account.get("daily_pnl"),
         "realized_pnl": account.get("realized_pnl"),
         "unrealized_pnl": account.get("unrealized_pnl"),
+        # Basis: realized_pnl is TODAY's realized figure, unrealized_pnl is the
+        # open P&L of every open position. The sum is labelled as such in the UI.
         "total_pnl": (float(account.get("realized_pnl") or 0.0) + float(account.get("unrealized_pnl") or 0.0))
         if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
         else None,
+        "fees": account.get("fees"),
         "drawdown": account.get("drawdown"),
         "account_suffix": account.get("account_suffix"),
         "snapshot_at": account.get("snapshot_at"),

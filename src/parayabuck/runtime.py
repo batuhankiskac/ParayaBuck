@@ -3034,8 +3034,19 @@ class EngineRuntime:
                 self._note_rebalance_advance_failure(market, exc)
                 continue
             failures = getattr(self, "_rebalance_advance_failures", None)
-            if failures:
-                failures.pop(market, None)
+            if failures and failures.pop(market, None) is not None:
+                # The advance works again: lift the latch this failure path set
+                # (not one an ambiguous outcome or a reconcile set), so a
+                # transient broker error does not need an operator reset.
+                with getattr(self, "_state_lock", threading.RLock()):
+                    if self._market_entry_halts.get(
+                        market
+                    ) == "rebalance_reconciliation_required" and market in getattr(
+                        self, "_advance_failure_latched", set()
+                    ):
+                        self._market_entry_halts[market] = None
+                        log.warning("Two-phase rebalance advance recovered; %s entry latch lifted", market.value)
+                    getattr(self, "_advance_failure_latched", set()).discard(market)
             if result is not None and result.status == "rebalance_blocked":
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._market_entry_halts[market] = "rebalance_reconciliation_required"
@@ -3059,8 +3070,8 @@ class EngineRuntime:
 
         The persisted rebalance is left as it is, so every later advance
         retries it. The entry halt is the reconcile-pending latch: entries
-        stay blocked (exits are not) until a verified reset, which also
-        re-runs the advance. The alert throttles per market, and the count of
+        stay blocked (exits are not) until the next advance succeeds or a
+        verified reset re-runs it. The alert throttles per market, and the count of
         consecutive failures is carried in its fields.
         """
         failures = getattr(self, "_rebalance_advance_failures", None)
@@ -3068,6 +3079,11 @@ class EngineRuntime:
             failures = self._rebalance_advance_failures = {}
         failures[market] = failures.get(market, 0) + 1
         with getattr(self, "_state_lock", threading.RLock()):
+            if self._market_entry_halts.get(market) is None:
+                latched = getattr(self, "_advance_failure_latched", None)
+                if latched is None:
+                    latched = self._advance_failure_latched = set()
+                latched.add(market)
             self._market_entry_halts[market] = "rebalance_reconciliation_required"
         try:
             alerts.emit(

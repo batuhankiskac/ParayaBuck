@@ -268,6 +268,34 @@ def test_failed_advance_alerts_and_latches_reconcile_pending(captured) -> None:
     EngineRuntime._advance_portfolio_rebalance(engine, Market.EQUITY)
     assert calls == ["advance", "advance"]
     assert engine._rebalance_advance_failures == {}
+    # The advance works again, so the latch this path set is lifted on its own.
+    assert engine._market_entry_halts[Market.EQUITY] is None
+
+
+def test_recovered_advance_keeps_a_latch_it_did_not_set(captured) -> None:
+    class _Runtime:
+        market = Market.EQUITY
+        calls = 0
+
+        def advance_rebalance(self, **kwargs: object) -> None:
+            type(self).calls += 1
+            if type(self).calls == 1:
+                raise RuntimeError("broker unreachable")
+            return None
+
+    engine = object.__new__(EngineRuntime)
+    engine._portfolio_lock = threading.RLock()
+    engine._state_lock = threading.RLock()
+    # An ambiguous outcome latched the market before the failure.
+    engine._market_entry_halts = {Market.EQUITY: "rebalance_reconciliation_required"}
+    engine._portfolio_runtimes = [_Runtime()]
+    engine.trading_state = lambda market: TradingState.ACTIVE
+    engine._equity_signal_basis_latch = lambda: None
+
+    EngineRuntime._advance_portfolio_rebalance(engine, Market.EQUITY)
+    EngineRuntime._advance_portfolio_rebalance(engine, Market.EQUITY)
+
+    assert engine._market_entry_halts[Market.EQUITY] == "rebalance_reconciliation_required"
 
 
 # P2-5-7: a rejected-SELL retry that raises after some SELLs were sent still

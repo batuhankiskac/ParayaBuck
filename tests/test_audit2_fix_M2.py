@@ -207,7 +207,9 @@ def test_gitignore_covers_atomic_write_env_temp_files_and_not_the_backup_file() 
         for line in (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    assert any(fnmatch.fnmatchcase(".env.a1b2c3d4", pattern) for pattern in patterns), (
+    # atomic_write names its temp file ".<target name>.XXXXXXXX", so for .env
+    # the name starts with two dots.
+    assert any(fnmatch.fnmatchcase("..env.a1b2c3d4", pattern) for pattern in patterns), (
         "a mkstemp .env temp file must be ignored"
     )
     assert not any(fnmatch.fnmatchcase(".env.backup", pattern) for pattern in patterns), (

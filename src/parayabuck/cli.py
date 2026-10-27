@@ -1722,7 +1722,10 @@ def _ops_explain(args: argparse.Namespace) -> int:
                 # carries no recognised reason): say so, with the surfaces
                 # checked, instead of the "Normal" NO_TARGET_CHANGE.
                 no_trade_reason = UNKNOWN_NO_TRADE_REASON
-                checked = "checked: journal decision_summary (none), decision target reason (none recognised)"
+                summary_checked = (
+                    "decision_summary (read, no recognised reason)" if summary_events else "decision_summary (none)"
+                )
+                checked = f"checked: journal {summary_checked}, decision target reason (none recognised)"
                 detail = f"{checked}; {detail}" if detail else checked
         # Build explanation
         if getattr(args, "json", False):
@@ -1755,6 +1758,8 @@ def _ops_explain(args: argparse.Namespace) -> int:
             print(f"Reason: {no_trade_reason}")
             if detail:
                 print(f"Detail: {detail}")
+            if rebalance:
+                print(f"Rebalance phase: {rebalance.get('phase')}")
             if decision:
                 # show target change if available
                 try:

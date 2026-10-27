@@ -557,6 +557,10 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
     gross = float(account.get("gross_exposure") or 0.0)
     positions = account.get("positions", [])
     equity_value = sum(float(p.get("market_value") or 0.0) for p in positions if p.get("market") == "equity")
+    # The equity exposure above counts every equity position, while the strategy card
+    # counts only the bot-managed slice. The external share is the difference.
+    managed_value = sum(_managed_share(p)[1] for p in positions if p.get("market") == "equity")
+    external_value = max(equity_value - managed_value, 0.0)
     daily_pnl = float(account.get("daily_pnl") or 0.0)
     limits = getattr(cfg, "risk", None) if cfg is not None else None
     incidents, risk_state = _dashboard_ledger_risk()
@@ -571,6 +575,7 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
             float(getattr(limits, "cash_buffer_pct", _RISK_DEFAULTS.cash_buffer_pct) or 0.0) * 100
         ),
         "equity_exposure_pct": (equity_value / equity) * 100,
+        "external_exposure_pct": (external_value / equity) * 100,
         "daily_pnl": daily_pnl,
         "daily_loss_limit_pct": (
             float(getattr(limits, "daily_loss_limit_pct", _RISK_DEFAULTS.daily_loss_limit_pct) or 0.0) * 100

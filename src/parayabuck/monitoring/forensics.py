@@ -183,6 +183,49 @@ def find_stuck_rebalances(
         return []
 
 
+def find_closed_unresolved_rebalances(
+    db_path: str | Path | None, *, within_seconds: float = 86400, strict: bool = False
+) -> list[dict[str, Any]]:
+    """Rebalances closed without their deferred BUYs because a SELL leg stayed unsettled.
+
+    The closure is a one-off outcome, so only rows written within
+    ``within_seconds`` are reported (a row whose age cannot be read is reported).
+    Restricted to the markets the equity runtime executes, like
+    :func:`find_stuck_rebalances`.
+
+    ``strict=True`` re-raises a read failure instead of answering ``[]``.
+    """
+    if db_path is None or not Path(str(db_path)).exists():
+        return []
+    product_markets = {Market.EQUITY.value}
+    closed: list[dict[str, Any]] = []
+    try:
+        conn = _connect_readonly(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            if not _table_exists(conn, "portfolio_rebalance_executions", strict=strict):
+                return []
+            rows = conn.execute(
+                "SELECT * FROM portfolio_rebalance_executions WHERE status = ?",
+                ("closed_unresolved",),
+            ).fetchall()
+            now = datetime.now(UTC)
+            for r in rows:
+                if str(r["market"] or "") not in product_markets:
+                    continue
+                updated_at = _parse_iso(r["updated_at"])
+                if updated_at is None or (now - updated_at).total_seconds() <= within_seconds:
+                    closed.append(dict(r))
+            return closed
+        finally:
+            conn.close()
+    except Exception:
+        if strict:
+            raise
+        log.warning("closed-unresolved rebalance query failed", exc_info=True)
+        return []
+
+
 def runtime_session_forensics(db_path: str | Path | None) -> dict[str, Any]:
     """Detect unclean previous sessions: no ended_at with newer session exists.
 
@@ -460,6 +503,15 @@ _NO_TRADE_PATTERNS: dict[str, str] = {
     # The engine's own hold reasons (decision summary no_trade_reason).
     "signal_source_mismatch": "SIGNAL_SOURCE_MISMATCH",
     "signal_adjustment_unverified": "SIGNAL_ADJUSTMENT_UNVERIFIED",
+    # Rebalance advance outcomes recorded as the decision's no-trade reason.
+    "rebalance_in_progress": "REBALANCE_IN_PROGRESS",
+    "rebalance_blocked": "REBALANCE_BLOCKED",
+    "rebalance_waiting_for_slot": "REBALANCE_WAITING_FOR_SLOT",
+    "replan_snapshot_stale": "ACCOUNT_STALE",
+    "stale_decision_buy_held": "STALE_DECISION_BUY_HELD",
+    "submit_blocked": "SUBMIT_BLOCKED",
+    "replan_sell_submitted": "SELL_PHASE_PENDING",
+    "closed_unresolved": "REBALANCE_CLOSED_UNRESOLVED",
 }
 
 
@@ -488,6 +540,7 @@ __all__ = [
     "current_account_id",
     "decision_reconstruction",
     "expected_session_id",
+    "find_closed_unresolved_rebalances",
     "find_stuck_rebalances",
     "latest_decision_row",
     "map_no_trade_reason",

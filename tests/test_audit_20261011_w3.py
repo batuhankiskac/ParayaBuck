@@ -459,10 +459,13 @@ def test_w3_recovering_session_tags_startup_origin(tmp_path: Path) -> None:
 
 
 def test_w3_zero_owned_operator_rebase_adopts_surplus(tmp_path: Path) -> None:
-    """R3D2: an explicit rebase from zero adopts the broker quantity."""
+    """R3D2: an explicit rebase from zero adopts the broker quantity.
+
+    F10-3: the adoption must now state the unit cost (an acquisition lot);
+    without it the zero-owned increase is refused, see tests/test_audit_fix_W11.py."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     try:
-        assert repo.rebase_ownership_to_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 50.0) == 50.0
+        assert repo.rebase_ownership_to_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 50.0, unit_cost=10.0) == 50.0
         assert repo.owned_quantities(ACCOUNT, Market.EQUITY).get(SYMBOL, 0.0) == pytest.approx(50.0)
     finally:
         repo.close()

@@ -13,12 +13,13 @@ A share change is rebased automatically only when it is provable:
 - **Shortfall** (the broker holds fewer shares than the repository owns) is
   always adoptable: reducing ownership to the broker's own count can never
   over-claim a share. That is a foreign liquidation or a reverse split; the
-  audit row records which.
+  audit row records which. A standard reverse-split ratio within about one
+  share is accepted, because a reverse split pays cash for fractional shares.
 - **Surplus** (the broker holds more shares than the repository owns) claims
   inventory the bot never bought, so it needs a standard split ratio *and* a
-  broker average entry price divided by that same ratio. A foreign buy changes
-  the quantity but leaves our own cost basis alone, so the quantity gap alone
-  never proves a split.
+  broker average entry price that matches our total cost over the broker's
+  share count. A foreign buy changes the quantity but leaves our own cost
+  basis alone, so the quantity gap alone never proves a split.
 - Anything else stays ``UNKNOWN``: a shortfall halts with an actionable
   incident, an unconfirmed surplus raises an operator alert (the extra shares
   stay external), and the operator rebases explicitly
@@ -29,6 +30,10 @@ ever filled: the broker's ``avg_entry_price`` describes the open lots only,
 so after a few rebalances an all-history average would never corroborate a
 real split. :func:`open_position_cost_bases` replays fills since the position
 was last flat under both FIFO lot depletion and the average-cost method.
+
+A split rescales only the lots that existed when it took effect. An operator
+increase that is not a corroborated split is an acquisition and seeds a new
+lot at a stated unit cost; an increase with neither proof is refused.
 """
 
 from __future__ import annotations
@@ -49,6 +54,17 @@ KNOWN_SPLIT_RATIOS: tuple[float, ...] = (0.1, 0.125, 0.2, 0.25, 1 / 3, 0.5, 2.0,
 # Alpaca reports quantities to 9 decimals; a relative band absorbs that noise.
 QUANTITY_TOLERANCE = 1e-6
 
+# A reverse split pays cash in lieu for fractional shares, so the broker count
+# can sit up to about one share below the exact ratio. Applies to reductions
+# only: a forward split does not round holdings down.
+FRACTIONAL_SHARE_TOLERANCE = 1.0
+
+# A reduction whose ratio is within this relative band of a standard ratio,
+# yet outside the fractional tolerance, is ambiguous (a partial foreign sale
+# or an inexact reverse split). It halts for an operator instead of being
+# booked as a foreign sale.
+NEAR_STANDARD_RELATIVE_BAND = 0.02
+
 # A split divides the average entry price by the same ratio as the share
 # count. Partial exits and cash dividends move our own average by far less
 # than this band, and a foreign trade leaves it unchanged.
@@ -59,6 +75,9 @@ COST_BASIS_TOLERANCE = 0.02
 # every share-count change the runtime absorbed.
 SPLIT_REBASE_KIND = "split_rebase"
 FOREIGN_SELL_KIND = "foreign_sell_reduction"
+# An operator increase the bot did not buy (a foreign purchase on the shared
+# key). It seeds a lot at the unit cost stated with the adjustment.
+ACQUISITION_KIND = "operator_acquisition"
 
 MATCH = "match"
 SPLIT = "split"
@@ -66,14 +85,18 @@ FOREIGN_SELL = "foreign_sell"
 UNKNOWN = "unknown"
 
 __all__ = [
+    "ACQUIRE",
+    "ACQUISITION_KIND",
     "ADJUST",
     "BUY",
     "COST_BASIS_TOLERANCE",
     "FOREIGN_SELL",
     "FOREIGN_SELL_KIND",
+    "FRACTIONAL_SHARE_TOLERANCE",
     "KNOWN_SPLIT_RATIOS",
     "LotBookInconsistency",
     "MATCH",
+    "NEAR_STANDARD_RELATIVE_BAND",
     "QUANTITY_TOLERANCE",
     "SELL",
     "SPLIT",
@@ -82,6 +105,8 @@ __all__ = [
     "UNKNOWN",
     "ShareChange",
     "classify_share_change",
+    "format_quantity",
+    "fractional_split_ratio",
     "known_split_ratio",
     "open_position_cost_bases",
     "open_position_lots",
@@ -90,29 +115,49 @@ __all__ = [
 BUY = "buy"
 SELL = "sell"
 # ``adjust`` is an audited ownership adjustment (signed quantity, no price).
-# A plain ``adjust`` reduction is a foreign sale or a stale clear and
-# depletes like a sell; ``split_adjust`` is a reverse-split rebase and
-# rescales the open lots (fewer shares, same total cost).
+# A reducing ``adjust`` is a foreign sale or a stale clear and depletes like
+# a sell. An increasing ``adjust`` has no cost basis and is refused by the
+# replay. ``split_adjust`` is a split rebase (either sign) and rescales the
+# open lots: fewer shares for a reverse split, more for a forward split, with
+# the total cost unchanged. ``acquire`` seeds a lot at a stated unit cost.
 ADJUST = "adjust"
 SPLIT_ADJUST = "split_adjust"
+ACQUIRE = "acquire"
+
+
+def format_quantity(value: float) -> str:
+    """Share count as operator-facing text, exact to Alpaca's 9 decimals.
+
+    ``:g`` keeps six significant digits and rounds 1034.567891 to 1034.57, so
+    a copy-pasted rebase command would then adopt the wrong count.
+    """
+    text = f"{float(value):.9f}".rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
 
 
 class LotBookInconsistency(ValueError):
-    """A sale or reducing adjustment exceeds the open lots the bot owns.
+    """A sale or reducing adjustment exceeds the open lots the bot owns, or an
+    event cannot be priced (an unpriced increase, a split with no lots).
 
     The lot book then cannot be trusted, so nothing derived from it (cost
     basis, gain fraction) may be used. ``symbol`` is empty when the replay was
     not given one; the caller that knows the symbol re-raises with it set.
     """
 
-    def __init__(self, *, sell_quantity: float, open_quantity: float, symbol: str = "") -> None:
+    def __init__(self, *, sell_quantity: float, open_quantity: float, symbol: str = "", detail: str = "") -> None:
         self.symbol = symbol
         self.sell_quantity = sell_quantity
         self.open_quantity = open_quantity
-        super().__init__(
-            f"Lot book inconsistent for {symbol or '<unknown symbol>'}: a reduction of "
-            f"{sell_quantity:g} exceeds the {open_quantity:g} open lot quantity"
-        )
+        self.detail = detail
+        subject = f"Lot book inconsistent for {symbol or '<unknown symbol>'}"
+        if detail:
+            message = f"{subject}: {detail}"
+        else:
+            message = (
+                f"{subject}: a reduction of {format_quantity(sell_quantity)} exceeds the "
+                f"{format_quantity(open_quantity)} open lot quantity"
+            )
+        super().__init__(message)
 
 
 def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[list[list[float]], float, float]:
@@ -125,26 +170,44 @@ def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[lis
     is larger than the open quantity by more than the relative
     :data:`QUANTITY_TOLERANCE` (with a 1e-9 absolute floor). Such a fill
     cannot come from a consistent book; truncating it silently would hide it.
+    An increase without a cost basis, or a split with no open lots, raises too.
     """
     lots: list[list[float]] = []  # FIFO [quantity, price]
     quantity = 0.0
     cost = 0.0  # average-cost method total
     for kind, raw_quantity, price in events:
         amount = float(raw_quantity)
-        if kind == ADJUST and amount > 0:
-            if quantity <= 1e-12:
-                continue
+        if kind == SPLIT_ADJUST:
+            # A split moves the share count and leaves the total cost alone:
+            # every open lot scales by the same ratio, price by its inverse.
+            if quantity <= 1e-12 or quantity + amount <= 1e-12:
+                raise LotBookInconsistency(
+                    sell_quantity=abs(amount),
+                    open_quantity=quantity,
+                    detail="a split rescale needs open lots and a positive share count after it",
+                )
             ratio = (quantity + amount) / quantity
             lots = [[lot_quantity * ratio, lot_price / ratio] for lot_quantity, lot_price in lots]
             quantity += amount
             continue
-        if kind == SPLIT_ADJUST and amount < 0 and quantity > 1e-12 and quantity + amount > 1e-12:
-            # Reverse split: fewer shares, same total cost. Rescale the open
-            # lots (price by the inverse ratio) instead of depleting them
-            # like a sale, which would leave the pre-split basis behind.
-            ratio = quantity / (quantity + amount)
-            lots = [[lot_quantity / ratio, lot_price * ratio] for lot_quantity, lot_price in lots]
+        if kind == ADJUST and amount > 0:
+            # An increase that is not a split has no provenance and no price,
+            # so the lots it adds cannot be costed. Refuse instead of guessing.
+            raise LotBookInconsistency(
+                sell_quantity=amount,
+                open_quantity=quantity,
+                detail="an unpriced ownership increase has no cost basis; it must be a split or an acquisition",
+            )
+        if kind == ACQUIRE:
+            if price is None or not math.isfinite(float(price)) or float(price) <= 0 or amount <= 0:
+                raise LotBookInconsistency(
+                    sell_quantity=amount,
+                    open_quantity=quantity,
+                    detail="an acquisition needs a finite positive unit cost",
+                )
+            lots.append([amount, float(price)])
             quantity += amount
+            cost += amount * float(price)
             continue
         if kind == BUY:
             if price is None or price <= 0 or amount <= 0:
@@ -177,13 +240,13 @@ def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[lis
 def open_position_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[tuple[float, float], ...]:
     """FIFO open lots of the current position as ``(quantity, unit cost)``.
 
-    Same replay as :func:`open_position_cost_bases` (one buy appends a lot, a
-    sell or reducing adjustment consumes the oldest lots, a split rebase
-    rescales them, a flat position clears them), but the whole lot list is
-    returned oldest first instead of two averages. A ``buy`` event's ``price``
-    is the lot's effective per-unit cost, so the A1u caller passes the fill
-    price plus the buy's fees (the research engine's ``usd_price_with_fee``).
-    Returns ``()`` when nothing is open.
+    Same replay as :func:`open_position_cost_bases` (one buy or acquisition
+    appends a lot, a sell or reducing adjustment consumes the oldest lots, a
+    split rebase rescales them, a flat position clears them), but the whole
+    lot list is returned oldest first instead of two averages. A ``buy``
+    event's ``price`` is the lot's effective per-unit cost, so the A1u caller
+    passes the fill price plus the buy's fees (the research engine's
+    ``usd_price_with_fee``). Returns ``()`` when nothing is open.
 
     This is the downsize gain band's input and it must never raise into
     planning. An inconsistent lot book (see :class:`LotBookInconsistency`)
@@ -202,7 +265,9 @@ def open_position_lots(events: Iterable[tuple[str, float, float | None]]) -> tup
             "paper_incident",
             message=f"{error}. The downsize gain band falls back to the constant band until the lot book is repaired.",
             category="lot_book_inconsistency",
-            incident_id=f"lot_book_inconsistency:{error.sell_quantity:.9g}:{error.open_quantity:.9g}",
+            incident_id=(
+                f"lot_book_inconsistency:{format_quantity(error.sell_quantity)}:{format_quantity(error.open_quantity)}"
+            ),
             sell_quantity=error.sell_quantity,
             open_quantity=error.open_quantity,
         )
@@ -215,15 +280,14 @@ def open_position_lots(events: Iterable[tuple[str, float, float | None]]) -> tup
 def open_position_cost_bases(events: Iterable[tuple[str, float, float | None]]) -> tuple[float, ...]:
     """Average entry price of the CURRENT position, under FIFO and average cost.
 
-    ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``
-    and ``sell`` fills (positive quantity, fill price) and ``adjust`` for an
-    audited ownership adjustment (signed quantity, no price). An addition is
-    a split rebase and rescales the open lots (more shares, same total
-    cost); a ``split_adjust`` decrease (a reverse split) rescales them the
-    same way (fewer shares, same total cost). Any other reduction depletes
-    like a sell. Lots are discarded whenever the position goes flat.
-    Returns ``(fifo, average_cost)`` — the same value twice when no sell
-    touched the open lots — or ``()`` when nothing is open. Raises
+    ``events`` are chronological ``(kind, quantity, price)`` tuples: ``buy``,
+    ``acquire`` and ``sell`` fills and acquisitions (positive quantity, unit
+    price) and ``adjust`` / ``split_adjust`` audited ownership adjustments
+    (signed quantity, no price). A ``split_adjust`` rescales the open lots in
+    either direction (more shares or fewer, same total cost). Any other
+    reduction depletes like a sell. Lots are discarded whenever the position
+    goes flat. Returns ``(fifo, average_cost)`` — the same value twice when no
+    sell touched the open lots — or ``()`` when nothing is open. Raises
     :class:`LotBookInconsistency` when the replay is not self-consistent.
     """
     lots, quantity, cost = _replay_lots(events)
@@ -264,19 +328,53 @@ def known_split_ratio(ratio: float) -> float | None:
     return None
 
 
+def fractional_split_ratio(owned_quantity: float, broker_quantity: float) -> float | None:
+    """The standard reverse-split ratio that explains ``broker_quantity`` from
+    ``owned_quantity`` within :data:`FRACTIONAL_SHARE_TOLERANCE` shares.
+
+    Only ratios below one qualify: a reverse split is the case that pays cash
+    for fractional shares. The closest such ratio wins; None when none fits.
+    """
+    best: float | None = None
+    best_gap = FRACTIONAL_SHARE_TOLERANCE
+    for candidate in KNOWN_SPLIT_RATIOS:
+        if candidate >= 1:
+            continue
+        gap = abs(broker_quantity - owned_quantity * candidate)
+        if gap <= FRACTIONAL_SHARE_TOLERANCE and (best is None or gap < best_gap):
+            best, best_gap = candidate, gap
+    return best
+
+
+def _near_standard_reverse_ratio(ratio: float) -> float | None:
+    """A standard reverse-split ratio ``ratio`` sits within the near-standard band of."""
+    for candidate in KNOWN_SPLIT_RATIOS:
+        if candidate < 1 and abs(ratio - candidate) <= NEAR_STANDARD_RELATIVE_BAND * candidate:
+            return candidate
+    return None
+
+
 def _cost_basis_confirms(
     owned_average_costs: Sequence[float | None],
     broker_average_cost: float | None,
-    ratio: float,
+    owned_quantity: float,
+    broker_quantity: float,
 ) -> bool:
-    """Whether the broker's average entry price agrees with ``owned / ratio``
-    for any of our cost-basis candidates (FIFO, average cost)."""
+    """Whether the broker's average entry price equals our total cost over the
+    broker's share count, for any of our cost-basis candidates (FIFO, average).
+
+    The broker's average is total cost over its shares, and a split leaves the
+    total cost alone. So ``owned_average * owned / broker`` is the average a
+    split must produce, including any post-split buys already in the count.
+    """
     if broker_average_cost is None or not math.isfinite(broker_average_cost) or broker_average_cost <= 0:
+        return False
+    if broker_quantity <= 1e-12:
         return False
     for owned in owned_average_costs:
         if owned is None or not math.isfinite(owned) or owned <= 0:
             continue
-        expected = owned / ratio
+        expected = owned * owned_quantity / broker_quantity
         if abs(broker_average_cost - expected) <= COST_BASIS_TOLERANCE * expected:
             return True
     return False
@@ -289,76 +387,98 @@ def classify_share_change(
     owned_average_cost: float | None = None,
     broker_average_cost: float | None = None,
     owned_average_cost_candidates: Sequence[float] = (),
+    post_boundary_quantity: float = 0.0,
 ) -> ShareChange:
     """Classify one symbol's owned-vs-broker share count difference.
 
     ``owned_average_cost`` is the repository's average entry price of the
-    current position (``owned_average_cost_candidates`` may add the other
-    lot method's value); ``broker_average_cost`` is the broker position's
+    whole current position (``owned_average_cost_candidates`` may add the
+    other lot method's value); ``broker_average_cost`` is the broker position's
     ``avg_entry_price``. A share *increase* needs both sides to be accepted
     as a split; a share *decrease* at a standard split ratio needs the
     broker basis to corroborate it, otherwise it is a foreign sell (an
     unchanged broker basis proves no corporate action occurred).
+
+    ``post_boundary_quantity`` is the owned quantity booked at or after the
+    split's effective time (signed; post-split buys are positive). It is held
+    out of the ratio, so a fill that landed after the split does not dilute
+    it. The cost check still uses the whole position.
     """
     owned = float(owned_quantity)
     broker = float(broker_quantity)
-    if not math.isfinite(owned) or not math.isfinite(broker) or owned < 0 or broker < 0:
+    post = float(post_boundary_quantity)
+    if not (math.isfinite(owned) and math.isfinite(broker) and math.isfinite(post)) or owned < 0 or broker < 0:
         raise ValueError("Share quantities must be finite and non-negative")
-    ratio = broker / owned if owned > 1e-12 else 0.0
     if owned <= 1e-12 or broker <= 1e-12 or abs(broker - owned) <= max(1e-12, owned * QUANTITY_TOLERANCE):
         return ShareChange(MATCH, owned, broker, 1.0, "owned quantity matches the broker position")
-    ratio_match = known_split_ratio(ratio)
-    corroborated = ratio_match is not None and _cost_basis_confirms(
-        (owned_average_cost, *owned_average_cost_candidates), broker_average_cost, ratio_match
+    whole_ratio = broker / owned
+    pre_owned = owned - post
+    pre_broker = broker - post
+    candidate: float | None = None
+    ratio = whole_ratio
+    if pre_owned > 1e-12 and pre_broker > 1e-12:
+        ratio = pre_broker / pre_owned
+        candidate = known_split_ratio(ratio)
+        if candidate is None and broker < owned:
+            candidate = fractional_split_ratio(pre_owned, pre_broker)
+    corroborated = candidate is not None and _cost_basis_confirms(
+        (owned_average_cost, *owned_average_cost_candidates), broker_average_cost, owned, broker
     )
-    # The ratio reported on the result is the standard one when it matched, so
-    # the audit row shows 2 rather than 1.9999998.
-    matched = ratio if ratio_match is None else ratio_match
     if broker < owned:
-        if ratio_match is not None and corroborated:
+        if corroborated and candidate is not None:
             return ShareChange(
                 SPLIT,
                 owned,
                 broker,
-                ratio_match,
-                f"{ratio_match:g}-for-1 reverse split confirmed by the broker average entry price",
+                candidate,
+                f"{candidate:g}-for-1 reverse split confirmed by the broker average entry price",
             )
-        if ratio_match is not None:
+        if candidate is None:
+            near = _near_standard_reverse_ratio(ratio)
+            if near is not None:
+                return ShareChange(
+                    UNKNOWN,
+                    owned,
+                    broker,
+                    ratio,
+                    f"broker holds {ratio:.6f} of the owned quantity, close to a {near:g}x reverse split but "
+                    f"outside the {FRACTIONAL_SHARE_TOLERANCE:g}-share fractional tolerance; halting for the operator",
+                )
             return ShareChange(
                 FOREIGN_SELL,
                 owned,
                 broker,
-                ratio,
-                f"broker holds fewer shares than owned at a {ratio_match:g}x ratio but its average entry price "
-                "does not corroborate a reverse split",
+                whole_ratio,
+                "broker holds fewer shares than owned and no standard split ratio explains the gap",
             )
         return ShareChange(
             FOREIGN_SELL,
             owned,
             broker,
-            ratio,
-            "broker holds fewer shares than owned and no standard split ratio explains the gap",
+            whole_ratio,
+            f"broker holds fewer shares than owned at a {candidate:g}x ratio but its average entry price "
+            "does not corroborate a reverse split",
         )
-    if corroborated:
+    if corroborated and candidate is not None:
         return ShareChange(
             SPLIT,
             owned,
             broker,
-            matched,
-            f"{ratio_match:g}-for-1 split confirmed by the broker average entry price",
+            candidate,
+            f"{candidate:g}-for-1 split confirmed by the broker average entry price",
         )
-    if ratio_match is not None:
+    if candidate is not None:
         return ShareChange(
             UNKNOWN,
             owned,
             broker,
-            matched,
-            f"broker holds {ratio_match:g}x the owned quantity but its average entry price does not corroborate a split",
+            candidate,
+            f"broker holds {candidate:g}x the owned quantity but its average entry price does not corroborate a split",
         )
     return ShareChange(
         UNKNOWN,
         owned,
         broker,
-        ratio,
+        whole_ratio,
         "broker holds more shares than owned and no standard split ratio explains the gap",
     )

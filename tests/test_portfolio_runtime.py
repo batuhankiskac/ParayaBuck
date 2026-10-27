@@ -1427,7 +1427,8 @@ def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> No
 def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) -> None:
     """Ownership drift during account polling must halt the runtime and
     persist the safety state instead of being retried as a transient error."""
-    today = datetime.now(UTC).date()
+    # The runtime keys risk_state by the New York session date, not the UTC date.
+    today = datetime.now(UTC).astimezone(NEW_YORK).date()
     import time
 
     from parayabuck.execution.alpaca import OwnershipDriftError

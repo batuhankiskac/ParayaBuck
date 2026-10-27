@@ -616,7 +616,14 @@ def test_shutdown_cancels_an_in_flight_start_before_waiting_for_it(
                 if made and made[0].entered.is_set():
                     break
                 await asyncio.sleep(0.01)
-            threading.Timer(0.05, made[0].release.set).start()
+
+            # Release the gated start only after the shutdown has raised its
+            # cancel flag, so the ordering does not depend on a wall-clock delay.
+            def release_after_cancel() -> None:
+                if made[0].startup_cancel.wait(5):
+                    made[0].release.set()
+
+            threading.Thread(target=release_after_cancel, daemon=True).start()
 
     asyncio.run(asyncio.wait_for(run(), 10))
 

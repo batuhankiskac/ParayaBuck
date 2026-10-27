@@ -127,7 +127,7 @@ def _all_cash_activities(
     result: list[dict[str, object]] = []
     while True:
         params: dict[str, object] = {
-            "activity_types": "CSD,CSW,ACATC,JNLC,DIV,FEE,CFEE,JNLS",
+            "activity_types": "CSD,CSW,ACATC,JNLC,DIV,DIVNRA,INT,FEE,CFEE,JNLS",
             "direction": "desc",
             "page_size": 100,
         }

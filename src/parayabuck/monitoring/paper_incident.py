@@ -33,7 +33,9 @@ log = logging.getLogger("parayabuck.monitoring.paper_incident")
 # Alpaca cash-activity classes that move equity without being a deposit or a
 # withdrawal. They are separate terms in the bridge: a QLD distribution is
 # income, a FEE/CFEE is a charge, and neither is an unexplained residual.
-INCOME_ACTIVITIES = frozenset({"DIV", "JNLS"})
+# DIVNRA (non-resident withholding, negative) and INT (interest) are income too;
+# left out, they fell into net_transfers and read as an unexplained residual.
+INCOME_ACTIVITIES = frozenset({"DIV", "DIVNRA", "INT", "JNLS"})
 CASH_CHARGE_ACTIVITIES = frozenset({"FEE", "CFEE"})
 
 

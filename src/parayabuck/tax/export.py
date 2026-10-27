@@ -26,7 +26,14 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from parayabuck.tax.dividends import NOT_IMPORTED_INCOME_TYPES, IncomeRecord, income_records, load_activities
+from parayabuck.tax.dividends import (
+    NOT_IMPORTED_INCOME_TYPES,
+    OTHER_TYPES_NOTE,
+    IncomeRecord,
+    coverage_spans_year,
+    income_records,
+    load_activities,
+)
 from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, MissingTableError, TaxDataError
 from parayabuck.tax.ledger import TURKEY_TIME, LotDisposal, build_disposals
 from parayabuck.tax.rates import DEFAULT_USDTRY_PATH, DEFAULT_YIUFE_PATH, RateBook, load_rate_book
@@ -97,6 +104,7 @@ class YearReport:
     foreign_tax_credit_tl: float
     dividend_tax_due_tl: float
     notes: tuple[str, ...]
+    income_coverage_complete: bool
 
     def to_dict(self) -> dict[str, Any]:
         """Summary mapping written as JSON (disposal rows are in the CSV)."""
@@ -123,6 +131,7 @@ class YearReport:
             "interest_tax_estimate_tl": _r(self.interest_tax_estimate_tl),
             "foreign_tax_credit_tl": _r(self.foreign_tax_credit_tl),
             "dividend_tax_due_tl": _r(self.dividend_tax_due_tl),
+            "income_coverage_complete": self.income_coverage_complete,
             "notes": list(self.notes),
         }
 
@@ -164,12 +173,35 @@ def build_year_report(
         progressive_tax(dividend_base + max(interest_tl, 0.0), year) - progressive_tax(dividend_base, year), 0.0
     )
     credit = min(max(withholding_tl, 0.0), dividend_tax)
+    declaration_required = income_total_tl > threshold
+    dividend_tax_due = dividend_tax - credit
+    coverage_complete = coverage_spans_year(connection, account_id, year)
 
     notes: list[str] = []
     if not income:
         notes.append(f"no dividend or interest activities stored for {year}; run `tax import-activities`")
+    if not coverage_complete:
+        notes.append(
+            f"{year} yılı için temettü ve faiz içe aktarma kapsamı yılı tamamen kapsamıyor; yıl sonundan sonra "
+            f"`tax import-activities --since {year}-01-01` komutunu çalıştırın. Rakamlar eksik olabilir."
+        )
     if dividend_gross_usd > 0 and withholding_usd > dividend_gross_usd * US_TREATY_WITHHOLDING_CAP + 1e-6:
-        notes.append("US withholding exceeds the 20% treaty cap; check the W-8BEN on file with the broker")
+        excess_usd = withholding_usd - dividend_gross_usd * US_TREATY_WITHHOLDING_CAP
+        notes.append(
+            f"US stopajı brüt temettünün %20 anlaşma tavanını (treaty cap) {excess_usd:,.2f} USD aşıyor. "
+            "Tavanın üstündeki kısım da temettü vergisi sınırına kadar mahsup tutarına dahil edildi; "
+            "yasal dayanağı doğrulanmadı. W-8BEN kaydını aracı kurumdan kontrol edin."
+        )
+    if withholding_usd > 0 and dividend_gross_usd <= 0:
+        notes.append(
+            "stopaj kaydı var ama brüt temettü içe aktarılmamış; net temettü negatif görünür. "
+            "Eksik temettü kayıtlarını kontrol edin."
+        )
+    if dividend_tax_due > 0 and not declaration_required:
+        notes.append(
+            "temettü ve faiz toplamı beyan eşiğinin altında; beyan zorunluluğu görünmüyor. "
+            "dividend_tax_due_tl yine de ihtiyatlı olarak gösteriliyor."
+        )
     if net_gain < 0:
         notes.append("net loss for the year; not carried forward and no tax is due on it (rule 3)")
     if not disposals:
@@ -178,6 +210,7 @@ def build_year_report(
         f"income types {', '.join(NOT_IMPORTED_INCOME_TYPES)} (capital-gain distributions, return of capital) "
         "are not imported; any such income is missing from these figures"
     )
+    notes.append(OTHER_TYPES_NOTE)
 
     return YearReport(
         year=year,
@@ -196,12 +229,13 @@ def build_year_report(
         dividend_net_tl=dividend_gross_tl - withholding_tl,
         interest_tl=interest_tl,
         income_threshold_tl=threshold,
-        income_declaration_required=income_total_tl > threshold,
+        income_declaration_required=declaration_required,
         dividend_tax_estimate_tl=dividend_tax,
         interest_tax_estimate_tl=interest_tax,
         foreign_tax_credit_tl=credit,
-        dividend_tax_due_tl=dividend_tax - credit,
+        dividend_tax_due_tl=dividend_tax_due,
         notes=tuple(notes),
+        income_coverage_complete=coverage_complete,
     )
 
 
@@ -275,6 +309,10 @@ def ytd_status(
     base: dict[str, Any] = {"year": year, "account_id": account_id}
     if connection is None:
         return {**base, "status": "unavailable", "error": "ledger database not found"}
+    if not account_id or account_id == "unknown":
+        # The runtime falls back to "unknown" when the broker reports no account id; zero
+        # figures for that placeholder would read as a real, empty account.
+        return {**base, "status": "unavailable", "error": "broker account id unknown; tax figures not attributed"}
     try:
         rates = load_rate_book(Path(usdtry_path), Path(yiufe_path))
         report = build_year_report(connection, account_id, year, rates)
@@ -292,7 +330,7 @@ def ytd_status(
         return {**base, "status": "unavailable", "error": str(exc)}
     except (ValueError, TypeError) as exc:
         return {**base, "status": "error", "error": str(exc)}
-    if not report.income:
+    if not report.income or not report.income_coverage_complete:
         income_status = "veri eksik"
     elif report.income_declaration_required:
         income_status = "aşıldı, beyan gerekir"
@@ -312,6 +350,7 @@ def ytd_status(
         "income_declaration_required": report.income_declaration_required,
         "income_declaration_status": income_status,
         "income_row_count": len(report.income),
+        "income_coverage_complete": report.income_coverage_complete,
         "dividend_tax_due_tl": _r(report.dividend_tax_due_tl),
         "interest_tax_estimate_tl": _r(report.interest_tax_estimate_tl),
         "notes": list(report.notes),

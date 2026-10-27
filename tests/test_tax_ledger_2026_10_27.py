@@ -302,6 +302,7 @@ def test_fetch_rates_to_files_merges_and_writes_loadable_csv(tmp_path: Path) -> 
         yiufe_path=yiufe,
         api_key="k",
         http_get=fake_get,
+        confirmed_series=True,  # the empty yiufe file has no overlapping month to cross-check against
     )
     assert counts == {"usdtry_rows": 2, "yiufe_rows": 1}
     book = load_rate_book(usd, yiufe)

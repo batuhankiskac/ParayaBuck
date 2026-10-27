@@ -159,7 +159,8 @@ def test_incident_download_paginates_relevant_cash_activities(monkeypatch) -> No
     assert len(activities) == 101
     # Dividends and broker cash charges move equity, so the reconciler needs
     # them too: without them a QLD distribution reads as unexplained loss.
-    assert calls[0]["activity_types"] == "CSD,CSW,ACATC,JNLC,DIV,FEE,CFEE,JNLS"
+    # DIVNRA and INT (audit F2-10-4) are income too, so they are requested as well.
+    assert calls[0]["activity_types"] == "CSD,CSW,ACATC,JNLC,DIV,DIVNRA,INT,FEE,CFEE,JNLS"
     assert calls[0]["after"] == "2026-01-01T00:00:00Z"
     assert "page_token" in calls[1]
 

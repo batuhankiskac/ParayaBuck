@@ -103,18 +103,20 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
         )
 
     try:
-        if not payload.paper:
-            # B3: the LIVE arm is bound to the LIVE key pair only.
-            key, secret = await asyncio.to_thread(manager.get_live_credentials)
-            if not key or not secret:
-                raise ValueError("CANLI Alpaca anahtarları (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY) gerekli.")
-            await asyncio.to_thread(manager._require_valid_live_arm, key, secret, consume=False)
         # Same lock as the settings drawer, and the same validate-then-replace
         # discipline: an unvalidated write (e.g. live without a dollar cap)
         # broke the next restart (doctor ExecStartPre) and every backup run.
+        # The LIVE arm is checked under the same lock as the write, so an arm
+        # that expires or is invalidated in between cannot authorize the toggle.
         # The idle check repeats under the manager's state lock: a start that
         # began after the check above must not read the config mid-toggle.
         async with resolve_web_state(request).settings_lock:
+            if not payload.paper:
+                # B3: the LIVE arm is bound to the LIVE key pair only.
+                key, secret = await asyncio.to_thread(manager.get_live_credentials)
+                if not key or not secret:
+                    raise ValueError("CANLI Alpaca anahtarları (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY) gerekli.")
+                await asyncio.to_thread(manager._require_valid_live_arm, key, secret, consume=False)
             await asyncio.to_thread(manager.write_mode_if_idle, payload.paper, _write_mode)
 
         await asyncio.to_thread(manager.reset_broker)  # Force broker reset

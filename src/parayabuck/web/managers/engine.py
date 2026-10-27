@@ -225,6 +225,10 @@ class EngineManager:
         # True while a settings save stops, writes and restarts the engine; a
         # manual or auto start in that window would read a half-written config.
         self._settings_write_open = False
+        # An operator Stop that arrived during a settings save. The settings
+        # restart's own start must not undo it; the next start attempt refuses
+        # once and clears this flag.
+        self._settings_stop_requested = False
         # time.monotonic() when the current start attempt began (None between attempts).
         self._start_attempt_monotonic: float | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
@@ -379,6 +383,7 @@ class EngineManager:
         """Hold starts out while a settings save stops, writes and restarts the engine."""
         with self._state_lock:
             self._settings_write_open = True
+            self._settings_stop_requested = False
 
     def end_settings_write(self) -> None:
         with self._state_lock:
@@ -574,7 +579,11 @@ class EngineManager:
             if self.runtime is not None:
                 try:
                     runtime_health = self.runtime.health()
-                    self.engine_state = runtime_health.state
+                    # 'stopping' and 'stop_failed' are the manager's own states (a
+                    # stop in progress or a runtime that did not stop): a probe must
+                    # not overwrite them, or the restart-required marker is lost.
+                    if self.engine_state not in {"stopping", "stop_failed"}:
+                        self.engine_state = runtime_health.state
                 except Exception as exc:
                     # A failing health probe must not take down /api/status
                     # and every websocket subscriber; fall back to the last
@@ -850,6 +859,11 @@ class EngineManager:
                     raise ValueError("Motor başlatılamadı: uygulama kapanıyor.")
                 if self._settings_write_open:
                     raise ValueError("Motor başlatılamadı: ayar kaydı sürüyor; kayıt bitince tekrar deneyin.")
+                if self._settings_stop_requested:
+                    self._settings_stop_requested = False
+                    raise ValueError(
+                        "Motor başlatılamadı: ayar kaydı sırasında durdurma istendi; motoru elle başlatın."
+                    )
                 if self.runtime is not None or self.engine_state in _START_ENGINE_BLOCKING_STATES:
                     raise ValueError(f"Motor zaten {_ENGINE_STATE_TR.get(self.engine_state, self.engine_state)}.")
                 # The auto-start retry loop re-enters while its own failed
@@ -1056,7 +1070,10 @@ class EngineManager:
                         runtime, f"Engine start failed and its workers did not stop: {message}"
                     )
                     failed = True
-                elif interrupted:
+                elif interrupted or self.engine_state == "stopping":
+                    # A stop that arrived before the runtime was published
+                    # (during warmup) is read from the live state, as the
+                    # transient handler does; the local flag is stale here.
                     self.engine_state = "stopped"
                     self.last_engine_error = None
                 else:
@@ -1165,6 +1182,10 @@ class EngineManager:
             # A start attempt still in flight must abort before its
             # resume/catch-up steps submit orders (see StartupCancelled).
             self._start_cancel.set()
+            if operator_request and self._settings_write_open:
+                # The settings save restarts the engine after this window's
+                # stop; it must not undo an operator Stop given in the meantime.
+                self._settings_stop_requested = True
             # A sleeping auto-start retry must not outlive an explicit stop:
             # cancel it (a start attempt already in flight is interrupted via
             # the 'stopping' state instead).
@@ -1298,6 +1319,22 @@ class EngineManager:
                     with self._state_lock:
                         self._retry_task = None
                         self._retry_next_at = None
+                except Exception as exc:
+                    # A permanent refusal on a retry (an operator halt set during
+                    # the backoff, a stop in the dispatch gap) leaves the state the
+                    # failed attempt set at 'starting' or 'stopping'. Settle it
+                    # here, or every manual start, stop and settings save is refused.
+                    message = self.redact_secrets(str(exc))
+                    with self._state_lock:
+                        self._reset_retry_state()
+                        if self.runtime is None and self.engine_state in {"starting", "stopping"}:
+                            if self.engine_state == "stopping":
+                                self.engine_state = "stopped"
+                                self.last_engine_error = None
+                            else:
+                                self.engine_state = "error"
+                                self.last_engine_error = message
+                    raise
         except asyncio.CancelledError:
             with self._state_lock:
                 self._reset_retry_state()
@@ -1477,6 +1514,11 @@ class EngineManager:
                     "source": "broker",
                 }
                 with self._account_lock:
+                    # reset_broker and start swap the broker without the refresh
+                    # lock. A poll that finished on a dropped broker (e.g. LIVE)
+                    # must not publish that account as the fresh cache.
+                    if self.broker is not broker:
+                        return self._stale_or_unavailable_snapshot()
                     self.last_account = snapshot
                     self._last_account_monotonic = time.monotonic()
                     self._account_failed_monotonic = None
@@ -1561,33 +1603,39 @@ class EngineManager:
             live_broker.close()
 
     def confirm_live_arming(self, phrase: str) -> None:
-        pending = self._pending_live_arm
-        key, secret = self.get_live_credentials()
-        if (
-            pending is None
-            or key is None
-            or secret is None
-            or datetime.now(UTC) >= pending.expires_at
-            or pending.credential_fingerprint != self._credential_fingerprint(key, secret)
-            or pending.config_digest != self._config_digest(paper=False)
-            # Bytes: compare_digest raises TypeError on non-ASCII str (a 500, not a refusal).
-            or not secrets.compare_digest(phrase.strip().encode("utf-8"), f"LIVE {pending.account_suffix}".encode())
-        ):
-            self.invalidate_live_arming()
-            raise ValueError("Onay ifadesi doğrulanan hesapla eşleşmiyor; ifadeyi yeniden isteyip doğru yazın.")
-        now = datetime.now(UTC)
-        self._live_arm_token = replace(
-            pending,
-            issued_at=now,
-            expires_at=now + timedelta(minutes=5),
-        )
-        self._pending_live_arm = None
-        self._live_armed = True
+        # The check and the arm share _state_lock: a stop or an invalidation
+        # between them must not be overwritten by a late arm.
+        with self._state_lock:
+            pending = self._pending_live_arm
+            key, secret = self.get_live_credentials()
+            if (
+                pending is None
+                or key is None
+                or secret is None
+                or datetime.now(UTC) >= pending.expires_at
+                or pending.credential_fingerprint != self._credential_fingerprint(key, secret)
+                or pending.config_digest != self._config_digest(paper=False)
+                # Bytes: compare_digest raises TypeError on non-ASCII str (a 500, not a refusal).
+                or not secrets.compare_digest(phrase.strip().encode("utf-8"), f"LIVE {pending.account_suffix}".encode())
+            ):
+                self.invalidate_live_arming()
+                raise ValueError("Onay ifadesi doğrulanan hesapla eşleşmiyor; ifadeyi yeniden isteyip doğru yazın.")
+            now = datetime.now(UTC)
+            self._live_arm_token = replace(
+                pending,
+                issued_at=now,
+                expires_at=now + timedelta(minutes=5),
+            )
+            self._pending_live_arm = None
+            self._live_armed = True
 
     def invalidate_live_arming(self) -> None:
-        self._live_armed = False
-        self._pending_live_arm = None
-        self._live_arm_token = None
+        # Under _state_lock (an RLock, innermost in the lock order) so that a
+        # concurrent confirm_live_arming cannot re-arm after this returns.
+        with self._state_lock:
+            self._live_armed = False
+            self._pending_live_arm = None
+            self._live_arm_token = None
 
     def live_prerequisites(self) -> dict[str, Any]:
         """Operator-facing live-arm readiness checklist computed WITHOUT secrets.

@@ -44,6 +44,7 @@ from parayabuck.execution.alpaca_reconciliation import (
     _WORKING_BROKER_STATUSES,
     ReconciliationReport,
     ReconciliationResultError,
+    startup_reconcile_scope,
 )
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
@@ -1458,7 +1459,8 @@ class EngineRuntime:
         self._stop_event.clear()
         self._state = "starting"
         try:
-            reconciliation = ReconciliationReport.from_result(self.broker.reconcile())
+            with startup_reconcile_scope():
+                reconciliation = ReconciliationReport.from_result(self.broker.reconcile())
             if reconciliation.has_drift:
                 self._reconcile_failed = True
                 with getattr(self, "_state_lock", threading.RLock()):
@@ -3277,6 +3279,11 @@ class EngineRuntime:
             _, _, fetch_generation = self._account_snapshot_cache_state()
             with self._account_snapshot_guard():
                 last_account_at = getattr(self, "_last_account_at", None)
+            # A state-changing fill is booked after the account loop's snapshot,
+            # so a reused snapshot is pre-fill. The generation fence cannot tell,
+            # because the invalidation above already moved it; see the persist
+            # guard below.
+            fill_changed_state = status == "partial_fill" or is_terminal_order_status(status)
             if (
                 snapshot_provider is not None
                 and last_account_at is not None
@@ -3330,7 +3337,9 @@ class EngineRuntime:
                 # reusing its account slot. A fetch that was in flight during
                 # the booking is discarded by this bump (CC-9).
                 self._invalidate_account_snapshot_after_execution()
-            if account is not None:
+            # A snapshot reused across a state-changing fill is pre-fill: it is
+            # not persisted, and the account loop re-persists from its next fetch.
+            if account is not None and not (cached is not None and fill_changed_state):
                 try:
                     await asyncio.to_thread(self._persist_risk_state, account)
                 except Exception:
@@ -6070,6 +6079,12 @@ class EngineRuntime:
                 )
                 if not peak_service.reset_peak_equity(new_baseline, expected_epoch=expected_epoch):
                     log.info("Risk epoch already active; the operator reset is a no-op")
+                    # A crash after the sidecar commit left the incident clear or
+                    # the DB high-water undone. Finish those steps for the epoch
+                    # that is already active, or every later reset stays a no-op.
+                    if repository is not None:
+                        self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+                        _heal_persisted_high_water(repository, account_id, float(peak_service.peak_equity))
                     return float(peak_service.peak_equity)
             try:
                 self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
@@ -6517,6 +6532,17 @@ def _catch_up_blocked(runtime: object) -> bool:
     """
     status = str(getattr(runtime, "startup_catch_up_status", None) or "")
     return status.startswith("blocked:") or status in _CATCH_UP_TRANSIENT_STATUSES
+
+
+def _heal_persisted_high_water(repository: Any, account_id: str, active_peak: float) -> None:
+    """Lower a persisted high-water that still sits above the active epoch's peak.
+
+    Only a reset (``reset_high_water``) ever lowers it, so a stale value left by
+    a crash inside the epoch reset would otherwise re-latch the drawdown halt
+    on every restart. A value at or below the active peak is left alone.
+    """
+    if repository.high_water(account_id) > active_peak:
+        repository.reset_high_water(account_id, active_peak)
 
 
 def _symbol_batches(symbols: list[str]) -> tuple[list[str], ...]:

@@ -1,0 +1,8 @@
+review_calendar_v1 SUMMARY (numbers from RESULTS.json)
+wall_clock_seconds_run: 4.9
+passing arms: none
+K: pre CAGR base 15.76% max DD 46.67% after tax 2000/2010/2017 10.75/15.24/23.97% sells/yr 10.2 exposure(vote-on) 1.754
+R2ref: pre CAGR base 15.48% max DD 46.76% after tax 2000/2010/2017 10.16/14.71/22.89% sells/yr 29.6 exposure(vote-on) 1.754
+R1: pre CAGR base 16.55% max DD 42.32% after tax 2000/2010/2017 11.68/15.89/25.61% sells/yr 4.1 exposure(vote-on) 1.754
+R2Q: pre CAGR base 15.04% max DD 40.19% after tax 2000/2010/2017 10.80/14.34/22.43% sells/yr 3.5 exposure(vote-on) 1.754
+R3: pre CAGR base 15.68% max DD 48.63% after tax 2000/2010/2017 10.91/15.52/24.53% sells/yr 5.2 exposure(vote-on) 1.754

@@ -212,9 +212,8 @@ def test_gitignore_covers_atomic_write_env_temp_files_and_not_the_backup_file() 
     assert any(fnmatch.fnmatchcase("..env.a1b2c3d4", pattern) for pattern in patterns), (
         "a mkstemp .env temp file must be ignored"
     )
-    assert not any(fnmatch.fnmatchcase(".env.backup", pattern) for pattern in patterns), (
-        ".env.backup is an operator file and must not be ignored"
-    )
+    # .env.backup holds the backup unit's credentials, so it is ignored by name.
+    assert ".env.backup" in patterns
 
 
 # --- S2-7-2: the tracked-secret scan fails closed when git cannot list files ---

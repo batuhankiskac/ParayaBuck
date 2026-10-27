@@ -168,6 +168,9 @@ activemq-data/
 # the full credential set (S2-4-3).
 ..env.????????
 ..env.validate
+# The off-host backup env file the backup unit reads (holds SMTP and off-host
+# credentials): never committed.
+.env.backup
 .*.yaml.????????
 .*.yaml.validate
 data/runtime/

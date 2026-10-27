@@ -75,16 +75,22 @@ def fetch_benchmark_bars(manager: Any, start: datetime, end: datetime, minutes: 
         timeframe = TimeFrame.Hour
     else:
         timeframe = TimeFrame(minutes, TimeFrameUnit.Minute)
-    response: Any = client.get_stock_bars(
-        StockBarsRequest(
-            symbol_or_symbols=BENCHMARK_SYMBOL,
-            timeframe=timeframe,
-            start=start,
-            end=end,
-            feed=DataFeed.IEX,
-            adjustment=Adjustment.ALL,
+    try:
+        response: Any = client.get_stock_bars(
+            StockBarsRequest(
+                symbol_or_symbols=BENCHMARK_SYMBOL,
+                timeframe=timeframe,
+                start=start,
+                end=end,
+                feed=DataFeed.IEX,
+                adjustment=Adjustment.ALL,
+            )
         )
-    )
+    finally:
+        # A client is built per cache miss: release its pooled connections now
+        # rather than leaving the requests.Session to the garbage collector.
+        if session is not None:
+            session.close()
     data = getattr(response, "data", None) or {}
     bars = data.get(BENCHMARK_SYMBOL, []) if isinstance(data, dict) else []
     return [(bar.timestamp, float(bar.close)) for bar in bars if bar.close]

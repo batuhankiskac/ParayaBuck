@@ -63,19 +63,32 @@ class _UndecodedFrame:
 class AlpacaTradingUpdateStream:
     """TradingStream adapter; broker events are the primary order-state source."""
 
+    # Set by stop(); a run() that starts after it returns without connecting.
+    _stop_requested = False
+
     def __init__(
         self,
         api_key: str,
         secret_key: str,
         paper: bool,
         handler: UpdateHandler,
+        on_reconnect: Callable[[], None] | None = None,
     ) -> None:
         from alpaca.trading.stream import TradingStream
 
-        self._stream = TradingStream(api_key, secret_key, paper=paper)
+        # Same close timeout as the bar stream: websockets' 10 s default would
+        # let an unresponsive close hold the old consumer past the stop join.
+        websocket_params = {
+            "ping_interval": 10,
+            "ping_timeout": 180,
+            "max_queue": 1024,
+            "close_timeout": 2,
+        }
+        self._stream = TradingStream(api_key, secret_key, paper=paper, websocket_params=websocket_params)
         self._handler = handler
         guard_sdk_cast(self._stream, self._undecoded_frame)
-        supervise_sdk_stream(self._stream, label="trade updates")
+        # A reconnect may have missed updates: the owner reconciles from the broker.
+        supervise_sdk_stream(self._stream, label="trade updates", on_reconnect=on_reconnect)
         self._stream.subscribe_trade_updates(self._on_update)
 
     @staticmethod
@@ -87,16 +100,20 @@ class AlpacaTradingUpdateStream:
     async def _on_update(self, raw: Any) -> None:
         # This coroutine runs inside alpaca-py's TradingStream dispatch: an
         # exception escaping it can stall the stream for good. A malformed
-        # broker event is logged and dropped; reconciliation recovers the
-        # order state from the broker. Handler failures are the runtime's own
+        # broker event is logged and reconciliation is requested, which recovers
+        # the order state from the broker. Handler failures are the runtime's own
         # concern and are handled (and halted on) inside the handler.
         if isinstance(raw, _UndecodedFrame):
             await self._on_undecoded(raw)
             return
         try:
             update = self._parse(raw)
-        except Exception:
-            log.error("Malformed Alpaca trade update dropped: %r", raw, exc_info=True)
+        except Exception as exc:
+            # Handed on as undecoded so the runtime reconciles the order state
+            # from the broker; a drop here would leave a missed fill to the
+            # periodic reconcile alone.
+            log.error("Malformed Alpaca trade update; requesting reconciliation: %r", raw, exc_info=True)
+            await self._on_undecoded(_UndecodedFrame(payload=raw, error=f"{type(exc).__name__}: {exc}"))
             return
         await self._handler(update)
 
@@ -109,6 +126,22 @@ class AlpacaTradingUpdateStream:
         try:
             update = self._parse(frame.payload)
         except Exception:
+            # The fields that failed to decode may be the ones _parse needs, so
+            # fall back to the order identity alone: the runtime reconciles it.
+            identity = _identity_update(frame.payload)
+            if identity is not None:
+                emit_execution_alert(
+                    "paper_incident",
+                    message=(
+                        f"Undecodable Alpaca trade update for client_order_id={identity.client_order_id}; "
+                        f"reconciliation requested ({frame.error})"
+                    ),
+                    category="undecoded_trade_update",
+                    incident_id=f"undecoded_trade_update:{identity.client_order_id}:unparsed",
+                    client_order_id=identity.client_order_id,
+                )
+                await self._handler(identity)
+                return
             log.error("Undecodable Alpaca trade update has no usable identity: %r", frame.payload, exc_info=True)
             emit_execution_alert(
                 "paper_incident",
@@ -180,14 +213,42 @@ class AlpacaTradingUpdateStream:
         )
 
     def run(self) -> None:
+        # A stop that arrived before this run began must not be lost: the SDK
+        # forgets it, and the run would then consume until process exit.
+        if self._stop_requested:
+            return
         self._stream.run()
 
     def stop(self) -> None:
+        self._stop_requested = True
         # alpaca-py creates the event loop only inside run(); its stop()
         # dereferences that loop, so a never-run stream has nothing to stop.
         if getattr(self._stream, "_loop", ...) is None:
             return
         self._stream.stop()
+
+
+def _identity_update(raw: Any) -> TradeUpdate | None:
+    """An undecoded update carrying only the order identity, or None without one.
+
+    The runtime answers an undecoded event for a known order by reconciling
+    from the broker, so no fill facts are read or booked here.
+    """
+    order = _field(raw, "order", raw)
+    client_order_id = str(_field(order, "client_order_id", "") or "")
+    if not client_order_id:
+        return None
+    symbol = str(_field(order, "symbol", "") or "")
+    return TradeUpdate(
+        event=UNDECODED_TRADE_EVENT,
+        client_order_id=client_order_id,
+        broker_order_id=str(_field(order, "id", "") or ""),
+        symbol=symbol,
+        market=Market.CRYPTO if "/" in symbol else Market.EQUITY,
+        filled_qty=0.0,
+        average_fill_price=None,
+        timestamp=datetime.now(UTC),
+    )
 
 
 def _finite_or_none(value: Any) -> float | None:

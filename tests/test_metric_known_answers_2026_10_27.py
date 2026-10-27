@@ -190,16 +190,6 @@ def test_drawdown_clock_restarts_after_a_recovery_above_the_peak() -> None:
     assert result.max_drawdown_duration_days == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PortfolioBacktestEngine._result only moves the drawdown peak on a strict "
-        "'equity > peak', so a curve that returns exactly to its prior high does "
-        "not restart the drawdown clock: [100, 110, 90, 110, 105] reports a 3-day "
-        "max drawdown duration (day 1 peak to day 4) where the first underwater "
-        "span (day 1 to its recovery on day 3) is 2 days and the second is 1 day."
-    ),
-)
 def test_drawdown_clock_restarts_when_equity_returns_exactly_to_the_peak() -> None:
     curve = [100.0, 110.0, 90.0, 110.0, 105.0]
     result = _metrics(curve, [_at(day) for day in range(len(curve))])

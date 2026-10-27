@@ -2034,6 +2034,10 @@ class PortfolioRuntime:
         ``buy_pending``: once every deferred BUY is terminal the rebalance is
         marked complete.
 
+        Before a deferred BUY side is sent, on every path, the decision's
+        session is compared with the newest closed signal bar: a side decided
+        for an earlier session is closed as superseded and never sent.
+
         Returns the transition result, or ``None`` when the rebalance cannot
         advance yet (or nothing is in flight). This is safe to call from a
         trade-update callback, a bar decision and process startup, and is
@@ -2367,6 +2371,23 @@ class PortfolioRuntime:
             return None
         return current.decision_id
 
+    def _latest_finished_signal_session(self) -> datetime | None:
+        """Timestamp of the newest closed signal bar in the history, or ``None``.
+
+        A forming equity daily bar (its session is still trading) is skipped,
+        so the session a decision was made in stays current until it closes.
+        """
+        now = _utcnow()
+        newest: datetime | None = None
+        for series in self.history.values():
+            for bar in reversed(series):
+                if bar.market != self.market or _is_unfinished_signal_bar(self.market, bar, now):
+                    continue
+                if newest is None or bar.timestamp > newest:
+                    newest = bar.timestamp
+                break
+        return newest
+
     def _superseded_sells_working(self) -> bool:
         """Whether a superseded rebalance still has SELLs working at the broker.
 
@@ -2420,6 +2441,12 @@ class PortfolioRuntime:
             account_id=self.account_id,
             session_id=self.session_id,
             reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
+        )
+        self._raise_operator_alert_once(
+            (decision_id, "superseded_buy_side_discarded"),
+            message="A rebalance from an earlier session was closed; its deferred BUYs were discarded",
+            category="superseded_buy_side_discarded",
+            decision_id=decision_id,
         )
 
     def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
@@ -2751,6 +2778,17 @@ class PortfolioRuntime:
             not is_terminal_order_status(str(item["status"])) and str(item["status"]) not in _AMBIGUOUS_ORDER_STATUSES
             for item in buys
         )
+        # Every advance path (bar, catch-up, trade update, restart and reset
+        # resumes) reaches the BUY side here, so the session check is applied
+        # here too: a BUY side decided for an earlier session is never sent.
+        # Warmup seeds the history before any resume runs. A runtime with no
+        # closed bar in its history has nothing to judge the session by, so
+        # its BUY side keeps the handling it always had.
+        newest_session = self._latest_finished_signal_session()
+        decided_at = datetime.fromisoformat(str(decision["decision_timestamp"]))
+        if newest_session is not None and self._session_key(newest_session) != self._session_key(decided_at):
+            self._close_superseded_rebalance(decision_id)
+            return None
         account = account or self.broker.account()
         maximum_allocation = self.maximum_allocation
         if self.mode == "live":
@@ -2787,13 +2825,16 @@ class PortfolioRuntime:
         # Rules only for the symbols this plan can touch (held or targeted). One
         # untradable symbol elsewhere in the universe must not block the BUY phase.
         universe = set(self.symbols)
-        held_or_targeted = {
+        held = {
             canonical_symbol(position.symbol, position.market)
             for position in account.positions
             if position.market == self.market and not position.is_flat
-        } | {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
+        }
+        held_or_targeted = held | {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
         rules = self._trading_rules_for(sorted(held_or_targeted & universe))
-        untradable_held = sorted((held_or_targeted & universe) - set(rules))
+        # Only a held symbol owes an exit. An untradable target is left out of
+        # the plan by the planner; it must not close the whole BUY side.
+        untradable_held = sorted((held & universe) - set(rules))
         if untradable_held:
             # A held symbol that cannot be traded has an exit owed that cannot be sent:
             # the BUY side is held and the rebalance closes, nothing halts.
@@ -2821,7 +2862,30 @@ class PortfolioRuntime:
         # A re-plan that planned a SELL still owes that exit even when the SELL is
         # left to its retry path (below): the BUYs wait for the slot it holds.
         replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
+        planned_sells = {
+            order.symbol: order.client_order_id for order in planned if order.side == PortfolioOrderSide.SELL
+        }
         planned = self._replan_orders_with_fresh_ids(decision_id, planned)
+        kept_sell_legs = {order.symbol for order in planned if order.side == PortfolioOrderSide.SELL}
+        dropped_sell_legs: list[str] = []
+        if any(leg not in kept_sell_legs for leg in planned_sells):
+            # A rejected leg stays with retry_rejected_exit_sells (one retry, then
+            # an alert). Only an exit the re-plan could not send (ids exhausted)
+            # still owes its exit here: the BUY side is held and closed.
+            rejected_ids = {
+                str(row["client_order_id"])
+                for row in self.repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value)
+                if str(row["status"]) == "rejected"
+            }
+            dropped_sell_legs = sorted(
+                leg
+                for leg, planned_id in planned_sells.items()
+                if leg not in kept_sell_legs and planned_id not in rejected_ids
+            )
+        if dropped_sell_legs:
+            for leg in dropped_sell_legs:
+                self._hold_unsettled_sell_leg(decision_id, leg, "replan_sell_dropped")
+            return self._close_unsettled_sell_legs(decision_id, dropped_sell_legs)
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
         if december_deferral_holds:
@@ -3628,9 +3692,10 @@ class PortfolioRuntime:
         decision_id = self.repository.latest_decision_id(self.account_id, self.market)
         if decision_id is None:
             return ()
+        sell_rows = self.repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value)
         rejected = [
             row
-            for row in self.repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value)
+            for row in sell_rows
             if str(row["status"]) == "rejected"
             and not is_exit_sell_retry(str(row["client_order_id"]))
             and not self.repository.has_order(exit_sell_retry_client_order_id(str(row["client_order_id"])))
@@ -3664,6 +3729,14 @@ class PortfolioRuntime:
         for row in rejected:
             symbol = canonical_symbol(str(row["symbol"]), self.market)
             if symbol in open_symbols:
+                continue
+            if any(
+                str(other["symbol"]) == str(row["symbol"])
+                and str(other["client_order_id"]) != str(row["client_order_id"])
+                for other in sell_rows
+            ):
+                # Another SELL of this decision for the symbol (a re-plan, a residual
+                # or an earlier retry) already carries the exit: a second SELL would sell it twice.
                 continue
             position = positions.get(symbol)
             if position is None or position.qty <= 0 or position.managed_qty <= 1e-12:

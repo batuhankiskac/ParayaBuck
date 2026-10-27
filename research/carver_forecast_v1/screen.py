@@ -325,18 +325,18 @@ def gate_table(lab, A):
     g["G4"] = all(
         sum(R[k]["subperiods"][p] > K[k]["subperiods"][p] for p in ("P1", "P2", "P3")) >= 2 for k in both
     )
-    b = A["bootstrap_vs_K"]["pre"]
+    b = R["bootstrap_vs_K"]["pre"]
     g["G5"] = b["base"]["median_delta_pp"] >= 0 and b["calibrated"]["median_delta_pp"] >= 0
     g["G6"] = _g1(R["pre_tax_base_m1"], K["pre_tax_base_m1"]) and _g1(R["pre_tax_cal_m1"], K["pre_tax_cal_m1"])
     dc = np.array([(R["oos_calibrated_m2"][w]["cagr"] - K["oos_calibrated_m2"][w]["cagr"]) * 100 for w in OOS_WIN])
     dd = np.array([(R["oos_calibrated_m2"][w]["max_dd"] - K["oos_calibrated_m2"][w]["max_dd"]) * 100 for w in OOS_WIN])
     g["G7"] = bool(np.median(dc) >= 0 and np.sum(dc >= -0.5) >= 5 and np.sum(dd <= 3.0) >= 5 and dd.max() <= 8.0)
-    g["G8"] = A["g8_pooled_oos_median_delta_pp"] >= 0
+    g["G8"] = R["g8_pooled_oos_median_delta_pp"] >= 0
     g["G9"] = R["pre_tax_base_m2"]["turnover_annual"] <= 2 * K["pre_tax_base_m2"]["turnover_annual"]
     tw = {w: (R["after_tax_100k"]["windows"][w]["after_tax_cagr"] - K["after_tax_100k"]["windows"][w]["after_tax_cagr"]) * 100
           for w in WINDOWS}
     g["AT_all_three_windows_beat_K"] = all(v > 0 for v in tw.values())
-    bt = A["bootstrap_vs_K"]["tax"]
+    bt = R["bootstrap_vs_K"]["tax"]
     g["AT_B1_B2"] = all(bt[t]["median_delta_pp"] >= 0 and bt[t]["share_gt_0"] >= 0.55 for t in ("B1", "B2"))
     hd = {h: (R["after_tax_100k"]["halves"][h]["after_tax_cagr"] - K["after_tax_100k"]["halves"][h]["after_tax_cagr"]) * 100
           for h in HALVES}

@@ -488,8 +488,16 @@ def run_product_backtest(
     fill_basis: Literal["open", "close"] = "open",
     allow_same_bar_close: bool = False,
     impact_coefficient: float = 0.0,
+    initial_positions: Mapping[str, tuple[float, float]] | None = None,
+    initial_cash_balance: float | None = None,
 ) -> ProductBacktestResult:
     """Run the product strategy over ``bars``.
+
+    ``initial_positions`` (symbol -> (quantity, unit cost USD)) starts the run
+    from pre-existing holdings with no fill or fee; ``initial_cash_balance`` sets
+    the cash they leave (default: ``initial_cash`` less the holdings' value at the
+    first open). ``initial_cash`` keeps meaning the total starting equity here.
+    Both default to None, which is the flat-cash start.
 
     ``strict`` (default) fails closed: a missing strategy warmup, a NYSE
     calendar failure, or a gappy daily history for a decision symbol raises
@@ -591,6 +599,8 @@ def run_product_backtest(
         allow_same_bar_close=allow_same_bar_close,
         impact_coefficient=impact_coefficient,
         drawdown_liquidation=config.risk.drawdown_liquidation,
+        initial_positions=initial_positions,
+        initial_cash=initial_cash_balance,
     )
     result = engine.run(
         filtered,
@@ -624,6 +634,12 @@ def run_product_backtest(
             equity_curve=(),
             drawdowns=(),
         )
+    if initial_positions:
+        # Only a non-flat start is recorded, so default artifacts are unchanged.
+        report.summary["initial_holdings"] = {
+            symbol: {"quantity": float(quantity), "unit_cost": float(unit_cost)}
+            for symbol, (quantity, unit_cost) in sorted(initial_positions.items())
+        }
     report.summary.update(
         {
             "market": market.value,

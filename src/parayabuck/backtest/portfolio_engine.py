@@ -4,7 +4,7 @@ import math
 from bisect import bisect_right
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from itertools import pairwise
 from types import EllipsisType
@@ -332,6 +332,8 @@ class PortfolioBacktestEngine:
         allow_same_bar_close: bool = False,
         impact_coefficient: float = 0.0,
         drawdown_liquidation: Any = None,
+        initial_positions: Mapping[str, tuple[float, float]] | None = None,
+        initial_cash: float | None = None,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -484,6 +486,25 @@ class PortfolioBacktestEngine:
         self._last_observed_equity = starting_equity
         self._risk_session_date: date | None = None
         self._cash = starting_equity
+        # Pre-existing holdings and cash (audit item 38). Both default to None,
+        # which keeps the flat-cash start bit-for-bit. ``_run_start_equity`` is
+        # the equity the run is measured from: starting_equity, or the cash
+        # plus the holdings' value when ``initial_cash`` is given.
+        if initial_cash is not None and (not math.isfinite(initial_cash) or initial_cash < 0):
+            raise ValueError("initial_cash must be finite and non-negative")
+        self._initial_cash_input: float | None = None if initial_cash is None else float(initial_cash)
+        self._initial_positions: dict[str, tuple[float, float]] = {}
+        for raw_symbol, pair in (initial_positions or {}).items():
+            symbol = canonical_symbol(raw_symbol, Market.EQUITY)
+            quantity, unit_cost = pair
+            if symbol in self._initial_positions:
+                raise ValueError(f"initial_positions lists {symbol} more than once")
+            if not math.isfinite(quantity) or quantity <= 0:
+                raise ValueError(f"initial position {symbol} quantity must be positive and finite")
+            if not math.isfinite(unit_cost) or unit_cost < 0:
+                raise ValueError(f"initial position {symbol} cost basis must be non-negative and finite")
+            self._initial_positions[symbol] = (float(quantity), float(unit_cost))
+        self._run_start_equity = starting_equity
 
     # -- public API ---------------------------------------------------------
 
@@ -526,6 +547,7 @@ class PortfolioBacktestEngine:
         self._peak_equity = self.starting_equity
         self._day_start_equity = self.starting_equity
         self._last_observed_equity = self.starting_equity
+        self._run_start_equity = self.starting_equity
         self._risk_session_date = None
         self._previous_timestamp = None
         self._last_processed = None
@@ -544,6 +566,7 @@ class PortfolioBacktestEngine:
                 self._deduplicate(bars),
                 key=lambda bar: (bar.timestamp, bar.symbol),
             )
+        self._open_initial_positions(ordered)
         # Callers pass warmup sorted and canonicalized (the product runner uses
         # _normalized_warmup on both paths); avoid a per-trial sort here.
         for bar in warmup or []:
@@ -650,6 +673,56 @@ class PortfolioBacktestEngine:
             benchmark_price_return=benchmark_price_return,
             benchmark_return_basis=benchmark_basis,
         )
+
+    def _open_initial_positions(self, ordered: list[Bar]) -> None:
+        """Install the pre-existing holdings and cash before the first bar.
+
+        No order is created: the holdings carry the supplied unit cost as their
+        average price and a single FIFO lot, pay no fee or slippage, and are
+        valued at the open of each symbol's first bar in ``ordered``. Their
+        acquisition timestamp sits one microsecond before the first bar so they
+        are active from the first snapshot. With no initial positions and no
+        initial cash this is a no-op, so the flat-cash default is unchanged.
+        """
+        if not self._initial_positions and self._initial_cash_input is None:
+            return
+        if not ordered:
+            raise ValueError("initial_positions require at least one processed bar")
+        first_opens: dict[str, float] = {}
+        for bar in ordered:
+            if bar.symbol in self._initial_positions and bar.symbol not in first_opens:
+                first_opens[bar.symbol] = bar.open
+                if len(first_opens) == len(self._initial_positions):
+                    break
+        missing = sorted(set(self._initial_positions) - set(first_opens))
+        if missing:
+            raise ValueError(f"initial positions have no bars to value them: {missing}")
+        value = sum(quantity * first_opens[symbol] for symbol, (quantity, _) in self._initial_positions.items())
+        if self._initial_cash_input is None:
+            cash = self.starting_equity - value
+            equity = self.starting_equity
+        else:
+            cash = self._initial_cash_input
+            equity = cash + value
+        if cash < 0:
+            raise ValueError(f"initial cash would be negative ({cash:.2f}) after the initial positions")
+        opened_at = ordered[0].timestamp - timedelta(microseconds=1)
+        for symbol, (quantity, unit_cost) in self._initial_positions.items():
+            self._positions[symbol] = _Position(
+                symbol,
+                Market.EQUITY,
+                self.strategy.timeframe,
+                quantity,
+                unit_cost,
+                opened_at,
+                lots=[[quantity, unit_cost]],
+            )
+            self._last_price[symbol] = first_opens[symbol]
+        self._cash = cash
+        self._run_start_equity = equity
+        self._peak_equity = equity
+        self._day_start_equity = equity
+        self._last_observed_equity = equity
 
     @staticmethod
     def _close_to_close_return(bars: list[Bar]) -> float:
@@ -1789,8 +1862,8 @@ class PortfolioBacktestEngine:
         benchmark_price_return: float | None = None,
         benchmark_return_basis: str = "price",
     ) -> PortfolioBacktestResult:
-        ending = curve[-1] if curve else self.starting_equity
-        peak = self.starting_equity
+        ending = curve[-1] if curve else self._run_start_equity
+        peak = self._run_start_equity
         peak_index = 0
         underwater = False
         max_drawdown = 0.0
@@ -1827,8 +1900,8 @@ class PortfolioBacktestEngine:
         end_ts = curve_timestamps[-1] if curve_timestamps else None
         duration_days = int((end_ts - start_ts).total_seconds() / 86_400) if start_ts and end_ts else 0
         years = duration_days / 365.0
-        total_return = ending / self.starting_equity - 1
-        cagr = ((ending / self.starting_equity) ** (1 / years) - 1) if years > 0 and ending > 0 else 0.0
+        total_return = ending / self._run_start_equity - 1
+        cagr = ((ending / self._run_start_equity) ** (1 / years) - 1) if years > 0 and ending > 0 else 0.0
         periods_per_year = len(returns) / years if years > 0 else 0.0
         annualizer = math.sqrt(max(1.0, periods_per_year)) if returns else 1.0
         pnls = tuple(event for _, _, event in self._realized_pnl_events)
@@ -1843,7 +1916,7 @@ class PortfolioBacktestEngine:
         fee_total = sum(fill.fee for fill in fills) + sum(
             fee for _symbol, _slippage, _spread, fee in self._liquidation_costs
         )
-        avg_equity = sum(curve) / len(curve) if curve else self.starting_equity
+        avg_equity = sum(curve) / len(curve) if curve else self._run_start_equity
         traded_notional = sum(fill.qty * fill.reference_price for fill in fills)
         turnover = traded_notional / avg_equity if avg_equity > 0 else 0.0
         total_cost = slippage_total + spread_total + fee_total
@@ -1891,7 +1964,7 @@ class PortfolioBacktestEngine:
                     benchmarks[symbol] = series[-1].close / series[0].close - 1
         self._sync_state_bookkeeping()
         return PortfolioBacktestResult(
-            starting_equity=self.starting_equity,
+            starting_equity=self._run_start_equity,
             ending_equity=ending,
             total_return=total_return,
             benchmark_return=benchmark_return,
@@ -2032,7 +2105,7 @@ class PortfolioBacktestEngine:
         for index, timestamp in enumerate(curve_timestamps):
             buckets.setdefault((timestamp.year, timestamp.month), []).append(index)
         monthly: dict[tuple[int, int], float | None] = {}
-        previous = self.starting_equity
+        previous = self._run_start_equity
         for (year, month), indices in sorted(buckets.items()):
             value = curve[indices[-1]]
             monthly[(year, month)] = value / previous - 1 if previous > 0 else None
@@ -2044,7 +2117,7 @@ class PortfolioBacktestEngine:
         for index, timestamp in enumerate(curve_timestamps):
             by_year.setdefault(timestamp.year, []).append(index)
         year_returns: list[float] = []
-        previous = self.starting_equity
+        previous = self._run_start_equity
         for year in sorted(by_year):
             indices = by_year[year]
             value = curve[indices[-1]]

@@ -338,7 +338,8 @@ class ReconciliationService:
 
         Called after the targeted lookup returned 404. Only a row still
         ``submitting`` or ``reconciliation_required``, whose last write is at
-        least ``UNKNOWN_ORDER_CANCEL_AGE_SECONDS`` old, is booked ``canceled``
+        least ``UNKNOWN_ORDER_CANCEL_AGE_SECONDS`` old and whose broker submit
+        call has returned (or never started), is booked ``canceled``
         with a zero fill, and only when the lookup went through a client-id
         query (a missing query proves nothing). Anything else is unchanged and
         the final OPEN-ID comparison still reports it as drift.
@@ -348,6 +349,10 @@ class ReconciliationService:
         client = getattr(self._broker, "_client", None)
         if (
             status not in _UNKNOWN_ORDER_CANCELABLE_STATUSES
+            # A POST that started and has not returned has an unknown outcome:
+            # if it is accepted late, the canceled row could not come back and
+            # its fill would go unbooked while a residual SELL follows.
+            or getattr(local, "submit_call_in_flight", False) is True
             or not isinstance(updated_at, datetime)
             or lookup is None
             or callback is None

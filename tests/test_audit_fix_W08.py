@@ -145,6 +145,9 @@ class _ExitRepository:
     def has_order(self, client_order_id: str) -> bool:
         return client_order_id in self._retried
 
+    def open_orders(self, _account_id: str) -> tuple[()]:
+        return ()
+
 
 class _ExitPortfolio:
     market = Market.EQUITY

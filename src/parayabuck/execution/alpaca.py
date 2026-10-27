@@ -661,6 +661,30 @@ class AlpacaBroker:
         HTTP 4xx, or Alpaca's insufficient-quantity validation body."""
         return self._is_definite_client_rejection(exc) or self._available_qty_from_error(exc) > 0
 
+    def _recovered_order_mismatch(self, request: Any, recovered: Any) -> str | None:
+        """The first field on which a broker order found by client id differs from the request, or None.
+
+        A client id can be derived by another ledger (a restored copy) for a
+        different order. Such an order is never adopted as this request's, so
+        a field the request states must be present and equal on the broker
+        order. A request that does not state a field leaves it unchecked.
+        """
+        symbol = getattr(request, "symbol", None)
+        if symbol is not None and not same_symbol(str(self._field(recovered, "symbol", "") or ""), str(symbol)):
+            return "symbol"
+        side = getattr(request, "side", None)
+        if side is not None and self._normalized_field(recovered, "side") != str(getattr(side, "value", side)).lower():
+            return "side"
+        qty = getattr(request, "qty", None)
+        if qty is not None:
+            try:
+                recovered_qty = float(self._field(recovered, "qty", "") or "")
+            except (TypeError, ValueError):
+                return "quantity"
+            if abs(recovered_qty - float(qty)) > 1e-9:
+                return "quantity"
+        return None
+
     def _submit_with_recovery(self, request: Any, client_order_id: str) -> Any:
         try:
             return self._client.submit_order(request)
@@ -678,6 +702,22 @@ class AlpacaBroker:
                     recovered = None
                     lookup_error = lookup_exc
                 if recovered is not None:
+                    mismatch = self._recovered_order_mismatch(request, recovered)
+                    if mismatch is not None:
+                        # Not this order: adopting it would book this request's
+                        # outcome against another order's fills. Fail closed.
+                        _emit_alert(
+                            "ambiguous_order",
+                            message=(
+                                f"Broker order for client_order_id={client_order_id} differs in {mismatch}; "
+                                f"not adopted after submit error: {submit_exc}"
+                            ),
+                            client_order_id=client_order_id,
+                            reason="broker_order_mismatch",
+                        )
+                        raise AmbiguousOrderState(
+                            f"Broker order {client_order_id} differs from the request in {mismatch}: {submit_exc}"
+                        ) from submit_exc
                     status = self._normalized_field(recovered, "status")
                     if status in DEAD_BROKER_ORDER_STATUSES:
                         try:
@@ -732,12 +772,14 @@ class AlpacaBroker:
                         submit_exc,
                     )
                     return recovered
-                if getattr(lookup_error, "status_code", None) == 404:
-                    # The deterministic client id was never accepted, so nothing
-                    # reached the broker: the submit failure is a known outcome,
-                    # not an ambiguity. The caller treats a DefiniteOrderRejection
-                    # as not sent and does not cancel the legs queued after it.
-                    # (Mirrors resolve_portfolio_submission, where a 404 is canceled.)
+                if getattr(lookup_error, "status_code", None) == 404 and self._is_definite_refusal(submit_exc):
+                    # The deterministic client id was never accepted and the
+                    # submit itself was a broker refusal, so nothing reached the
+                    # broker: the outcome is known, not an ambiguity. The caller
+                    # treats a DefiniteOrderRejection as not sent and does not
+                    # cancel the legs queued after it. A 404 after a transport
+                    # failure (timeout, 5xx) is NOT proof: the POST may have been
+                    # accepted and the lookup may lag, so it stays ambiguous.
                     raise DefiniteOrderRejection(
                         f"Broker never accepted order {client_order_id}: {submit_exc}"
                     ) from submit_exc

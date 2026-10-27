@@ -22,7 +22,7 @@ from requests.exceptions import HTTPError
 
 import parayabuck.runtime as runtime_module
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
-from parayabuck.execution.alpaca_models import DefiniteOrderRejection
+from parayabuck.execution.alpaca_models import AmbiguousOrderState, DefiniteOrderRejection
 from parayabuck.execution.alpaca_orders import OrderService
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
 from parayabuck.portfolio.runtime_models import REBALANCE_PHASE_BUY_READY
@@ -401,14 +401,14 @@ def test_definite_broker_rejection_is_typed_not_ambiguous(tmp_path: Path) -> Non
     assert isinstance(excinfo.value.__cause__, HTTPError)
 
 
-def test_a_non_http_submit_failure_with_a_404_lookup_is_a_definite_non_submission(tmp_path: Path) -> None:
-    """A 404 lookup proves the client id never reached the broker, whatever the
-    submit error was. The caller gets the definite non-submission (it does not
-    cancel the legs queued after it), not the raw submit error."""
+def test_a_non_http_submit_failure_with_a_404_lookup_stays_ambiguous(tmp_path: Path) -> None:
+    """A 404 lookup only proves the client id was never accepted when the submit
+    itself was a broker refusal. A non-refusal submit failure (here a plain
+    ValueError) may still have been accepted, so the write stays ambiguous."""
     submit_error = ValueError("insufficient buying power")
     broker = _rejected_submit_broker(tmp_path, submit_error)
 
-    with pytest.raises(DefiniteOrderRejection) as excinfo:
+    with pytest.raises(AmbiguousOrderState) as excinfo:
         OrderService(broker)._submit_with_recovery(SimpleNamespace(), "cid-1")
 
     assert excinfo.value.__cause__ is submit_error

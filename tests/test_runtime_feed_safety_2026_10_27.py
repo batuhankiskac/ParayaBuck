@@ -149,8 +149,11 @@ def test_latch_blocks_buys_and_clears_after_a_clean_reconcile() -> None:
     runtime._reconcile_safely()
 
     assert runtime._reconcile_pending_reason is None
-    runtime._advance_portfolio_rebalance(Market.EQUITY, account=account)
+    # The clean reconciliation itself advances the rebalance once the latch
+    # is cleared (F2-6-1), so the deferred BUYs go out without a later trigger.
     assert submitted == [False, True]
+    runtime._advance_portfolio_rebalance(Market.EQUITY, account=account)
+    assert submitted == [False, True, True]
 
 
 def test_latch_set_during_a_running_scan_survives_that_scan() -> None:

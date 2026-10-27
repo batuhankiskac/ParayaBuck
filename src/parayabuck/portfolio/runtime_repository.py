@@ -1539,6 +1539,7 @@ class PortfolioStateRepository:
                 reference_price=float(row[7] or 0.0),
                 status=str(row[8] or ""),
                 last_updated_at=_latest_timestamp(row[9], row[10], row[11]),
+                submit_call_in_flight=bool(row[10]) and not row[11],
             )
             for row in rows
         )

@@ -81,6 +81,9 @@ class OpenPortfolioOrder:
     # return); reconciliation uses them to close a never-accepted order.
     status: str = ""
     last_updated_at: datetime | None = None
+    # True while a broker submit call has started and has not returned: its
+    # outcome is unknown, so reconciliation must not close the row yet.
+    submit_call_in_flight: bool = False
 
 
 @dataclass(frozen=True)

@@ -74,8 +74,15 @@ class _Outgoing:
 
 
 def _smtp_credentials(env: Mapping[str, str] | None = None) -> tuple[str, str]:
+    """SMTP login: a systemd credential file (``$CREDENTIALS_DIRECTORY``) first, then the env var."""
+    from parayabuck.config import credential_from_directory
+
     source = os.environ if env is None else env
-    return str(source.get(SMTP_USERNAME_ENV, "") or ""), str(source.get(SMTP_PASSWORD_ENV, "") or "")
+
+    def _one(name: str) -> str:
+        return credential_from_directory(name, source) or str(source.get(name, "") or "")
+
+    return _one(SMTP_USERNAME_ENV), _one(SMTP_PASSWORD_ENV)
 
 
 def validate_email_setup(settings: Any, env: Mapping[str, str] | None = None) -> list[str]:

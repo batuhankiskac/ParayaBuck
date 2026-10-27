@@ -71,6 +71,9 @@ def test_flag_on_shortfall_is_collected_and_snapshot_still_builds(tmp_path: Path
 def test_flag_on_unlocks_when_the_broker_covers_the_owned_quantity(tmp_path: Path) -> None:
     fake = FakeTradingClient()
     fake.set_position("IWM", qty=2)
+    # QLD is owned by the fixture: the broker must list it too, or it is a
+    # full-position shortfall (audit G-2) and locks as well.
+    fake.set_position("QLD", qty=2)
     broker = _broker(tmp_path, fake, flag=True)
     broker.account()
     assert broker.drift_locked_symbols == frozenset({"IWM"})

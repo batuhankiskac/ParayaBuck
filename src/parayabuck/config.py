@@ -405,10 +405,16 @@ class RiskLimits:
     max_drawdown_pct: float = 0.75
     # Default-off catastrophe brake; absent key keeps the shipped behaviour.
     drawdown_liquidation: DrawdownLiquidationConfig = field(default_factory=DrawdownLiquidationConfig)
+    # Default-off: same-day deposits, withdrawals and journals count as P&L,
+    # daily loss and drawdown, as before. On: they are netted out of daily P&L,
+    # day-start equity and the drawdown peak (AccountService.account).
+    adjust_for_cash_flows: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.drawdown_liquidation, DrawdownLiquidationConfig):
             raise ValueError("risk.drawdown_liquidation must be a mapping")
+        if not isinstance(self.adjust_for_cash_flows, bool):
+            raise ValueError("risk.adjust_for_cash_flows must be a boolean")
         ratios = (
             self.max_position_pct,
             self.max_gross_exposure_pct,

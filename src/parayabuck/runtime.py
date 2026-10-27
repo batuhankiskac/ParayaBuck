@@ -542,7 +542,16 @@ class EngineRuntime:
             self.broker.adjust_for_cash_flows = True
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
-        self.trading_updates = AlpacaTradingUpdateStream(api_key, secret_key, self.paper, self._on_trade_update)
+        # alpaca-py reconnects a dropped trade stream inside its own loop, where
+        # the worker supervisor never sees it. Each reconnect latches entries
+        # and reconciles, because the updates sent while it was down are not replayed.
+        self.trading_updates = AlpacaTradingUpdateStream(
+            api_key,
+            secret_key,
+            self.paper,
+            self._on_trade_update,
+            on_reconnect=lambda: self._set_reconcile_pending("trade_updates_restart"),
+        )
         # The stream's one-minute bars are aggregated ONLY into the strategy
         # signal cadences (the daily decision bar for VT35): nothing else in
         # the engine consumes stream-built candles.
@@ -1099,19 +1108,39 @@ class EngineRuntime:
 
         Flags only, like ``_exit_sell_retry_blocked``. Stopping and the circuit
         breaker hold every order; a BUY also needs the market to be ACTIVE (no
-        halt, entry latch or pending reconcile raised since the advance began).
-        SELLs keep flowing under latches, as on the decision path.
+        halt, entry latch or pending reconcile raised since the advance began)
+        and an unverified equity signal basis must not hold it. SELLs keep
+        flowing under latches, as on the decision path.
         """
         if not getattr(self, "_running", False):
             return "engine_not_running"
         if getattr(self, "_circuit_breaker_reason", None) is not None:
             return "circuit_breaker"
-        if (
-            getattr(order, "side", None) == PortfolioOrderSide.BUY
-            and self.trading_state(market) is not TradingState.ACTIVE
+        if getattr(order, "side", None) == PortfolioOrderSide.BUY and (
+            self.trading_state(market) is not TradingState.ACTIVE or self._buy_held_by_signal_basis(market)
         ):
             return "buy_not_permitted"
         return None
+
+    def _buy_held_by_signal_basis(self, market: Market) -> bool:
+        """True while an unverified equity signal basis holds new BUYs.
+
+        Reads the cached verifier state only (no provider call), so it is
+        safe under the portfolio lock and at every broker submit.
+        """
+        return market == Market.EQUITY and self._equity_signal_basis_cached_latch() is not None
+
+    def _reconcile_for_incident_recovery(self) -> Any:
+        """Broker reconcile for ``automate_incident_recovery`` on the decision thread.
+
+        The other reconcile callers hold ``_reconcile_lock``; this one runs on
+        the decision thread, so it takes the lock too.
+        """
+        broker = getattr(self, "broker", None)
+        if broker is None or not hasattr(broker, "reconcile"):
+            return False
+        with getattr(self, "_reconcile_lock", threading.Lock()):
+            return broker.reconcile()
 
     def _exit_sell_retry_blocked(self, market: Market | None) -> bool:
         """True when a rejected-SELL retry must not be submitted now.
@@ -3021,8 +3050,15 @@ class EngineRuntime:
                     # The halt, entry-latch and reconcile gates are raised
                     # without this lock, so the read above can be stale by
                     # the time the BUY is submitted: re-read the permission
-                    # flags here, under the lock, right before the advance.
+                    # flags and the signal-basis latch here, under the lock,
+                    # right before the advance.
                     submit_now = submit_buys and self.trading_state(market) is TradingState.ACTIVE
+                    if submit_now and self._buy_held_by_signal_basis(market):
+                        # The basis latched after the read above: hold the BUY
+                        # the same way, and let the signal monitor resume it.
+                        submit_now = False
+                        if cached_basis_only:
+                            self._basis_buy_deferred = True
                     advance_kwargs: dict[str, object] = {
                         "submit_deferred_buys": submit_now,
                         # Re-read again at each broker submit: a halt raised by a
@@ -4296,9 +4332,7 @@ class EngineRuntime:
                     strategy=getattr(getattr(portfolio_runtime, "strategy", None), "name", "unknown"),
                     error=str(exc),
                     current_state={"market": portfolio_runtime.market.value},
-                    reconcile_action=lambda: (
-                        _broker.reconcile() if _broker is not None and hasattr(_broker, "reconcile") else False
-                    ),
+                    reconcile_action=self._reconcile_for_incident_recovery,
                 )
                 log.exception(
                     "Portfolio ownership drift blocked decisions for market=%s",
@@ -5445,8 +5479,10 @@ class EngineRuntime:
         # Warmup-retry threads and the decision worker both resize the live
         # not-ready set; comparing or copying it while another thread
         # resizes it raises RuntimeError. So every access is serialized here
-        # and the local is an immutable snapshot; state lock only, nothing
-        # inside the loop takes another lock.
+        # and the local is an immutable snapshot. The state lock covers the
+        # snapshot and the not-ready updates; nothing inside that block takes
+        # another lock. The warmup-retry spawn (below, after the state lock is
+        # released) takes its own spawn lock.
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
             # Copy each history once. Portfolio-lock holders insert and replace
@@ -6437,7 +6473,7 @@ class EngineRuntime:
         Only the strategy signal cadences are fetched, on the SPLITS basis
         (the same basis as backtest historical data; bridged across live
         splits by ``data/adjustment.py``). Bars are seeded into every
-        matching portfolio runtime under the ingestion and portfolio locks.
+        matching portfolio runtime under the portfolio lock.
         """
         group = list(symbols)
         for timeframe in sorted(self._strategy_timeframes):

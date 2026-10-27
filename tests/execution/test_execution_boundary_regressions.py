@@ -128,7 +128,7 @@ def _stream(handled: list[TradeUpdate]) -> AlpacaTradingUpdateStream:
     return stream
 
 
-def test_malformed_trade_update_is_dropped_without_raising_into_the_sdk() -> None:
+def test_malformed_trade_update_is_handed_on_for_reconciliation_without_raising_into_the_sdk() -> None:
     handled: list[TradeUpdate] = []
     stream = _stream(handled)
     malformed = SimpleNamespace(
@@ -139,7 +139,9 @@ def test_malformed_trade_update_is_dropped_without_raising_into_the_sdk() -> Non
 
     asyncio.run(stream._on_update(malformed))
 
-    assert handled == []
+    # The unreadable fill is not booked; the order identity goes on as an
+    # undecoded event, which makes the runtime reconcile from the broker.
+    assert [(update.event, update.client_order_id) for update in handled] == [("undecoded", "pb-1")]
 
 
 def test_well_formed_trade_update_reaches_the_handler() -> None:

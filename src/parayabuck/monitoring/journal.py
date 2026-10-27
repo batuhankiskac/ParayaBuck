@@ -552,6 +552,7 @@ def configure_global_journal(observability: ObservabilityConfig) -> EventJournal
         if _global_journal is not None and str(_global_journal.path) != DEFAULT_JOURNAL_PATH:
             _global_is_configured = True
             return _global_journal
+        replaced = _global_journal
         _global_journal = EventJournal(
             observability.journal_path,
             queue_size=observability.event_queue_size,
@@ -559,6 +560,11 @@ def configure_global_journal(observability: ObservabilityConfig) -> EventJournal
             max_events=observability.event_max_events,
         )
         _global_is_configured = True
+        if replaced is not None:
+            # The default journal may already have a writer thread running.
+            # Stop it here: otherwise it is orphaned and polls for the
+            # process lifetime, writing to its old path.
+            replaced.stop()
         return _global_journal
 
 

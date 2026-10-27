@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -20,6 +21,14 @@ _BACKOFF_MAX_EXPONENT = 6
 _AUTH_ALERT_AFTER = 3
 # Backoff sleeps in steps this long so a stop request is noticed promptly.
 _SLEEP_STEP_SECONDS = 1.0
+# A session that stays connected this long has proven itself: its drop starts
+# a fresh backoff. A shorter session counts as a failure, so a server that
+# accepts and then drops each connection cannot force a zero-delay loop.
+_STABLE_SESSION_SECONDS = 60.0
+
+
+def _backoff_seconds(failures: int) -> float:
+    return float(min(_BACKOFF_CAP_SECONDS, _BACKOFF_BASE_SECONDS * 2 ** min(failures - 1, _BACKOFF_MAX_EXPONENT)))
 
 
 def guard_sdk_cast(stream: Any, fallback: Callable[[Any, Exception], Any]) -> None:
@@ -45,6 +54,8 @@ def supervise_sdk_stream(
     *,
     label: str,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    on_reconnect: Callable[[], None] | None = None,
 ) -> None:
     """Wrap alpaca-py's connect step with backoff, socket cleanup and alerts.
 
@@ -53,11 +64,23 @@ def supervise_sdk_stream(
     The wrapped step closes that socket, waits an exponentially growing delay
     (interrupted by a stop request), then re-raises so the SDK loop retries.
     Repeated authentication failures raise one alert per streak.
+
+    The SDK also re-enters this step with no delay after a dropped session.
+    A session shorter than ``_STABLE_SESSION_SECONDS`` is therefore backed off
+    before it is reopened, and the backoff resets only after a stable session.
+    ``on_reconnect`` runs after each successful reconnect, so the owner can
+    schedule a reconciliation for updates missed while the stream was down.
     """
     start = getattr(stream, "_start_ws", None)
     if start is None:
         return
-    state: dict[str, Any] = {"failures": 0, "auth_failures": 0, "auth_failed": False}
+    state: dict[str, Any] = {
+        "failures": 0,
+        "auth_failures": 0,
+        "auth_failed": False,
+        "session_started_at": None,
+        "connected_before": False,
+    }
     auth = getattr(stream, "_auth", None)
     if auth is not None:
 
@@ -72,6 +95,19 @@ def supervise_sdk_stream(
 
     async def supervised_start() -> None:
         state["auth_failed"] = False
+        dropped_at = state["session_started_at"]
+        state["session_started_at"] = None
+        if dropped_at is not None:
+            # The SDK re-enters this step straight after a dropped session.
+            if clock() - dropped_at >= _STABLE_SESSION_SECONDS:
+                state["failures"] = 0
+            else:
+                state["failures"] += 1
+                delay = _backoff_seconds(state["failures"])
+                log.warning("Alpaca %s stream dropped after a short session; reconnecting in %.0fs", label, delay)
+                await _sleep_unless_stopped(stream, delay, sleep)
+                if not getattr(stream, "_should_run", True):
+                    raise ConnectionError(f"Alpaca {label} stream stopped during reconnect backoff")
         try:
             await start()
         except Exception as exc:
@@ -91,10 +127,7 @@ def supervise_sdk_stream(
                     category="stream_auth_failed",
                     incident_id=f"stream_auth_failed:{label}",
                 )
-            delay = min(
-                _BACKOFF_CAP_SECONDS,
-                _BACKOFF_BASE_SECONDS * 2 ** min(state["failures"] - 1, _BACKOFF_MAX_EXPONENT),
-            )
+            delay = _backoff_seconds(state["failures"])
             log.warning(
                 "Alpaca %s stream connect failed (attempt %d); retrying in %.0fs: %s",
                 label,
@@ -104,8 +137,14 @@ def supervise_sdk_stream(
             )
             await _sleep_unless_stopped(stream, delay, sleep)
             raise
-        state["failures"] = 0
+        state["session_started_at"] = clock()
         state["auth_failures"] = 0
+        if state["connected_before"] and on_reconnect is not None:
+            try:
+                on_reconnect()
+            except Exception:
+                log.warning("Reconnect hook for the Alpaca %s stream failed", label, exc_info=True)
+        state["connected_before"] = True
 
     stream._start_ws = supervised_start
 
@@ -123,6 +162,8 @@ class AlpacaBarStream:
 
     # Malformed bars dropped by this stream; instances count into their own copy.
     malformed_bar_count = 0
+    # Set by stop(); a run() that starts after it returns without connecting.
+    _stop_requested = False
 
     def __init__(self, api_key: str, secret_key: str, stock_stream_feed: str = "iex") -> None:
         from alpaca.data.enums import DataFeed
@@ -191,16 +232,26 @@ class AlpacaBarStream:
         timeframe: str = "1m",
         updated_handler: BarHandler | None = None,
     ) -> None:
+        # alpaca-py dispatches every bar of a frame in one loop: an exception
+        # escaping a handler would drop the frame's remaining bars.
         async def stock_handler(raw: Any) -> None:
             bar = self._convert_or_drop(raw, timeframe)
             if bar is not None:
-                await handler(bar)
+                try:
+                    await handler(bar)
+                except Exception:
+                    log.error("Alpaca stock bar handler failed; the frame's other bars still flow", exc_info=True)
 
         async def stock_updated_handler(raw: Any) -> None:
             bar = self._convert_or_drop(raw, timeframe)
             if bar is not None:
                 target = updated_handler or handler
-                await target(bar)
+                try:
+                    await target(bar)
+                except Exception:
+                    log.error(
+                        "Alpaca stock updated-bar handler failed; the frame's other bars still flow", exc_info=True
+                    )
 
         if stock_symbols:
             self.stock.subscribe_bars(stock_handler, *stock_symbols)
@@ -209,6 +260,10 @@ class AlpacaBarStream:
                 subscribe_updated(stock_updated_handler, *stock_symbols)
 
     def run_stock(self) -> None:
+        # A stop that arrived before this run began must not be lost: the SDK
+        # forgets it, and the run would then consume until process exit.
+        if self._stop_requested:
+            return
         self.stock.run()
 
     @staticmethod
@@ -220,4 +275,5 @@ class AlpacaBarStream:
         stream.stop()
 
     def stop(self) -> None:
+        self._stop_requested = True
         self._stop_sdk_stream(self.stock)

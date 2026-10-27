@@ -335,19 +335,22 @@ def test_connect_failures_back_off_without_an_auth_alert(monkeypatch: Any) -> No
     assert alerts == []
 
 
-def test_a_successful_connect_resets_the_backoff_and_the_auth_streak(monkeypatch: Any) -> None:
+def test_a_stable_session_resets_the_backoff_and_the_auth_streak(monkeypatch: Any) -> None:
     monkeypatch.setattr(alpaca_stream, "emit_execution_alert", lambda *_args, **_fields: None)
     sleeps: list[float] = []
+    now = [0.0]
 
     async def fake_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
     stream = _FakeSdkStream(auth_failures=2)
-    supervise_sdk_stream(stream, label="trade updates", sleep=fake_sleep)
+    supervise_sdk_stream(stream, label="trade updates", sleep=fake_sleep, clock=lambda: now[0])
     for _ in range(2):
         with pytest.raises(ValueError):
             _attempt(stream)
     _attempt(stream)
+    # The session stays up past the stable window before it drops.
+    now[0] += 120.0
     stream.auth_failures_left = 1
     with pytest.raises(ValueError):
         _attempt(stream)

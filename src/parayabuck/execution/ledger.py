@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from parayabuck.core.models import Market
 from parayabuck.logger import get_logger
 from parayabuck.risk.state import RiskState, SafetyIncident
-from parayabuck.storage import SQLiteStore, migrate_legacy_decision_orders
+from parayabuck.storage import (
+    SQLiteStore,
+    check_runtime_schema_version,
+    migrate_legacy_decision_orders,
+    stamp_runtime_schema_version,
+)
 
 log = get_logger("parayabuck.execution.ledger")
 
@@ -18,6 +25,36 @@ log = get_logger("parayabuck.execution.ledger")
 # timestamps fall back to the epoch so it sorts as the oldest incident.
 CORRUPT_INCIDENT_SCOPE = "corrupt"
 _CORRUPT_INCIDENT_TIME = datetime(1970, 1, 1, tzinfo=UTC)
+
+# Numeric fields every ``risk_state`` payload must carry. A missing key is an
+# error, never a default: a renamed key would otherwise read as a zero peak.
+RISK_STATE_REQUIRED_FIELDS = ("day_start_equity", "peak_equity", "realized_pnl", "unrealized_pnl", "fees")
+
+
+def parse_risk_state_payload(raw: str | bytes) -> dict[str, Any]:
+    """The single strict reader of a ``risk_state`` payload.
+
+    Shared by ``ExecutionLedger.load_risk_state`` and the peak-sidecar query,
+    so both agree on which rows are readable. Raises ``ValueError`` (a
+    ``json`` decode error is one too) for a payload that is not a JSON object,
+    misses a required field, or holds a non-finite required number.
+    ``peak_epoch`` and ``circuit_breaker_reason`` are optional.
+    """
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("risk_state payload is not a JSON object")
+    parsed: dict[str, Any] = {}
+    for name in RISK_STATE_REQUIRED_FIELDS:
+        if name not in payload:
+            raise ValueError(f"risk_state payload is missing {name!r}")
+        value = float(payload[name])
+        if not math.isfinite(value):
+            raise ValueError(f"risk_state payload field {name!r} is not finite")
+        parsed[name] = value
+    parsed["circuit_breaker_reason"] = payload.get("circuit_breaker_reason")
+    parsed["peak_epoch"] = int(payload.get("peak_epoch", 0) or 0)
+    return parsed
+
 
 # Legacy single-name/bracket ledger rows that still claim ownership or a
 # working order. Nothing in the VT35 runtime manages them any more, so their
@@ -126,6 +163,8 @@ class ExecutionLedger:
 
     def _migrate(self) -> None:
         with self._lock:
+            # Refuse a newer schema before any DDL touches it.
+            check_runtime_schema_version(self.connection)
             migrate_legacy_decision_orders(self.connection)
             self._create_initial_schema()
             self._migrate_v2_managed_positions()
@@ -133,6 +172,7 @@ class ExecutionLedger:
             self._migrate_v4_circuit_breaker_backfill()
             self._migrate_v5_execution_quality_columns()
             self._migrate_v6_watermark()
+            stamp_runtime_schema_version(self.connection)
             self.connection.commit()
 
     def _create_initial_schema(self) -> None:
@@ -350,11 +390,9 @@ class ExecutionLedger:
         )
 
     def _migrate_v6_watermark(self) -> None:
-        # v6: persisted fill-activity reconciliation watermark. The
-        # per-minute reconcile previously rescanned the FULL fill-activity
-        # history every pass; the watermark lets it sync incrementally
-        # from a bounded window while keeping the same idempotent
-        # fee/fill-recovery application.
+        # v6: version stamp only. It creates no table or column, and no
+        # fill-activity reconciliation watermark is persisted anywhere; the
+        # stamp is kept so existing databases stay at version 6.
         self.connection.execute(
             """
                 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
@@ -498,18 +536,18 @@ class ExecutionLedger:
         if row is None:
             return None
         try:
-            payload = json.loads(row[0])
+            payload = parse_risk_state_payload(row[0])
             return RiskState(
                 account_id=account_id,
                 session_date=session_date,
-                day_start_equity=float(payload["day_start_equity"]),
-                peak_equity=float(payload["peak_equity"]),
-                realized_pnl=float(payload["realized_pnl"]),
-                unrealized_pnl=float(payload["unrealized_pnl"]),
-                fees=float(payload["fees"]),
-                circuit_breaker_reason=payload.get("circuit_breaker_reason"),
+                day_start_equity=payload["day_start_equity"],
+                peak_equity=payload["peak_equity"],
+                realized_pnl=payload["realized_pnl"],
+                unrealized_pnl=payload["unrealized_pnl"],
+                fees=payload["fees"],
+                circuit_breaker_reason=payload["circuit_breaker_reason"],
                 updated_at=datetime.fromisoformat(str(row[1])),
-                peak_epoch=int(payload.get("peak_epoch", 0) or 0),
+                peak_epoch=payload["peak_epoch"],
             )
         except (TypeError, ValueError, KeyError):
             # A corrupt/truncated risk_state row (bad JSON payload, missing

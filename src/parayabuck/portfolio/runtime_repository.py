@@ -12,7 +12,7 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from parayabuck.core.models import Market
 from parayabuck.execution.portfolio import (
@@ -47,7 +47,7 @@ from parayabuck.portfolio.runtime_models import (
     _decision_id,
 )
 from parayabuck.portfolio.runtime_ownership import net_owned_quantities
-from parayabuck.storage import SQLiteStore
+from parayabuck.storage import SQLiteStore, check_runtime_schema_version, stamp_runtime_schema_version
 
 log = get_logger("parayabuck.portfolio.runtime_repository")
 
@@ -60,9 +60,12 @@ _LEGACY_CRYPTO_MARKET = Market.CRYPTO.value
 # path records ``submitted``, a reconciliation snapshot taken before the
 # fill) must never move a final order back to a working status: the row
 # would re-enter ``open_orders`` and hold a position slot until the next
-# reconciliation. ``done_for_day`` is excluded because Alpaca resumes such
-# an order on the next session.
-_FINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES - {"done_for_day"}))
+# reconciliation. ``done_for_day`` is final as well: Alpaca does not resume
+# such an order, so a late working-status event must not revive it.
+_FINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES))
+# A terminal incoming status is never blocked by this guard, so a late fill
+# landing on a ``canceled`` or ``expired`` row moves the row to ``filled``
+# (the fill itself is booked by ``apply_trade_update``).
 _NON_REGRESSING_STATUS_SQL = (
     f"CASE WHEN status IN ({_FINAL_ORDER_STATUSES_SQL}) "
     f"AND ? NOT IN ({TERMINAL_ORDER_STATUSES_SQL}) THEN status ELSE ? END"
@@ -91,6 +94,21 @@ def _execution_price(
     if not math.isfinite(derived) or derived <= 0:
         return cumulative_average
     return derived
+
+
+def _emit_invalid_fill_alert(client_order_id: str, message: str) -> None:
+    """Alert the operator that a broker fill was refused and left unbooked."""
+    try:
+        from parayabuck.monitoring import alerts
+
+        alerts.emit(
+            "paper_incident",
+            message=message,
+            category="invalid_fill_facts",
+            incident_id=f"invalid_fill_facts:{client_order_id}",
+        )
+    except Exception:
+        log.warning("Alert emission failed for rejected fill facts of %s", client_order_id, exc_info=True)
 
 
 def _parse_instant(value: object) -> datetime:
@@ -167,6 +185,9 @@ class PortfolioStateRepository:
         self._migrate()
 
     def _migrate(self) -> None:
+        # Refuse a newer schema before any DDL touches it.
+        with self.store.lock:
+            check_runtime_schema_version(self.store.connection)
         with self.store.lock, self.store.connection:
             self.store.connection.executescript(
                 """
@@ -307,30 +328,30 @@ class PortfolioStateRepository:
             )
             columns = {str(row[1]) for row in self.store.connection.execute("PRAGMA table_info(portfolio_orders)")}
             if "cumulative_filled_quantity" not in columns:
-                self.store.connection.execute(
-                    "ALTER TABLE portfolio_orders ADD COLUMN cumulative_filled_quantity REAL NOT NULL DEFAULT 0"
-                )
                 # Legacy databases kept fills in portfolio_fills while the
                 # orders table had no cumulative quantity. Restore the real
                 # bookkeeping instead of leaving migrated orders at zero.
-                self.store.connection.execute(
+                self._add_column_with_backfill(
+                    "portfolio_orders",
+                    "cumulative_filled_quantity REAL NOT NULL DEFAULT 0",
                     """UPDATE portfolio_orders
                        SET cumulative_filled_quantity = COALESCE((
                            SELECT SUM(f.quantity) FROM portfolio_fills f
                            WHERE f.client_order_id = portfolio_orders.client_order_id
                        ), 0)
-                       WHERE cumulative_filled_quantity = 0"""
+                       WHERE cumulative_filled_quantity = 0""",
                 )
             if "average_fill_price" not in columns:
-                self.store.connection.execute("ALTER TABLE portfolio_orders ADD COLUMN average_fill_price REAL")
-                self.store.connection.execute(
+                self._add_column_with_backfill(
+                    "portfolio_orders",
+                    "average_fill_price REAL",
                     """UPDATE portfolio_orders
                        SET average_fill_price = (
                            SELECT SUM(f.quantity * f.price) / NULLIF(SUM(f.quantity), 0)
                            FROM portfolio_fills f
                            WHERE f.client_order_id = portfolio_orders.client_order_id
                        )
-                       WHERE average_fill_price IS NULL"""
+                       WHERE average_fill_price IS NULL""",
                 )
             # These times intentionally do not reuse ``created_at``.  That
             # timestamp means the logical order was persisted, whereas the
@@ -343,8 +364,9 @@ class PortfolioStateRepository:
             # Execution-quality capture (telemetry, REPORT ONLY): submission ->
             # fill delay per fill. Nullable; legacy rows stay valid.
             if "fill_delay_seconds" not in fill_columns:
-                self.store.connection.execute("ALTER TABLE portfolio_fills ADD COLUMN fill_delay_seconds REAL")
-                self.store.connection.execute(
+                self._add_column_with_backfill(
+                    "portfolio_fills",
+                    "fill_delay_seconds REAL",
                     """UPDATE portfolio_fills
                        SET fill_delay_seconds = (
                            SELECT CASE
@@ -358,7 +380,7 @@ class PortfolioStateRepository:
                            FROM portfolio_orders o
                            WHERE o.client_order_id = portfolio_fills.client_order_id
                        )
-                       WHERE fill_delay_seconds IS NULL"""
+                       WHERE fill_delay_seconds IS NULL""",
                 )
             adjustment_columns = {
                 str(row[1])
@@ -395,6 +417,28 @@ class PortfolioStateRepository:
                    VALUES (1, ?, ?)""",
                 (uuid4().hex[:12], datetime.now(UTC).isoformat()),
             )
+            stamp_runtime_schema_version(self.store.connection)
+
+    def _add_column_with_backfill(self, table: str, column_definition: str, backfill_sql: str) -> None:
+        """Add one column and its backfill in a single transaction.
+
+        ``ALTER`` runs in autocommit mode under Python's sqlite3 unless a
+        transaction is already open, so a crash between the column add and
+        the backfill would leave the column present and the backfill skipped
+        for good (the column-presence gate never reopens). An explicit
+        ``BEGIN IMMEDIATE`` makes the pair atomic: either both land or neither.
+        """
+        connection = self.store.connection
+        if connection.in_transaction:
+            connection.commit()
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column_definition}")
+            connection.execute(backfill_sql)
+        except BaseException:
+            connection.rollback()
+            raise
+        connection.commit()
 
     def _ensure_hot_path_indexes(self) -> None:
         """Additive, backward-compatible hot-path indexes (idempotent).
@@ -417,6 +461,10 @@ class PortfolioStateRepository:
                 ON portfolio_orders(decision_id);
             CREATE INDEX IF NOT EXISTS idx_portfolio_fills_client_order_id
                 ON portfolio_fills(client_order_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_fills_occurred_at
+                ON portfolio_fills(occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_execution_events_order_identity
+                ON portfolio_execution_events(client_order_id, dedup_identity, fee_observed);
             CREATE INDEX IF NOT EXISTS idx_portfolio_ownership_adjustments_account
                 ON portfolio_ownership_adjustments(account_id, consumed_quantity);
             """
@@ -804,14 +852,33 @@ class PortfolioStateRepository:
         phase: str,
         *,
         status: str | None = None,
-    ) -> None:
-        with self.store.lock, self.store.connection:
-            self.store.connection.execute(
-                """UPDATE portfolio_rebalance_executions
+        from_phase: str | None = None,
+    ) -> bool:
+        """Move one rebalance execution to ``phase``.
+
+        With ``from_phase`` the move applies only while the stored phase is
+        still ``from_phase``, so a stale caller cannot overwrite a newer
+        phase. Returns False, and logs, when no row matched (unknown decision
+        or a different stored phase); the row is then left unchanged.
+        """
+        sql = """UPDATE portfolio_rebalance_executions
                    SET phase = ?, status = COALESCE(?, status), updated_at = ?
-                   WHERE decision_id = ?""",
-                (phase, status, datetime.now(UTC).isoformat(), decision_id),
+                   WHERE decision_id = ?"""
+        params: tuple[object, ...] = (phase, status, datetime.now(UTC).isoformat(), decision_id)
+        if from_phase is not None:
+            sql += " AND phase = ?"
+            params = (*params, from_phase)
+        with self.store.lock, self.store.connection:
+            cursor = self.store.connection.execute(sql, params)
+            updated = cursor.rowcount == 1
+        if not updated:
+            log.error(
+                "Rebalance execution %s not moved to %s: no matching row (from_phase=%s)",
+                decision_id,
+                phase,
+                from_phase,
             )
+        return updated
 
     def current_rebalance_execution(self, account_id: str, market: Market) -> RebalanceExecutionState | None:
         """The newest persisted rebalance execution for one account/market.
@@ -969,18 +1036,23 @@ class PortfolioStateRepository:
         cash_headroom: float,
         admitted_batch_notional: float,
     ) -> None:
-        """Mirror final BUY headroom without affecting the order authority."""
+        """Mirror final BUY headroom without affecting the order authority.
+
+        One observation per (decision, order). The id is derived from that pair
+        and the insert ignores duplicates, so a retried or repeated write keeps
+        the first observation instead of adding a second row for the order.
+        """
         observed_at = datetime.now(UTC).isoformat()
         with self.store.lock, self.store.connection:
             self.store.connection.executemany(
-                """INSERT INTO portfolio_buy_admission_observations
+                """INSERT OR IGNORE INTO portfolio_buy_admission_observations
                    (observation_id, client_order_id, decision_id, observed_at, account_equity,
                     account_cash, realized_gross, committed_buy_notional,
                     gross_headroom, cash_headroom, admitted_batch_notional)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     (
-                        uuid4().hex,
+                        uuid5(NAMESPACE_URL, f"buy-admission:{decision_id}:{client_order_id}").hex,
                         client_order_id,
                         decision_id,
                         observed_at,
@@ -1256,21 +1328,12 @@ class PortfolioStateRepository:
                 average_fill_price,
                 fee,
             )
-            try:
-                from parayabuck.monitoring import alerts
-
-                alerts.emit(
-                    "paper_incident",
-                    message=(
-                        f"Rejected non-finite fill facts for {client_order_id} "
-                        f"(cumulative={cumulative_filled_quantity!r} average={average_fill_price!r} "
-                        f"fee={fee!r}); order left unbooked for the operator."
-                    ),
-                    category="invalid_fill_facts",
-                    incident_id=f"invalid_fill_facts:{client_order_id}",
-                )
-            except Exception:
-                log.warning("Alert emission failed for rejected fill facts of %s", client_order_id, exc_info=True)
+            _emit_invalid_fill_alert(
+                client_order_id,
+                f"Rejected non-finite fill facts for {client_order_id} "
+                f"(cumulative={cumulative_filled_quantity!r} average={average_fill_price!r} "
+                f"fee={fee!r}); order left unbooked for the operator.",
+            )
             return False
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
@@ -1328,6 +1391,19 @@ class PortfolioStateRepository:
                 ),
             )
             previous = float(row[0] or 0.0)
+            if average_value is None and cumulative_value > previous:
+                # A new fill delta cannot be priced without the cumulative
+                # average. Advancing the quantity now would book no fill and
+                # leave the lot book short, so refuse: the raw event stays
+                # journaled, the order keeps its status and quantity, and the
+                # operator is alerted.
+                _emit_invalid_fill_alert(
+                    client_order_id,
+                    f"Refused fill without a cumulative average for {client_order_id} "
+                    f"(status={status} cumulative={cumulative_filled_quantity!r} previous={previous!r}); "
+                    "order left non-terminal for the operator.",
+                )
+                return False
             reference = float(row[1] or 0.0)
             side = str(row[2])
             market = str(row[3] or "")

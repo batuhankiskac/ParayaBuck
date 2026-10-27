@@ -2709,6 +2709,18 @@ class PortfolioRuntime:
         # leaves no ``submitting`` row for a later BUY that never reached the
         # broker, so the next re-plan submits it instead of suppressing it.
         # ``_submit_orders`` records the same row (INSERT OR IGNORE).
+        # A BUY side whose decision is no longer the newest one belongs to a
+        # session that is over: it is never sent from here. Its rows stay
+        # ``buy_ready`` for the session-boundary close to settle.
+        latest_decision = self.repository.latest_decision_id(self.account_id, self.market)
+        if latest_decision is not None and latest_decision != decision_id:
+            log.warning(
+                "Deferred BUY not submitted: decision is no longer the latest one: market=%s decision=%s latest=%s",
+                self._market_name(),
+                decision_id,
+                latest_decision,
+            )
+            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "stale_decision_buy_held")
         submitted: tuple[str, ...] = ()
         for order in buy_orders:
             if submit_gate is not None:

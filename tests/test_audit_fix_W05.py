@@ -467,3 +467,29 @@ def test_submit_gate_holds_a_deferred_buy_and_keeps_the_phase_ready(tmp_path) ->
     released = runtime.advance_rebalance()
     assert released is not None and released.status == "buy_phase_submitted"
     assert [order.symbol for order in broker.submitted if order.side == PortfolioOrderSide.BUY] == ["MSFT"]
+
+
+# Stale decision: a BUY side whose decision is no longer the newest is never sent from an advance
+
+
+def test_stale_decision_buy_is_not_sent_from_an_advance(tmp_path, monkeypatch) -> None:
+    broker = _RulesBroker((_position("AAPL", 400),))
+    runtime, repository, first = _sell_decision(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, ("AAPL", "MSFT"))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell)
+    broker.positions = [_position("AAPL", 100)]
+    broker.open_symbols.discard("AAPL")
+    latest = ["a-newer-session-decision"]
+    monkeypatch.setattr(repository, "latest_decision_id", lambda account_id, market: latest[0])
+
+    held = runtime.advance_rebalance()
+
+    assert held is not None and held.status == "stale_decision_buy_held"
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    assert _phase(repository, runtime) == REBALANCE_PHASE_BUY_READY
+    assert repository.orders_for_decision(first.decision_id, side="buy") == ()
+
+    latest[0] = first.decision_id
+    released = runtime.advance_rebalance()
+    assert released is not None and released.status == "buy_phase_submitted"
+    assert [order.symbol for order in broker.submitted if order.side == PortfolioOrderSide.BUY] == ["MSFT"]

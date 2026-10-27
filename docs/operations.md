@@ -491,6 +491,7 @@ decision.
 |---|---|---|
 | `data/runtime/parayabuck.sqlite3` | Decisions, orders, fills, rebalance phases, risk state, safety incidents | **Critical** — restore from backup; broker positions survive but decision lineage does not |
 | `data/runtime/paper_equity_peak.json` | Drawdown peak + epoch | Missing → bootstraps at 0; corrupt → fail-closed |
+| `data/runtime/OPERATOR_HALT` | Operator halt from `parayabuck halt`; refuses every engine start until `parayabuck resume` | Lost → the halt is gone and the engine may start; restore its copy from the backup set |
 | `config/settings.yaml`, `.env` | Config (tracked in git), secrets | Restore from git / your secret store |
 | `data/runtime/observability.sqlite3`, `health_snapshot.json`, `data/cache/` | Journal, snapshot, warmup bars | Regenerated |
 | `data/backups/` | Backups | — |
@@ -503,12 +504,23 @@ safe while running) to `backup.path` (`data/backups`), verifies it with
 occasionally; they live on the same disk.
 
 Each backup set is the snapshot plus a verified copy of every peak sidecar
-that exists (`paper_equity_peak.json`, `live_equity_peak.json`), published
-next to it as `<snapshot stem>.<sidecar name>`. A missing sidecar is skipped
-(a host that has not traded has none). A sidecar that is unreadable, fails
-the peak-record check, or whose copy does not read back fails the whole set:
-the new files are removed, nothing half-complete is kept, and the command
-raises after `backup_failed` is recorded.
+that exists (`paper_equity_peak.json`, `live_equity_peak.json`) and of the
+operator halt marker `data/runtime/OPERATOR_HALT` when it exists. The copies
+are published next to the snapshot as `<snapshot stem>.<name>`, for example
+`<stem>.OPERATOR_HALT`. A missing member is skipped (a host that has not
+traded has none, and a host without a halt has no halt copy).
+
+A peak sidecar that is unreadable, fails the peak-record check, or whose copy
+does not read back is left out of the set. The snapshot still publishes, and
+the run records `backup_failed` with reason `sidecar_invalid`, so the set has
+no copy of that sidecar until the file is repaired. The members are published
+before the snapshot, and the snapshot's link is the commit point: an
+interrupted run leaves at most orphan members, which prune ages out, and never
+a snapshot published ahead of the members it was taken with.
+
+`parayabuck backup --verify-only <file>` checks the snapshot and every member
+the set carries. A member that exists must be a valid peak record or a JSON
+halt record; any other state fails the check.
 
 Failures are visible on the VM: `parayabuck backup` logs an ERROR, records
 `backup_failed` in the journal and exits non-zero (the unit shows `failed` in
@@ -539,6 +551,8 @@ sudo -u "$PB_USER" cp -a data/runtime/parayabuck.sqlite3* "$EVIDENCE"/   # keep 
 sudo -u "$PB_USER" .venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
 sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
 sudo -u "$PB_USER" rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
+# The set's halt copy, when it has one, keeps the restored host halted (a DR restore must not start unhalted).
+[ -e data/backups/<stem>.OPERATOR_HALT ] && sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.OPERATOR_HALT data/runtime/OPERATOR_HALT
 sudo systemctl start parayabuck
 sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
@@ -546,6 +560,11 @@ sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:800
 Orders and fills after the backup are missing from the restored ledger. On
 start the engine reconciles it against the broker and halts on drift it cannot
 explain; review the broker account before any safety reset. Never delete the DB, safety incidents or the peak file to "reset".
+
+The halt copy records the halt as it stood at backup time. If the halt was
+cleared after that backup, restoring the copy halts the engine until you review
+the state and run `parayabuck resume`. A set without a halt copy leaves any
+marker already on disk untouched.
 
 A restored file is in DELETE journal mode, because the backup normalizes to
 it. That is expected: `doctor --strict` reports `sqlite journal_mode` as INFO

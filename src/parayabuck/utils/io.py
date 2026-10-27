@@ -66,6 +66,27 @@ def _finish_committed_write(path: Path, mode: int | None) -> None:
         log.warning("Wrote %s but a post-rename step failed (durability or mode may be stale): %s", path, exc)
 
 
+class UnsafeSymlinkError(OSError):
+    """A write was refused because its destination is a symlink that leaves its directory."""
+
+
+def _write_target(path: Path) -> Path:
+    """The regular file a write to ``path`` replaces.
+
+    A symlink is followed only when the file it resolves to sits in the same
+    directory as the link (a managed link inside the state dir). A link that
+    points elsewhere is refused, so a planted link cannot redirect a write out
+    of the directory the caller named.
+    """
+    link = Path(path)
+    target = Path(os.path.realpath(link))
+    if link.is_symlink() and target.parent != Path(os.path.realpath(link.parent)):
+        raise UnsafeSymlinkError(
+            errno.EPERM, "refusing to write through a symlink that leaves its directory", str(link)
+        )
+    return target
+
+
 def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
     """Atomically replace ``path`` with ``content``.
 
@@ -75,10 +96,11 @@ def atomic_write(path: Path, content: str, mode: int | None = None) -> None:
     file is removed; the target is never left partially written.
 
     A symlinked destination is resolved first, so the regular file behind the
-    link is replaced and the link itself is kept. Failures after the rename
-    (chmod, directory fsync) are logged, not raised.
+    link is replaced and the link itself is kept, but only when that file is in
+    the link's own directory; any other link raises ``UnsafeSymlinkError``.
+    Failures after the rename (chmod, directory fsync) are logged, not raised.
     """
-    target = Path(os.path.realpath(path))
+    target = _write_target(Path(path))
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
     temporary = Path(temporary_name)
@@ -145,4 +167,4 @@ def sweep_orphan_temp_files(
     return removed
 
 
-__all__ = ["ORPHAN_TEMP_MIN_AGE_SECONDS", "atomic_write", "sweep_orphan_temp_files"]
+__all__ = ["ORPHAN_TEMP_MIN_AGE_SECONDS", "UnsafeSymlinkError", "atomic_write", "sweep_orphan_temp_files"]

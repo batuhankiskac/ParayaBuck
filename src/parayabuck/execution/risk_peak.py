@@ -40,11 +40,22 @@ def _parse_sidecar_file(path: Path) -> dict[str, Any] | None:
         raise
     except json.JSONDecodeError as exc:
         raise RiskStatePersistenceError(f"Peak equity file is malformed JSON at {path}: {exc}") from exc
+    return check_peak_record(data, path)
+
+
+def check_peak_record(data: object, path: str | Path) -> dict[str, Any]:
+    """Return ``data`` when it is a peak record the runtime accepts, else raise.
+
+    The one validator for peak sidecars: the runtime load path and the backup
+    set (``parayabuck.backup``) both call it, so they cannot disagree about
+    what a valid sidecar is. Oversized integers and infinities raise
+    ``RiskStatePersistenceError`` instead of ``OverflowError``.
+    """
     if not isinstance(data, dict) or "peak_equity" not in data:
         raise RiskStatePersistenceError(f"Peak equity file missing 'peak_equity' key at {path}")
     try:
         peak = float(data["peak_equity"])
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise RiskStatePersistenceError(
             f"Peak equity value is not a number at {path}: {data.get('peak_equity')!r}"
         ) from exc
@@ -54,7 +65,7 @@ def _parse_sidecar_file(path: Path) -> dict[str, Any] | None:
         raise RiskStatePersistenceError(f"Peak equity is negative at {path}: {peak!r}")
     try:
         epoch_val = int(data.get("epoch", 0) or 0)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise RiskStatePersistenceError(f"Peak epoch is not an integer at {path}: {data.get('epoch')!r}") from exc
     if epoch_val < 0:
         raise RiskStatePersistenceError(f"Peak epoch is negative at {path}: {epoch_val!r}")

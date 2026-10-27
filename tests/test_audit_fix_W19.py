@@ -59,8 +59,8 @@ def _make_db(path: Path) -> Path:
 # ------------------------------------------------------------------ utils/io
 
 
-def test_atomic_write_replaces_a_symlinked_destination_and_keeps_the_link(tmp_path: Path) -> None:
-    """S9-5: the regular file behind a managed symlink is replaced, the link survives."""
+def test_atomic_write_refuses_a_symlink_that_leaves_its_directory(tmp_path: Path) -> None:
+    """R2-3-6: a link pointing out of its directory is refused; the target outside is never written."""
     managed = tmp_path / "managed" / "settings.yaml"
     managed.parent.mkdir()
     managed.write_text("mode: paper\n", encoding="utf-8")
@@ -68,10 +68,11 @@ def test_atomic_write_replaces_a_symlinked_destination_and_keeps_the_link(tmp_pa
     link.parent.mkdir()
     link.symlink_to(managed)
 
-    atomic_write(link, "mode: live\n")
+    with pytest.raises(io_module.UnsafeSymlinkError):
+        atomic_write(link, "mode: live\n")
 
     assert link.is_symlink()
-    assert managed.read_text(encoding="utf-8") == "mode: live\n"
+    assert managed.read_text(encoding="utf-8") == "mode: paper\n"
 
 
 def test_chmod_failure_after_rename_is_logged_not_raised(
@@ -207,18 +208,18 @@ def test_backup_without_sidecars_publishes_only_the_database(tmp_path: Path) -> 
     assert sorted(path.name for path in backup_dir.iterdir()) == [destination.name]
 
 
-def test_invalid_peak_sidecar_fails_the_whole_backup_set(tmp_path: Path) -> None:
-    """BK-5: a sidecar that does not verify leaves no half-complete set behind."""
+def test_invalid_peak_sidecar_is_left_out_and_the_database_is_kept(tmp_path: Path) -> None:
+    """R2-3-1: an invalid sidecar is skipped and alerted; the verified snapshot still publishes."""
     runtime = tmp_path / "runtime"
     runtime.mkdir()
     source = _make_db(runtime / "parayabuck.sqlite3")
     (runtime / "paper_equity_peak.json").write_text('{"peak_equity": -5}', encoding="utf-8")
     backup_dir = tmp_path / "backups"
 
-    with pytest.raises(backup.BackupVerificationError, match="Peak sidecar failed validation"):
-        backup.backup_database(source, backup_dir, retention_days=7)
+    destination = backup.backup_database(source, backup_dir, retention_days=7)
 
-    assert list(backup_dir.glob("parayabuck-*")) == []
+    assert backup.verify_backup_set(destination)
+    assert sorted(path.name for path in backup_dir.iterdir()) == [destination.name]
     assert list(backup_dir.glob(".parayabuck-stage-*")) == []
 
 

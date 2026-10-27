@@ -24,7 +24,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from parayabuck.utils.io import atomic_write, sweep_orphan_temp_files
+from parayabuck.execution.alpaca_models import RiskStatePersistenceError
+from parayabuck.execution.risk_peak import check_peak_record
+from parayabuck.live_safety import HALT_MARKER_FILENAME, operator_halt_marker_path, read_operator_halt
+from parayabuck.utils.io import sweep_orphan_temp_files
 
 log = logging.getLogger("parayabuck.backup")
 
@@ -49,7 +52,16 @@ AUTO_BACKUP_GLOB = f"{BACKUP_PREFIX}[0-9]*{BACKUP_SUFFIX}"
 # that exists, published as ``<snapshot stem>.<sidecar name>``.
 PEAK_SIDECAR_NAMES = ("paper_equity_peak.json", "live_equity_peak.json")
 AUTO_PEAK_GLOB = f"{BACKUP_PREFIX}[0-9]*_equity_peak.json"
+# The operator halt marker (``parayabuck halt``) is a sidecar of the runtime
+# directory too. A set carries a JSON copy of it whenever the marker exists, so
+# a restore does not start unhalted. Published as ``<snapshot stem>.OPERATOR_HALT``.
+HALT_COPY_NAME = HALT_MARKER_FILENAME
+SET_SIDECAR_NAMES = (*PEAK_SIDECAR_NAMES, HALT_COPY_NAME)
+AUTO_HALT_GLOB = f"{BACKUP_PREFIX}[0-9]*.{HALT_COPY_NAME}"
 STAGE_PREFIX = ".parayabuck-stage-"
+# Every temp file this module can leave in the backup directory starts with this
+# prefix: staging files and the atomic_write temps of earlier runs.
+ORPHAN_TEMP_PREFIX = f".{BACKUP_PREFIX}"
 # A staging file younger than this may belong to a concurrent backup run; an
 # older one is left by a run that was killed mid-copy.
 STAGE_ORPHAN_MIN_AGE_SECONDS = 3600.0
@@ -67,8 +79,10 @@ class BackupVerificationError(RuntimeError):
 class BackupSourceMissing(FileNotFoundError):
     """The runtime database does not exist yet (first boot, before any decision).
 
-    Not a failure: nothing is written. Subclasses FileNotFoundError so existing
-    handlers keep working.
+    Nothing is written. ``backup_database`` only raises it; it does not alert.
+    The CLI checks the source first and records ``backup_failed``, because the
+    timer is unattended and a missing database is a failed backup. Subclasses
+    FileNotFoundError so existing handlers keep working.
     """
 
 
@@ -100,17 +114,25 @@ def _validate_label(label: str | None) -> str | None:
     return token
 
 
-def _backup_path(backup_dir: Path, stamp: datetime, *, label: str | None = None) -> Path:
+def _set_sidecar_path(snapshot: Path, name: str) -> Path:
+    """Where the set member ``name`` of ``snapshot`` lives."""
+    return snapshot.with_name(f"{snapshot.stem}.{name}")
+
+
+def _backup_path(
+    backup_dir: Path, stamp: datetime, *, label: str | None = None, sidecar_names: list[str] | tuple[str, ...] = ()
+) -> Path:
     """Timestamped, collision-safe backup filename.
 
     A labelled backup is published as ``parayabuck-keep-<label>-<stamp>``
-    so retention pruning never removes an operator-requested snapshot.
+    so retention pruning never removes an operator-requested snapshot. A name
+    is taken when the snapshot or one of its set members already exists.
     """
     stem = f"{KEEP_PREFIX}{label}-" if label else BACKUP_PREFIX
     stem += f"{stamp:%Y%m%dT%H%M%S%f}Z"
     candidate = backup_dir / f"{stem}{BACKUP_SUFFIX}"
     counter = 1
-    while candidate.exists():
+    while any(path.exists() for path in (candidate, *(_set_sidecar_path(candidate, name) for name in sidecar_names))):
         candidate = backup_dir / f"{stem}-{counter}{BACKUP_SUFFIX}"
         counter += 1
     return candidate
@@ -144,29 +166,78 @@ def _fsync_directory(directory: Path) -> None:
 
 
 def _valid_peak_payload(payload: str) -> bool:
-    """True for a peak record the runtime accepts: a JSON object with a finite,
-    non-negative ``peak_equity`` and an integer ``epoch`` when present."""
+    """True when ``payload`` is a peak record the runtime accepts.
+
+    Uses the runtime's own check (``check_peak_record``), so a sidecar the backup
+    keeps is one the engine would load.
+    """
     try:
-        data = json.loads(payload)
+        check_peak_record(json.loads(payload), "<backup sidecar>")
+    except (ValueError, RiskStatePersistenceError):
+        return False
+    return True
+
+
+def _valid_halt_copy(payload: str) -> bool:
+    """True when ``payload`` is a halt record copy: a JSON object."""
+    try:
+        return isinstance(json.loads(payload), dict)
     except ValueError:
         return False
-    if not isinstance(data, dict):
-        return False
+
+
+def _record_sidecar_failure(path: Path, detail: str, *, reason: str = "sidecar_invalid") -> None:
+    """Log one sidecar left out of a backup set and journal it as ``backup_failed``.
+
+    The set still publishes: the snapshot is verified on its own, and only the
+    named sidecar is missing from it.
+    """
+    log.error("Backup set written without %s: %s", path.name, detail)
     try:
-        peak = float(data["peak_equity"])
-        int(data.get("epoch", 0) or 0)
-    except (KeyError, TypeError, ValueError):
-        return False
-    return math.isfinite(peak) and peak >= 0
+        from parayabuck.monitoring.alerts import emit
+
+        emit(
+            "backup_failed",
+            message=f"Backup set written without {path.name}: {detail}",
+            reason=reason,
+            sidecar_path=str(path),
+        )
+    except Exception:  # pragma: no cover - alerting must never mask the backup result
+        log.exception("Could not emit backup_failed for the sidecar %s", path.name)
 
 
-def _copy_peak_sidecars(source_dir: Path, destination: Path, copies: list[Path]) -> None:
-    """Copy each peak sidecar next to the published snapshot and verify the copy.
+def _stage_sidecar(target_dir: Path, name: str, payload: str) -> Path | None:
+    """Write ``payload`` to a staging file in the backup directory and read it back.
 
-    A missing sidecar is skipped (a host that has not traded has none). A
-    present one must be a valid peak record, and its copy must read back
-    byte-identical. Copies are appended to ``copies`` as they are written so the
-    caller can remove a partial set.
+    Returns the staging path, or None when the copy does not read back identical;
+    the failed staging file is removed in that case.
+    """
+    fd, staged_name = tempfile.mkstemp(prefix=STAGE_PREFIX, suffix=f".{name}", dir=target_dir)
+    staged = Path(staged_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        written = staged.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        _remove_candidate(staged)
+        return None
+    if written != payload:
+        _remove_candidate(staged)
+        return None
+    return staged
+
+
+def _stage_set_sidecars(source_dir: Path, target_dir: Path, staged: list[tuple[str, Path]]) -> None:
+    """Stage every set member that exists beside the database, each read back before publication.
+
+    A peak sidecar that is unreadable or fails the runtime's check is left out of
+    the set and recorded as ``backup_failed`` (reason ``sidecar_invalid``). A
+    missing sidecar is skipped silently: a host that has not traded has none.
+    The halt marker is copied whenever it exists, as ``read_operator_halt``
+    reads it, so an unreadable marker is still kept as a halt. Staged paths are
+    appended to ``staged`` as they are written so the caller can clean up.
     """
     for name in PEAK_SIDECAR_NAMES:
         sidecar = source_dir / name
@@ -175,18 +246,25 @@ def _copy_peak_sidecars(source_dir: Path, destination: Path, copies: list[Path])
         except FileNotFoundError:
             continue
         except (OSError, UnicodeDecodeError) as exc:
-            raise BackupVerificationError(f"Peak sidecar unreadable: {sidecar}: {exc}") from exc
+            _record_sidecar_failure(sidecar, f"unreadable ({exc})")
+            continue
         if not _valid_peak_payload(payload):
-            raise BackupVerificationError(f"Peak sidecar failed validation: {sidecar}")
-        copy = destination.with_name(f"{destination.stem}.{name}")
-        atomic_write(copy, payload)
-        copies.append(copy)
-        try:
-            written = copy.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise BackupVerificationError(f"Peak sidecar copy unreadable: {copy}: {exc}") from exc
-        if written != payload or not _valid_peak_payload(written):
-            raise BackupVerificationError(f"Peak sidecar copy failed verification: {copy}")
+            _record_sidecar_failure(sidecar, "failed the peak-record check")
+            continue
+        stage = _stage_sidecar(target_dir, name, payload)
+        if stage is None:
+            _record_sidecar_failure(sidecar, "copy did not read back identical", reason="sidecar_copy_failed")
+            continue
+        staged.append((name, stage))
+    marker = operator_halt_marker_path(source_dir)
+    record = read_operator_halt(marker)
+    if record is not None:
+        payload = json.dumps(record, indent=2, sort_keys=True) + "\n"
+        stage = _stage_sidecar(target_dir, HALT_COPY_NAME, payload)
+        if stage is None:
+            _record_sidecar_failure(marker, "copy did not read back identical", reason="sidecar_copy_failed")
+        else:
+            staged.append((HALT_COPY_NAME, stage))
 
 
 def _file_mtime(path: Path) -> float | None:
@@ -197,6 +275,11 @@ def _file_mtime(path: Path) -> float | None:
         return path.stat().st_mtime
     except OSError:
         return None
+
+
+def _set_sidecars(snapshot: Path) -> list[Path]:
+    """The set members that exist next to ``snapshot`` (regular files only)."""
+    return [path for path in (_set_sidecar_path(snapshot, name) for name in SET_SIDECAR_NAMES) if path.is_file()]
 
 
 def backup_database(
@@ -221,10 +304,18 @@ def backup_database(
     pre-deploy one): it is published outside the automatic-backup glob and
     is therefore never pruned, matching the rollback runbook.
 
+    The set members (peak sidecars and the operator halt copy) are staged and
+    checked first. A member that is invalid is left out and alerted, and the
+    snapshot still publishes. A failure of the snapshot itself removes the new
+    set.
+
     Crash-consistency: construction uses a same-directory staging file, and
     only a closed, durable, verified snapshot is published under the normal
-    backup filename. The backup itself is atomic at the SQLite level — it
-    never contains a half-committed decision+order transaction.
+    backup filename. Members are linked before the snapshot, and the snapshot's
+    hard link is the commit point: a crash before it leaves at most orphan
+    members, which prune ages out, and never a snapshot without its members.
+    The backup itself is atomic at the SQLite level — it never contains a
+    half-committed decision+order transaction.
     """
     retention = _validate_retention(retention_days)
     keep_label = _validate_label(label)
@@ -236,11 +327,11 @@ def backup_database(
         log.warning("Backup skipped: runtime database %s does not exist yet", source)
         raise BackupSourceMissing(f"Runtime database not found: {source}")
     target_dir.mkdir(parents=True, exist_ok=True)
-    # A run killed mid-copy (SIGKILL, power loss) leaves a staging file that the
-    # publish path never reaches. Sweep the ones from earlier runs; the age floor
-    # spares a staging file a concurrent run is still writing.
-    for stale in sweep_orphan_temp_files(target_dir, STAGE_PREFIX, min_age_seconds=STAGE_ORPHAN_MIN_AGE_SECONDS):
-        log.info("Removed orphan backup staging file %s", stale.name)
+    # A run killed mid-copy (SIGKILL, power loss) leaves staging files, and an
+    # older run left atomic_write temps for its sidecar copies. Sweep the ones
+    # from earlier runs; the age floor spares a file a concurrent run is writing.
+    for stale in sweep_orphan_temp_files(target_dir, ORPHAN_TEMP_PREFIX, min_age_seconds=STAGE_ORPHAN_MIN_AGE_SECONDS):
+        log.info("Removed orphan backup temp file %s", stale.name)
 
     stamp = now or datetime.now(UTC)
     stage_fd, stage_name = tempfile.mkstemp(prefix=STAGE_PREFIX, suffix=".tmp", dir=target_dir)
@@ -251,7 +342,8 @@ def backup_database(
         _remove_candidate(stage)
         raise
     destination: Path | None = None
-    peak_copies: list[Path] = []
+    staged: list[tuple[str, Path]] = []
+    set_copies: list[Path] = []
     try:
         with (
             closing(sqlite3.connect(source)) as source_connection,
@@ -267,15 +359,15 @@ def backup_database(
             destination_connection.commit()
         # Durability: fsync file and directory.
         # - File fsync failure means the snapshot is NOT durable: remove the new
-        #   file (and sidecars), preserve previous verified backups, do NOT prune,
-        #   and raise BackupDurabilityError.
+        #   file (and its set members), preserve previous verified backups, do
+        #   NOT prune, and raise BackupDurabilityError.
         # - Directory fsync failure: only EINVAL/ENOTSUP/EOPNOTSUPP indicate the
         #   OS/filesystem does not support fsync on directories and are treated
         #   as best-effort (file fsync already succeeded). All other errors —
         #   notably EPERM/EACCES/EBADF on Linux which are permission failures —
         #   must be treated as durability failures: remove the new file
-        #   (and sidecars), preserve previous backups, do NOT prune, and raise
-        #   BackupDurabilityError.
+        #   (and its set members), preserve previous backups, do NOT prune, and
+        #   raise BackupDurabilityError.
         try:
             with open(stage, "rb") as fh:
                 os.fsync(fh.fileno())
@@ -289,13 +381,28 @@ def backup_database(
         if not verify_backup(stage):
             raise BackupVerificationError(f"Backup failed integrity check: {stage}")
 
-        # A hard link publishes the already verified inode without overwriting a
-        # backup selected concurrently. Re-select a suffixed name on collision.
+        _stage_set_sidecars(source.parent, target_dir, staged)
+        sidecar_names = [name for name, _ in staged]
+        # Publication order: members first, the snapshot last. A hard link
+        # publishes an already verified inode without overwriting a backup
+        # selected concurrently; a name collision on the snapshot re-selects a
+        # suffixed name together with its members.
         while True:
-            candidate = _backup_path(target_dir, stamp, label=keep_label)
+            candidate = _backup_path(target_dir, stamp, label=keep_label, sidecar_names=sidecar_names)
+            for name, staged_path in staged:
+                copy = _set_sidecar_path(candidate, name)
+                os.link(staged_path, copy)
+                set_copies.append(copy)
+            try:
+                _fsync_directory(target_dir)
+            except OSError as exc:
+                raise BackupDurabilityError(f"Backup member fsync failed for {target_dir}: {exc}") from exc
             try:
                 os.link(stage, candidate)
             except FileExistsError:
+                for copy in set_copies:
+                    _remove_candidate(copy)
+                set_copies.clear()
                 continue
             destination = candidate
             break
@@ -304,16 +411,18 @@ def backup_database(
             _fsync_directory(target_dir)
         except OSError as exc:
             raise BackupDurabilityError(f"Backup publication fsync failed for {target_dir}: {exc}") from exc
-        # The backup set is the snapshot plus the peak sidecars. A sidecar that
-        # fails verification fails the whole set: nothing is kept half-complete.
-        _copy_peak_sidecars(source.parent, destination, peak_copies)
     except BaseException:
         _remove_candidate(stage)
         if destination is not None:
             _remove_candidate(destination)
-        for copy in peak_copies:
+        for copy in set_copies:
             _remove_candidate(copy)
         raise
+    finally:
+        # The published members are hard links, so dropping the staging names
+        # leaves the set intact; on failure this removes the unpublished copies.
+        for _, staged_path in staged:
+            _remove_candidate(staged_path)
 
     assert destination is not None
     # Only after successful verification do we prune expired backups. A prune
@@ -323,13 +432,32 @@ def backup_database(
     except Exception:
         log.exception("Backup retention prune failed in %s; the new backup is kept", target_dir)
     # The local set is verified and kept either way; an off-host failure is
-    # recorded as an alert (backup_failed) instead of discarding it.
-    for artifact in (destination, *peak_copies):
+    # recorded as an alert (backup_failed) instead of discarding it. The sidecars
+    # of the previous automatic set are sent again: a sidecar whose off-host copy
+    # failed then is retried on this run.
+    for artifact in (destination, *set_copies, *_previous_set_sidecars(target_dir, destination)):
         try:
             copy_offhost(artifact)
         except OffhostCopyError as exc:
             _record_offhost_failure(artifact, exc)
     return destination
+
+
+def _previous_set_sidecars(backup_dir: Path, current: Path) -> list[Path]:
+    """Sidecar members of the newest automatic set other than ``current``.
+
+    Only the members are repeated, not the snapshot: they are small, and a set
+    whose sidecars never reached the off-host copy is the failure this covers.
+    """
+    previous: Path | None = None
+    newest: float | None = None
+    for candidate in backup_dir.glob(AUTO_BACKUP_GLOB):
+        if candidate == current:
+            continue
+        mtime = _file_mtime(candidate)
+        if mtime is not None and (newest is None or mtime > newest):
+            previous, newest = candidate, mtime
+    return [] if previous is None else _set_sidecars(previous)
 
 
 def offhost_command(template: str, path: str | Path) -> list[str]:
@@ -421,6 +549,34 @@ def verify_backup(path: str | Path) -> bool:
     return valid
 
 
+def verify_backup_set(path: str | Path) -> bool:
+    """``verify_backup`` for the snapshot and every set member it carries.
+
+    A missing member is fine (a host that has not traded has no peak sidecar and
+    no halt). A member that exists must be a regular file that passes its own
+    check: the peak record check for a peak sidecar, a JSON object for the halt
+    copy. Any other state fails the set, so a restore is never gated on the
+    database alone.
+    """
+    candidate = Path(path)
+    if not verify_backup(candidate):
+        return False
+    for name in SET_SIDECAR_NAMES:
+        member = _set_sidecar_path(candidate, name)
+        if not member.exists():
+            continue
+        if not member.is_file():
+            return False
+        try:
+            payload = member.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return False
+        valid = _valid_halt_copy(payload) if name == HALT_COPY_NAME else _valid_peak_payload(payload)
+        if not valid:
+            return False
+    return True
+
+
 def prune_backups(
     backup_dir: str | Path,
     *,
@@ -433,16 +589,21 @@ def prune_backups(
     ``parayabuck-keep-*`` snapshot is an operator-requested restore point
     that retention must never delete. Files are ordered by modification time,
     not by name, so the timestamp in the filename is informational only.
-    Returns the removed paths.
+    A file that cannot be removed is logged and skipped; the rest of the prune
+    still runs. Returns the removed paths.
     """
     retention = _validate_retention(retention_days)
     cutoff = (now or datetime.now(UTC)).timestamp() - retention * 86_400
     directory = Path(backup_dir)
     if not directory.is_dir():
         return []
-    # Peak copies age out with the snapshot they were taken with.
+    # Set members age out with the snapshot they were taken with.
     aged: list[tuple[float, Path]] = []
-    for candidate in (*directory.glob(AUTO_BACKUP_GLOB), *directory.glob(AUTO_PEAK_GLOB)):
+    for candidate in (
+        *directory.glob(AUTO_BACKUP_GLOB),
+        *directory.glob(AUTO_PEAK_GLOB),
+        *directory.glob(AUTO_HALT_GLOB),
+    ):
         mtime = _file_mtime(candidate)
         if mtime is not None:
             aged.append((mtime, candidate))
@@ -455,10 +616,18 @@ def prune_backups(
         except FileNotFoundError:
             # Removed concurrently by another run; nothing left to do.
             continue
+        except OSError as exc:
+            log.warning("Could not prune %s: %s", candidate.name, exc)
+            continue
         # Drop any WAL sidecar siblings left by pre-normalization backups.
         for sidecar in (Path(f"{candidate}-wal"), Path(f"{candidate}-shm")):
-            if sidecar.is_file():
-                sidecar.unlink()
+            try:
+                if sidecar.is_file():
+                    sidecar.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                log.warning("Could not prune %s: %s", sidecar.name, exc)
         removed.append(candidate)
     return removed
 
@@ -495,6 +664,7 @@ __all__ = [
     "AUTO_BACKUP_GLOB",
     "BACKUP_PREFIX",
     "BACKUP_SUFFIX",
+    "HALT_COPY_NAME",
     "KEEP_PREFIX",
     "MAX_BACKUP_AGE_HOURS",
     "OFFHOST_CMD_ENV",
@@ -508,4 +678,5 @@ __all__ = [
     "offhost_command",
     "prune_backups",
     "verify_backup",
+    "verify_backup_set",
 ]

@@ -386,7 +386,13 @@ def test_reconcile_with_drift_is_not_verified(repair, monkeypatch: pytest.Monkey
     assert seen["owned"] is True and seen["open_orders"] is True
     assert "QLD" in seen["tradable"]
 
-    monkeypatch.setattr(alpaca_module.AlpacaBroker, "reconcile", lambda self: {"MATCH": ["QLD"], "BROKER_STALE": []})
+    def _clean_reconcile(self):
+        # reconcile() binds the account identity before it reads state; a clean
+        # verdict is only accepted for a known account (the halt clear is scoped to it).
+        self._account_id = "acct-1"
+        return {"MATCH": ["QLD"], "BROKER_STALE": []}
+
+    monkeypatch.setattr(alpaca_module.AlpacaBroker, "reconcile", _clean_reconcile)
     assert repair._run_broker_reconcile() is True
 
 

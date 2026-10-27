@@ -76,6 +76,9 @@ _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
 # pass, startup gets the longer grace.
 _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS = 120.0
 _WATCHDOG_STARTUP_GRACE_SECONDS = 600.0
+# Longest an explicit stop may run before the watchdog gate closes. Kept below the
+# unit's TimeoutStopSec (180 s), so a hung stop is caught before systemd gives up.
+_WATCHDOG_STOP_MAX_SECONDS = 150.0
 _AUTO_START_RETRY_ALERT_AFTER = 3
 _AUTO_START_RETRY_ALERT_REPEAT = 10
 # A failed account refresh is not retried for this long; polls get the last
@@ -599,8 +602,18 @@ class EngineManager:
         the web process alive. A running engine must have finished an account
         loop pass (successful or not) within ``_WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS``; a hung
         account loop therefore stops the pings and systemd restarts the unit.
+        A stop that did not finish (``stop_failed``, or ``stopping`` past
+        ``_WATCHDOG_STOP_MAX_SECONDS``) stops the pings too: its workers may still
+        run, and a restart is the only recovery (C2-9-5).
         Lock-free on purpose: a blocked pinger would be a false watchdog kill.
         """
+        state = getattr(self, "engine_state", None)
+        if state == "stop_failed":
+            return False
+        if state == "stopping":
+            stop_started = getattr(self, "_stop_started_monotonic", None)
+            if stop_started is not None and time.monotonic() - stop_started > _WATCHDOG_STOP_MAX_SECONDS:
+                return False
         runtime = self.runtime
         if runtime is None or not getattr(runtime, "_running", False):
             # A start attempt that has not published its runtime yet (runtime.start()
@@ -1165,7 +1178,12 @@ class EngineManager:
             return f"LIVE start refused: {warning}"
         return None
 
-    def stop_engine(self, *, operator_request: bool = False) -> None:
+    def stop_engine(self, *, operator_request: bool = False) -> str:
+        """Stop the engine. Returns "stopping" while a start attempt is still in flight, else "stopped".
+
+        A start attempt in flight aborts before its first order and ends on its own
+        worker thread, so the engine is not "stopped" until it has ended (C2-9-1).
+        """
         # Only an explicit operator Stop is durable. Shutdown, restarts and
         # settings saves stop the engine without it, so they can still auto-start.
         # A record that cannot be saved never keeps the engine running: the
@@ -1194,15 +1212,18 @@ class EngineManager:
             # the 'stopping' state instead).
             self._cancel_pending_retry()
             if self.engine_state == "stopped" and self.runtime is None:
-                return
+                return "stopped"
             if self.runtime is None:
                 # No runtime yet: either a start is still in flight (mark the
                 # stop so start_engine aborts when its runtime is ready) or
                 # the engine is already down.
                 if self.engine_state == "starting":
                     self.engine_state = "stopping"
-                return
+                    self._stop_started_monotonic = time.monotonic()
+                attempt_in_flight = getattr(self, "_start_attempt_monotonic", None) is not None
+                return "stopping" if attempt_in_flight and self.engine_state == "stopping" else "stopped"
             self.engine_state = "stopping"
+            self._stop_started_monotonic = time.monotonic()
             runtime = self.runtime
         # Shutdown holds the ops and refresh locks, but never the account-cache
         # lock across runtime.stop(): a poll then gets the last snapshot instead of
@@ -1238,6 +1259,7 @@ class EngineManager:
                 log.exception("Closing the account broker after engine stop failed")
         self.invalidate_live_arming()
         log.info("ParayaBuck engine stopped")
+        return "stopped"
 
     def reset_broker(self) -> None:
         """Close and drop the account-snapshot broker without leaking its pool.

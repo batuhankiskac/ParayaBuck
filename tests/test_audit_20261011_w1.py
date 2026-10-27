@@ -180,7 +180,7 @@ def test_stop_orders_writer_stop_before_stopped_write(tmp_path: Any) -> None:
     calls: list[str] = []
     orig_stop, orig_stopped = writer.stop, writer.write_stopped
     writer.stop = lambda **_kw: (calls.append("stop"), orig_stop(**_kw))[1]  # type: ignore[method-assign]
-    writer.write_stopped = lambda: (calls.append("stopped"), orig_stopped())[1]  # type: ignore[method-assign]
+    writer.write_stopped = lambda **kw: (calls.append("stopped"), orig_stopped(**kw))[1]  # type: ignore[method-assign]
     engine._snapshot_writer = writer
     engine._snapshot_writer_started = True
     engine._stream_workers_launched = False

@@ -18,6 +18,9 @@ own state first, then the process-wide state).
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -43,11 +46,12 @@ def _intent_degraded_reasons(health: object) -> list[str]:
     return degraded_reasons(health)
 
 
-@router.get("/readyz")
-async def readyz(request: Request) -> JSONResponse:
-    """Deployment/trading readiness, distinct from /healthz process liveness."""
-    manager = get_engine_manager(request)
+def _probe_readiness(manager: Any) -> dict[str, Any]:
+    """Blocking readiness inputs: config parse, engine lock, runtime health.
 
+    The engine state lock can wait behind a settings write with fsync, so this
+    runs on a worker thread, never on the event loop (C2-10-1).
+    """
     try:
         cfg = load_config(str(getattr(manager, "config_path", "config/settings.yaml")))
         config_valid = True
@@ -71,6 +75,34 @@ async def readyz(request: Request) -> JSONResponse:
         except Exception as exc:  # pragma: no cover
             log.warning("Readiness health probe failed: %s", exc)
 
+    # has_active_runtime may be missing on stub fakes
+    try:
+        has_active = manager.has_active_runtime()
+    except Exception:
+        has_active = False
+
+    return {
+        "cfg": cfg,
+        "config_valid": config_valid,
+        "config_error": config_error,
+        "engine_state": engine_state,
+        "health": health,
+        "has_active": has_active,
+    }
+
+
+@router.get("/readyz")
+async def readyz(request: Request) -> JSONResponse:
+    """Deployment/trading readiness, distinct from /healthz process liveness."""
+    manager = get_engine_manager(request)
+    probe = await asyncio.to_thread(_probe_readiness, manager)
+    cfg = probe["cfg"]
+    config_valid = probe["config_valid"]
+    config_error = probe["config_error"]
+    engine_state = probe["engine_state"]
+    health = probe["health"]
+    has_active = probe["has_active"]
+
     trading_ready = bool(health and getattr(health, "healthy", False))
 
     app_config = getattr(cfg, "app", None) if cfg is not None else None
@@ -88,12 +120,6 @@ async def readyz(request: Request) -> JSONResponse:
     # managers used by tests.
     engine_failure = getattr(manager, "last_engine_error", None)
     retry_attempt = getattr(manager, "_retry_attempt", 0)
-    # has_active_runtime may be missing on stub fakes
-    try:
-        has_active = manager.has_active_runtime()
-    except Exception:
-        has_active = False
-
     trading_expected = configured_to_trade or has_active or engine_failed
     degraded_reasons = _intent_degraded_reasons(health)
     watchdog_config = getattr(cfg, "intent_watchdog", None) if cfg is not None else None

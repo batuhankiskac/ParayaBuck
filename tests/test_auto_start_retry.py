@@ -380,7 +380,7 @@ def test_start_commits_before_snapshot_writer_and_runtime_started(monkeypatch: A
             events.append("writer_start")
             self.started = True
 
-        def write_stopped(self) -> None:
+        def write_stopped(self, state: str = "stopped") -> None:
             events.append("writer_write_stopped")
 
         def stop(self, *, timeout: float) -> None:

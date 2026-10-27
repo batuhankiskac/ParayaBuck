@@ -50,17 +50,26 @@ async def start_engine(request: Request) -> dict[str, str]:
 
 @router.post("/stop")
 async def stop_engine(request: Request) -> dict[str, str]:
-    """POST /api/engine/stop — RuntimeError → 500, generic → 500."""
+    """POST /api/engine/stop — RuntimeError → 500, generic → 500.
+
+    Answers "stopping" while a start attempt is still in flight: that attempt
+    aborts before its first order and only then is the engine stopped (C2-9-1).
+    """
     manager = get_engine_manager(request)
     try:
         # An explicit Stop is durable: it survives a restart (see should_auto_start).
-        await asyncio.to_thread(manager.stop_engine, operator_request=True)
+        outcome = await asyncio.to_thread(manager.stop_engine, operator_request=True)
     except RuntimeError as exc:
         log.error("Engine stop failed: %s", exc)
         raise _http(500, _redacted(manager, str(exc))) from exc
     except Exception:
         log.exception("Engine stop failed with an unexpected error")
         raise _http(500, "Motor durdurulamadı; ayrıntılar uygulama günlüğünde.") from None
+    if outcome == "stopping":
+        return {
+            "status": "stopping",
+            "message": "Motor durduruluyor; devam eden başlatma emir göndermeden iptal edilecek.",
+        }
     return {"status": "stopped", "message": "Bot engine stopped."}
 
 

@@ -238,6 +238,15 @@ _SIGNAL_ADJUSTMENT_WINDOW_MARGIN_DAYS = 10
 # Stream worker name <-> market. Single source of truth so health
 # reporting, halt tracking and worker restart handling cannot disagree.
 _STREAM_WORKER_BY_MARKET = {Market.EQUITY: "pb-stocks"}
+
+
+def _join_started(thread: threading.Thread, timeout: float) -> None:
+    """Join ``thread`` only when it was started: joining an unstarted Thread raises (C2-9-3)."""
+    if thread.ident is None:
+        return
+    thread.join(timeout=timeout)
+
+
 _MARKET_BY_STREAM_WORKER = {worker: market for market, worker in _STREAM_WORKER_BY_MARKET.items()}
 # The NYSE schedule owns the session close, so the daily decision bar is
 # flushed at the real close (13:00 ET on an early-close day) and never at a
@@ -1117,6 +1126,11 @@ class EngineRuntime:
         """
         if not getattr(self, "_running", False):
             return "engine_not_running"
+        # An operator stop during startup cancels the attempt; resume and catch-up
+        # must not submit after that (C2-9-1). The event is the manager's per-attempt one.
+        start_cancel = getattr(self, "_startup_cancel", None)
+        if start_cancel is not None and start_cancel.is_set():
+            return "startup_cancelled"
         if getattr(self, "_circuit_breaker_reason", None) is not None:
             return "circuit_breaker"
         if getattr(order, "side", None) == PortfolioOrderSide.BUY and (
@@ -1702,6 +1716,10 @@ class EngineRuntime:
         self._raise_if_startup_cancelled()
         try:
             self._run_startup_catch_up(account=account)
+        except StartupCancelled:
+            # An operator stop, not a failure: start() runs the cleanup, and the
+            # attempt reports stopped rather than error.
+            raise
         except Exception as exc:
             self._state = "error"
             self.stop()
@@ -1995,17 +2013,15 @@ class EngineRuntime:
                 _observe.on_runtime_stopping(session_id=session_id, reason="stop")
         except Exception:
             pass
+        snapshot_writer = None
         if getattr(self, "_snapshot_writer_started", False) and getattr(self, "_snapshot_writer", None) is not None:
-            # Stop the writer BEFORE publishing the stopped snapshot: the
-            # writer thread loops write_once() until stop() sets its flag, so
-            # a periodic write landing between the two calls would replace
-            # the stopped snapshot with a stale running one.
+            # The writer stops first so no periodic write runs during the joins.
+            # The final snapshot is written once the outcome is known
+            # (_publish_stop_snapshot), so a stop that then fails never reads
+            # "stopped" (C2-9-4).
+            snapshot_writer = self._snapshot_writer
             try:
-                self._snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
-            except Exception:
-                pass
-            try:
-                self._snapshot_writer.write_stopped()  # type: ignore[union-attr]
+                snapshot_writer.stop(timeout=1.0)  # type: ignore[union-attr]
             except Exception:
                 pass
             self._snapshot_writer_started = False
@@ -2056,14 +2072,14 @@ class EngineRuntime:
             reconcile_thread = getattr(self, "_reconcile_thread", None)
             warmup_thread = getattr(self, "_warmup_retry_thread", None)
         for thread in threads_snapshot:
-            thread.join(timeout=5)
+            _join_started(thread, 5)
         alive = [thread.name for thread in threads_snapshot if thread.is_alive()]
         if reconcile_thread is not None:
-            reconcile_thread.join(timeout=30)
+            _join_started(reconcile_thread, 30)
             if reconcile_thread.is_alive():
                 alive.append(reconcile_thread.name)
         if warmup_thread is not None:
-            warmup_thread.join(timeout=30)
+            _join_started(warmup_thread, 30)
             if warmup_thread.is_alive():
                 alive.append(warmup_thread.name)
         # The signal-adjustment monitor MUST be joined before the historical
@@ -2071,12 +2087,13 @@ class EngineRuntime:
         # hit a dead HTTP session mid-request.
         signal_adjustment_thread = getattr(self, "_signal_adjustment_thread", None)
         if signal_adjustment_thread is not None:
-            signal_adjustment_thread.join(timeout=10)
+            _join_started(signal_adjustment_thread, 10)
             if signal_adjustment_thread.is_alive():
                 alive.append(signal_adjustment_thread.name)
         if alive:
             self._state = "stop_failed"
             log.error("Runtime workers did not stop cleanly: %s", ", ".join(alive))
+            self._publish_stop_snapshot(snapshot_writer)
             return False
         # Drain the process-global operational journal AFTER workers joined:
         # emit() only enqueues, so a clean stop would otherwise leave queued
@@ -2164,9 +2181,20 @@ class EngineRuntime:
         if cleanup_errors:
             self._state = "stop_failed"
             log.error("Runtime cleanup did not complete: %s", ", ".join(cleanup_errors))
+            self._publish_stop_snapshot(snapshot_writer)
             return False
+        self._publish_stop_snapshot(snapshot_writer)
         log.info("Engine runtime stopped")
         return True
+
+    def _publish_stop_snapshot(self, writer: Any) -> None:
+        """Write the stop outcome (``self._state``) as the final snapshot; no-op without a writer."""
+        if writer is None:
+            return
+        try:
+            writer.write_stopped(state=getattr(self, "_state", "stopped"))
+        except Exception:
+            log.warning("Final stop snapshot could not be written", exc_info=True)
 
     def _account_snapshot_guard(self) -> LockType:
         """Return the narrow lock protecting the account cache metadata."""
@@ -4776,6 +4804,10 @@ class EngineRuntime:
         """
         if not self._running or self._warming_up:
             return
+        if not getattr(self, "_startup_committed", False):
+            # A stop that arrived after the checkpoint in _start_impl aborts the
+            # catch-up before its first order (C2-9-1).
+            self._raise_if_startup_cancelled()
         runtimes = tuple(getattr(self, "_portfolio_runtimes", ()))
         if blocked_only:
             runtimes = tuple(runtime for runtime in runtimes if _catch_up_blocked(runtime))
@@ -6338,6 +6370,7 @@ class EngineRuntime:
                 f"{','.join(sorted(self._not_ready_symbols))})"
             )
         released = False
+        pending_restarts: list[tuple[Market, str]] = []
         try:
             with self._reconcile_lock:
                 try:
@@ -6405,10 +6438,12 @@ class EngineRuntime:
                         self.ledger.clear_safety_incident(account_id, cleared)
                 market_halts = getattr(self, "_market_entry_halts", None)
                 if market_halts is not None:
-                    self._verify_market_halts(market_halts)
+                    pending_restarts = self._verify_market_halts(market_halts)
                 with getattr(self, "_risk_state_lock", threading.Lock()):
                     self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
                 self._persist_risk_state(account)
+            if pending_restarts:
+                self._confirm_stream_restarts(getattr(self, "_market_entry_halts", {}), pending_restarts)
             # A halt withholds the risk-increasing BUY phase of a two-phase
             # rebalance (F12). The reset is the operator-verified recovery point,
             # so resume the persisted rebalances here — exactly what the startup
@@ -6474,13 +6509,15 @@ class EngineRuntime:
                 )
                 raise ValueError(f"Safety lock reset, but the startup catch-up retry failed: {exc}") from exc
 
-    def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> None:
+    def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> list[tuple[Market, str]]:
         """Clear each market halt only after its specific verified recovery.
 
         Runs INSIDE the reconcile lock; the successful ``broker.reconcile()``
         above already verified protection and order state, so per-halt
         verifications may rely on it. Unverified halts stay active and are
-        reported to the operator.
+        reported to the operator. A restart-limit halt only re-arms its worker
+        here; it is returned for ``_confirm_stream_restarts`` to clear once the
+        reconcile lock is released (C2-10-2).
 
         Every dict access takes the state lock, so each individual
         read-modify-write is atomic against a concurrent halt writer (stream
@@ -6494,6 +6531,7 @@ class EngineRuntime:
         invert the established lock order.
         """
         retained: list[str] = []
+        pending_restarts: list[tuple[Market, str]] = []
         with getattr(self, "_state_lock", threading.RLock()):
             markets = list(market_halts)
         for market in markets:
@@ -6502,11 +6540,10 @@ class EngineRuntime:
             if halt is None:
                 continue
             if halt.endswith("_restart_limit"):
-                # Only a verified stream reconnect clears it: re-arm the
-                # worker and require it to be alive and (when the market is
-                # live) delivering fresh events.
+                # Only a verified stream reconnect clears it: re-arm the worker
+                # here, and confirm it is alive and delivering after the lock.
                 if self._restart_stream_worker(market):
-                    self._clear_market_halt_if_unchanged(market_halts, market, halt)
+                    pending_restarts.append((market, halt))
                 else:
                     retained.append(f"{market.value}:{halt}:worker_not_delivering")
                 continue
@@ -6517,6 +6554,24 @@ class EngineRuntime:
                     retained.append(f"{market.value}:{halt}:rebalance_state_unresolved")
                 continue
             retained.append(f"{market.value}:{halt}:no_verification_path")
+        if retained:
+            log.warning("Market halts retained pending verification: %s", "; ".join(retained))
+        return pending_restarts
+
+    def _confirm_stream_restarts(
+        self, market_halts: dict[Market, str | None], pending: list[tuple[Market, str]]
+    ) -> None:
+        """Clear each restart-limit halt whose re-armed stream worker is delivering.
+
+        Runs after the reconcile lock is released: waiting for the worker must
+        not hold the lock that reconcile, the risk resets and the stop path use.
+        """
+        retained: list[str] = []
+        for market, halt in pending:
+            if self._stream_restart_delivering(market):
+                self._clear_market_halt_if_unchanged(market_halts, market, halt)
+            else:
+                retained.append(f"{market.value}:{halt}:worker_not_delivering")
         if retained:
             log.warning("Market halts retained pending verification: %s", "; ".join(retained))
 
@@ -6534,33 +6589,43 @@ class EngineRuntime:
                 market_halts[market] = None
 
     def _restart_stream_worker(self, market: Market) -> bool:
-        """Re-arm a restart-limited stream worker and verify delivery.
+        """Re-arm a restart-limited stream worker; True when it is alive or was spawned.
 
         A worker that hit its restart limit has exited; the operator reset
-        spawns a fresh worker. The halt clears only when the worker is alive
-        and — while the market is live — delivering fresh stream events.
+        spawns a fresh one. The spawn checks ``_running`` under ``_threads_lock``,
+        the lock stop() snapshots the threads under, so no worker starts once a
+        stop has begun (C2-10-2). It does not wait: ``_stream_restart_delivering``
+        does, after the reconcile lock is released.
         """
         worker_name = _STREAM_WORKER_BY_MARKET[market]
         worker = self._workers.get(worker_name)
+        if worker is not None and worker.alive:
+            return True
         target = self.stream.run_stock
-        if worker is None or not worker.alive:
+        with getattr(self, "_threads_lock", threading.Lock()):
+            if not getattr(self, "_running", False):
+                return False
             if worker is not None:
                 worker.restart_count = 0
                 worker.last_error = None
-            with getattr(self, "_threads_lock", threading.Lock()):
-                thread = threading.Thread(
-                    target=self._run_stream_worker,
-                    args=(worker_name, target),
-                    name=worker_name,
-                    daemon=True,
-                )
-                self._threads.append(thread)
-                thread.start()
-            deadline = time.monotonic() + 5.0
-            while time.monotonic() < deadline:
-                if worker is not None and worker.alive:
-                    break
-                time.sleep(0.05)
+            thread = threading.Thread(
+                target=self._run_stream_worker,
+                args=(worker_name, target),
+                name=worker_name,
+                daemon=True,
+            )
+            self._threads.append(thread)
+            thread.start()
+        return True
+
+    def _stream_restart_delivering(self, market: Market) -> bool:
+        """Wait up to 5 s for a re-armed stream worker to come alive, then check delivery."""
+        worker = self._workers.get(_STREAM_WORKER_BY_MARKET[market])
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if worker is not None and worker.alive:
+                break
+            time.sleep(0.05)
         return self._stream_worker_delivering(worker)
 
     def _stream_worker_delivering(

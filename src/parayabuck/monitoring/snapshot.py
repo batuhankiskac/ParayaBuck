@@ -119,12 +119,17 @@ class SnapshotWriter:
         self._stop = threading.Event()
         self._started = False
         self._lock = threading.Lock()
+        # Serializes periodic writes with the final write, and _final turns
+        # every later periodic write off (C2-9-4).
+        self._write_lock = threading.Lock()
+        self._final = False
 
     def start(self) -> None:
         with self._lock:
             if self._started:
                 return
             self._stop.clear()
+            self._final = False
             self._thread = threading.Thread(target=self._loop, name="pb-snapshot-writer", daemon=True)
             self._thread.start()
             self._started = True
@@ -149,6 +154,12 @@ class SnapshotWriter:
                 break
 
     def write_once(self) -> bool:
+        with self._write_lock:
+            if self._final:
+                return False
+            return self._write_snapshot()
+
+    def _write_snapshot(self) -> bool:
         snap: dict[str, Any] | None = None
         try:
             if self.provider is not None:
@@ -182,13 +193,24 @@ class SnapshotWriter:
             log.warning("snapshot write failed (isolated)", exc_info=True)
             return False
 
-    def write_stopped(self) -> None:
-        """Attempt to write stopped state on clean shutdown (best effort)."""
+    def write_stopped(self, state: str = "stopped") -> None:
+        """Write the final snapshot with the stop outcome (best effort).
+
+        Taken under the write lock, so a periodic write already in progress
+        finishes first, and ``_final`` keeps every later one from replacing this
+        snapshot. The timed acquire bounds the wait if the provider is wedged;
+        the write then goes ahead without the lock.
+        """
+        acquired = self._write_lock.acquire(timeout=5.0)
         try:
-            snap = build_snapshot(runtime_state="stopped")
+            self._final = True
+            snap = build_snapshot(runtime_state=state)
             write_snapshot_atomic(self.path, snap)
         except Exception:
             log.warning("snapshot stopped write failed", exc_info=True)
+        finally:
+            if acquired:
+                self._write_lock.release()
 
 
 __all__ = [

@@ -98,6 +98,18 @@ t >= START with year < Y (first in grid order on ties). Sessions of year Y use t
 target (spliced series, one account). Years 2000 to 2004 use the fixed K configuration (0.35, 252/126).
 Compare with fixed K (pre-tax and after tax at $100k in the three windows).
 
+## Amendments (recorded before the re-run that produces RESULTS.json)
+
+- **A1 (bug fix, SPA direction).** `arch.bootstrap.SPA` takes losses (it forms benchmark minus model
+  losses). The first full run passed daily returns, which tests the reverse direction; that run's
+  SPA and power-check numbers are discarded and not reported. The corrected code passes
+  -returns to SPA, as it already did for MCS. The design (benchmark K, the same models, the same
+  reps, seeds and block rule) is unchanged.
+- **A2 (sensitivity, block 20).** The first run gave a Politis-White stationary value of 1.34
+  (rounded block 1, i.e. iid resampling) for K's daily returns. The primary SPA/MCS/power block stays
+  the pre-registered round(PW) rule. The fixed block 20 used in earlier studies is added as a
+  sensitivity for SPA and MCS only. This was decided after seeing the PW value and is labelled so.
+
 ## Verdict rules (fixed)
 
 - Item 30 gate as defined above. No threshold other than sign.

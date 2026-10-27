@@ -237,7 +237,9 @@ def _pv(series, key):
 
 
 def run_spa_mcs(r_bench, models, names, bs):
-    spa = SPA(r_bench, models, block_size=bs, reps=SPA_REPS, bootstrap="stationary", seed=SEED)
+    # arch's SPA and MCS take LOSSES (lower is better); the series here are returns, so pass -returns.
+    # (Amendment A1: the first run passed returns to SPA, which inverts the test direction.)
+    spa = SPA(-r_bench, -models, block_size=bs, reps=SPA_REPS, bootstrap="stationary", seed=SEED)
     spa.compute()
     pv = spa.pvalues
     spa_out = {k: float(pv[k]) for k in ("lower", "consistent", "upper")}
@@ -262,7 +264,7 @@ def power_check(r_bench, sd_e, bs):
         for rep in range(POWER_REPS):
             z = rng.standard_normal(len(r_bench))
             model = r_bench + bp * 1e-4 + sd_e * z
-            s = SPA(r_bench, model.reshape(-1, 1), block_size=bs, reps=POWER_SPA_REPS, bootstrap="stationary", seed=rep)
+            s = SPA(-r_bench, -model.reshape(-1, 1), block_size=bs, reps=POWER_SPA_REPS, bootstrap="stationary", seed=rep)
             s.compute()
             rej += int(_pv(s.pvalues, "consistent") <= 0.10)
         out[f"edge_{bp}bp_per_day"] = {"rejection_rate_consistent_p_le_0.10": rej / POWER_REPS, "reps": POWER_REPS}
@@ -389,6 +391,9 @@ def run(show_timing=True):
     spa_out, mcs_out = run_spa_mcs(r_K, models, model_names, bs)
     res["item33_spa"] = {"benchmark": "f_K", "models": model_names, "block": bs, "reps": SPA_REPS, **spa_out}
     res["item33_mcs"] = mcs_out
+    # Amendment A2: sensitivity at the fixed block 20 used in earlier studies (reported next to PW)
+    spa20, mcs20 = run_spa_mcs(r_K, models, model_names, FIXED_BLOCK)
+    res["item33_sensitivity_block20"] = {"block": FIXED_BLOCK, "spa": spa20, "mcs": mcs20}
     sd_e = float(np.std(rets["e_R2"] - r_K, ddof=1))
     res["item33_power"] = power_check(r_K, sd_e, bs)
 

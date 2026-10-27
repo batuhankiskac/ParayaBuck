@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from parayabuck.config import Config, load_config
+from parayabuck.live_safety import operator_halt_active, operator_halt_marker_path, read_operator_halt
 from parayabuck.markets.timeframes import is_session_open
 from parayabuck.monitoring import metrics
 
@@ -97,7 +98,12 @@ def persisted_journal_state(snapshot: object) -> dict[str, Any] | None:
 # ------------------------------------------------------------------
 
 
-def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_tolerance_s: float = 90.0) -> HealthCheck:
+def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_tolerance_s: float) -> HealthCheck:
+    """Liveness of the engine from its health snapshot.
+
+    The tolerance is passed in by the caller (``_heartbeat_tolerance_seconds(config)``),
+    so the configured snapshot interval is the only source (D2-6-7).
+    """
     if not snapshot_path.exists():
         return HealthCheck(
             code="runtime_heartbeat",
@@ -129,6 +135,17 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         )
     age = (now - written_at).total_seconds()
     state = str(data.get("runtime_state") or data.get("state") or "unknown")
+    # A stop the engine wrote itself is planned (maintenance, operator stop) and is checked
+    # before staleness, so the snapshot's age after a clean stop does not page as CRITICAL (D2-6-3).
+    if state in {"stopped", "stop_failed"}:
+        return HealthCheck(
+            code="runtime_heartbeat",
+            status=HealthStatus.BLOCKED,
+            summary=f"runtime stopped (state={state})",
+            observed=state,
+            threshold=heartbeat_tolerance_s,
+            since=written_at,
+        )
     if age > heartbeat_tolerance_s:
         return HealthCheck(
             code="runtime_heartbeat",
@@ -138,15 +155,6 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
             threshold=heartbeat_tolerance_s,
             since=written_at,
             action="Süreç ölmüşse botu yeniden başlatın.",
-        )
-    if state in {"stopped", "stop_failed"}:
-        return HealthCheck(
-            code="runtime_heartbeat",
-            status=HealthStatus.BLOCKED,
-            summary=f"runtime stopped (state={state})",
-            observed=state,
-            threshold=heartbeat_tolerance_s,
-            since=written_at,
         )
     return HealthCheck(
         code="runtime_heartbeat",
@@ -397,6 +405,28 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
             observed=sa,
         )
     return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
+
+
+def _check_operator_halt(runtime_dir: Path) -> HealthCheck:
+    """The operator halt marker in the runtime directory as its own row (R2-9-9).
+
+    The marker keeps the engine halted across restarts. Without this row a stopped
+    engine held by the marker reads like an ordinary stop. Presence decides, as in
+    ``live_safety``: an unreadable marker still counts as a halt.
+    """
+    marker = operator_halt_marker_path(runtime_dir)
+    if not operator_halt_active(marker):
+        return HealthCheck(code="operator_halt", status=HealthStatus.OK, summary="no operator halt marker")
+    record = read_operator_halt(marker) or {}
+    reason = str(record.get("reason") or "unknown")
+    return HealthCheck(
+        code="operator_halt",
+        status=HealthStatus.BLOCKED,
+        summary=f"operator halt marker present (reason: {reason})",
+        observed=reason,
+        since=_parse_iso(record.get("created_at") if isinstance(record.get("created_at"), str) else None),
+        action="Durdurma nedenini inceleyin; işaretçiyi yalnızca operatör `parayabuck resume` ile kaldırır.",
+    )
 
 
 def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
@@ -753,6 +783,9 @@ def evaluate_health(
     checks.append(_check_intent_watchdog(health_snapshot))
     checks.append(_check_signal_cross_check(health_snapshot))
     checks.append(_check_observability(persisted_journal_state(health_snapshot)))
+    # The marker lives beside the ledger, as the runtime writes it (R2-9-9).
+    ledger = database_path if database_path is not None else config.runtime.decision_db_path
+    checks.append(_check_operator_halt(Path(ledger).parent))
 
     # Derive overall
     statuses = [c.status for c in checks]

@@ -681,5 +681,6 @@ def test_daily_summary_tax_line_format() -> None:
 def test_tax_cli_without_subcommand_returns_usage_code(capsys: pytest.CaptureFixture[str]) -> None:
     from parayabuck.cli import main
 
-    assert main(["tax"]) == 2
+    # Usage error (64), not 2: exit 2 is reserved for CRITICAL health (D2-6-5, X3).
+    assert main(["tax"]) == 64
     assert "usage: parayabuck tax" in capsys.readouterr().err

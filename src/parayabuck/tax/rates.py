@@ -36,8 +36,22 @@ from typing import Any
 from parayabuck.tax.errors import MissingIndexError, MissingRateError, TaxDataError
 from parayabuck.utils.io import atomic_write
 
-DEFAULT_USDTRY_PATH = Path("data/tax/usdtry.csv")
-DEFAULT_YIUFE_PATH = Path("data/tax/yiufe.csv")
+
+def _project_root() -> Path:
+    """The checkout that holds ``pyproject.toml`` above this package, else the working directory.
+
+    The rate files are operator state under ``data/tax``. Anchoring the defaults to the
+    checkout makes a run from another working directory read the same files (Q2-5-7).
+    An installed package without a checkout keeps the old relative default.
+    """
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return Path()
+
+
+DEFAULT_USDTRY_PATH = _project_root() / "data" / "tax" / "usdtry.csv"
+DEFAULT_YIUFE_PATH = _project_root() / "data" / "tax" / "yiufe.csv"
 EVDS_KEY_ENV = "PARAYABUCK_EVDS_KEY"
 EVDS_BASE_URL = "https://evds2.tcmb.gov.tr/service/evds/"
 # EVDS series codes: USD buying (döviz alış kuru, TL) and Yİ-ÜFE (2003=100).
@@ -298,17 +312,27 @@ def fetch_rates_to_files(
 ) -> dict[str, int]:
     """Download both series and merge them into the CSV files.
 
-    USD/TRY: existing rows are kept and a fetched rate replaces an older one for
-    the same date. Yİ-ÜFE: the series code is not confirmed, so a fetched month
-    that already holds a different index refuses the whole run and nothing is
-    written. When no fetched month overlaps the existing file there is nothing to
-    cross-check against, so the run refuses unless ``confirmed_series`` is set (the
-    operator has checked the series code). Rows keep their own ``source``; only new
-    months get the series label. Returns the number of rows in each file afterwards.
+    USD/TRY: existing rows are kept, new days are added, and a fetched rate that
+    differs from a stored rate for the same day refuses the whole run (F2-9-8),
+    as the Yİ-ÜFE series does; nothing is written. Yİ-ÜFE: the series code is not
+    confirmed, so a fetched month that already holds a different index refuses the
+    whole run and nothing is written. When no fetched month overlaps the existing
+    file there is nothing to cross-check against, so the run refuses unless
+    ``confirmed_series`` is set (the operator has checked the series code). Rows
+    keep their own ``source``; only new months get the series label. Returns the
+    number of rows in each file afterwards.
     """
     key = os.getenv(EVDS_KEY_ENV, "") if api_key is None else api_key
     usd: dict[date, float] = load_usdtry_csv(Path(usdtry_path)) if Path(usdtry_path).exists() else {}
-    usd.update(fetch_usd_try(start, end, key, http_get))
+    fetched_usd = fetch_usd_try(start, end, key, http_get)
+    usd_differing = sorted(day for day, rate in fetched_usd.items() if day in usd and usd[day] != rate)
+    if usd_differing:
+        raise TaxDataError(
+            f"EVDS USD/TRY differs from the usdtry file for {len(usd_differing)} day(s), "
+            f"e.g. {', '.join(day.isoformat() for day in usd_differing[:3])}; nothing was written. "
+            "Check the rate, or remove those rows first."
+        )
+    usd.update(fetched_usd)
     indices: dict[str, float] = load_yiufe_csv(Path(yiufe_path)) if Path(yiufe_path).exists() else {}
     fetched = fetch_yiufe(start, end, key, http_get)
     differing = sorted(month for month, value in fetched.items() if month in indices and indices[month] != value)

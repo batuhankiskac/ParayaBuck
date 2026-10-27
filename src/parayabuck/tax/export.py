@@ -26,6 +26,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from parayabuck.monitoring.operational_event import mask_account_number
 from parayabuck.tax.dividends import (
     NOT_IMPORTED_INCOME_TYPES,
     OTHER_TYPES_NOTE,
@@ -106,6 +107,14 @@ class YearReport:
     notes: tuple[str, ...]
     income_coverage_complete: bool
 
+    @property
+    def income_import_status(self) -> str:
+        """``complete`` when one import spans the year; ``stale`` when rows exist but no
+        import reaches 31 December; ``missing`` when nothing covers the year (F2-7-7)."""
+        if self.income_coverage_complete:
+            return "complete"
+        return "stale" if self.income else "missing"
+
     def to_dict(self) -> dict[str, Any]:
         """Summary mapping written as JSON (disposal rows are in the CSV)."""
         return {
@@ -132,6 +141,7 @@ class YearReport:
             "foreign_tax_credit_tl": _r(self.foreign_tax_credit_tl),
             "dividend_tax_due_tl": _r(self.dividend_tax_due_tl),
             "income_coverage_complete": self.income_coverage_complete,
+            "income_import_status": self.income_import_status,
             "notes": list(self.notes),
         }
 
@@ -245,6 +255,10 @@ def build_year_report(
     )
 
 
+# Text that a spreadsheet reads as a formula when the CSV is opened (F2-7-9).
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
 def _cell(value: Any) -> Any:
     if isinstance(value, bool) or value is None:
         return "" if value is None else str(value).lower()
@@ -252,6 +266,10 @@ def _cell(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, float):
         return round(value, 6)
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        # Broker-supplied ids and symbols must not run as formulas: a leading apostrophe
+        # keeps the cell text.
+        return "'" + value
     return value
 
 
@@ -312,7 +330,8 @@ def ytd_status(
     activities were never imported; ``income_declaration_status`` then reads
     ``veri eksik`` (data missing) instead of a threshold verdict.
     """
-    base: dict[str, Any] = {"year": year, "account_id": account_id}
+    # The account id is masked on every status: the dashboard and the daily summary show it (S2-2-1).
+    base: dict[str, Any] = {"year": year, "account_id": mask_account_number(account_id)}
     if connection is None:
         return {**base, "status": "unavailable", "error": "ledger database not found"}
     if not account_id or account_id == "unknown":

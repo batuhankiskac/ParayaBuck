@@ -433,7 +433,14 @@ class EventJournal:
         session_id: str | None = None,
         limit: int = 100,
         order: str = "desc",
+        strict: bool = False,
     ) -> list[OperationalEvent]:
+        """Matching events, newest first by default.
+
+        A read failure returns ``[]`` (logged), which is indistinguishable from an
+        empty journal. Callers that must tell the two apart (an operator "no
+        events" check) pass ``strict=True`` and get the exception instead (D2-6-2).
+        """
         try:
             # Bounded here as well as in the CLI: an unbounded read of the journal is a memory risk.
             limit = min(max(1, int(limit)), 1000)
@@ -516,6 +523,8 @@ class EventJournal:
             finally:
                 conn.close()
         except Exception:
+            if strict:
+                raise
             log.warning("journal query failed", exc_info=True)
             return []
 

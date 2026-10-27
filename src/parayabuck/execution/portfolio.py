@@ -197,6 +197,9 @@ class GainBandFallback:
 # because the gain band had no usable lot book (audit T2-10-4). Diagnostic only:
 # the order decision itself is unchanged.
 GAIN_BAND_FALLBACK_KEY = "gain_band_fallback"
+# Metadata key listing the calendar years whose NYSE November/December sessions could not
+# be read, so a December deferral check fell back to the ordinary rule (audit T2-10-4).
+DECEMBER_CALENDAR_FALLBACK_KEY = "december_calendar_fallback"
 
 
 # Metadata key naming the symbols whose current target the RISK layer produced
@@ -261,6 +264,25 @@ def _december_season_sessions(year: int) -> tuple[date, ...]:
     except Exception:
         log.warning("December deferral window unavailable for %s; the ordinary rule applies", year, exc_info=True)
         return ()
+
+
+def december_calendar_fallback_year(decision_timestamp: datetime, sessions: int) -> int | None:
+    """The season year whose calendar could not be read for this decision, else ``None``.
+
+    Mirrors the early exits of :func:`in_december_deferral_window`, so it reports
+    only a check that would have needed the calendar. The caller records the year
+    (:func:`record_december_calendar_fallbacks`) and raises one operator alert.
+    """
+    if sessions <= 0:
+        return None
+    session = signal_session_date(decision_timestamp)
+    if session.month < 11:
+        return None
+    try:
+        _cached_december_season_sessions(session.year)
+    except Exception:
+        return session.year
+    return None
 
 
 def in_december_deferral_window(decision_timestamp: datetime, sessions: int) -> bool:
@@ -424,6 +446,20 @@ def record_gain_band_fallbacks(target: TargetPortfolio, fallbacks: Sequence[Gain
     return replace(
         target,
         metadata={**target.metadata, GAIN_BAND_FALLBACK_KEY: tuple(item.as_metadata() for item in fallbacks)},
+    )
+
+
+def record_december_calendar_fallbacks(target: TargetPortfolio, years: Sequence[int]) -> TargetPortfolio:
+    """Attach the season years whose calendar was unreadable to the decision metadata (T2-10-4).
+
+    Only a non-empty list adds the key, so decisions without a fallback keep
+    byte-identical metadata.
+    """
+    if not years:
+        return target
+    return replace(
+        target,
+        metadata={**target.metadata, DECEMBER_CALENDAR_FALLBACK_KEY: tuple(sorted(set(years)))},
     )
 
 
@@ -930,6 +966,7 @@ class TargetToOrderPlanner:
         gain_band_fallbacks: list[GainBandFallback] | None = None,
         gain_band_tl_shadow: Callable[[str, Sequence[Sequence[float]], float, float, datetime], float | None]
         | None = None,
+        december_calendar_fallbacks: list[int] | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -949,6 +986,9 @@ class TargetToOrderPlanner:
         (metadata / summary) instead of silently dropping the order.
         ``gain_band_fallbacks`` receives one entry per downsize decided by the
         constant band because the gain band's lot book was unusable.
+        ``december_calendar_fallbacks`` receives the season year whenever a strategy
+        trim's December check could not read the NYSE calendar, so the ordinary rule
+        executed instead of the deferral (T2-10-4).
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -1012,6 +1052,11 @@ class TargetToOrderPlanner:
             # decision) is not the strategy's own trim: it keeps the constant
             # band, executes, and is never deferred.
             deferral_sessions = self.policy.december_deferral_sessions
+            strategy_trim = 0.0 < target_weight < current_weight and symbol not in risk_reduced
+            if december_calendar_fallbacks is not None and strategy_trim:
+                calendar_year = december_calendar_fallback_year(target.decision_timestamp, deferral_sessions)
+                if calendar_year is not None:
+                    december_calendar_fallbacks.append(calendar_year)
             deferral_case = (
                 deferral_sessions > 0
                 and 0.0 < target_weight < current_weight
@@ -1246,6 +1291,7 @@ def _client_order_id(decision_id: str, symbol: str, side: PortfolioOrderSide, sa
 
 
 __all__ = [
+    "DECEMBER_CALENDAR_FALLBACK_KEY",
     "DECEMBER_DEFERRAL_KEY",
     "DRAWDOWN_LIQUIDATION_REASON",
     "DrawdownLiquidationState",
@@ -1269,8 +1315,10 @@ __all__ = [
     "floor_increment_decimal",
     "gain_band_bypass_metadata",
     "gain_band_bypass_symbols",
+    "december_calendar_fallback_year",
     "in_december_deferral_window",
     "portfolio_execution_policy_from_config",
+    "record_december_calendar_fallbacks",
     "record_december_deferral_holds",
     "record_gain_band_fallbacks",
     "record_gain_band_holds",

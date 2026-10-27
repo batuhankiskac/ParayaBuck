@@ -430,15 +430,18 @@ Every parayabuck command uses the same five codes. Scripts, the unit's
 |------|---------|
 | 0 | Success, OK health, or nothing to do. |
 | 1 | Refused or failed: a rebase or halt refusal, a failed backup or bundle, a `doctor` blocker (and `--strict` warnings), DEGRADED, BLOCKED or UNKNOWN health, an unknown `ops explain` decision id. |
-| 2 | CRITICAL health (`ops status`, `ops doctor`). Known exception, not yet fixed: `parayabuck tax` with no subcommand also exits 2. |
+| 2 | CRITICAL health (`ops status`, `ops doctor`) only. A cleanly stopped engine is BLOCKED (exit 1), and `parayabuck tax` with no subcommand is a usage error (64). |
 | 3 | A file or database the command needs does not exist: the `backup --verify-only` target, the runtime database for `backup`, the halt directory, the decision database for `ops rebase-ownership`. Nothing was created. |
-| 64 | Usage error: an unknown or malformed argument, a bad `--since`/`--until` value, a bad `--broker-qty`, `--broker-average-cost` or `--acquisition-unit-cost`. |
+| 64 | Usage error: an unknown or malformed argument, a bad `--since`/`--until` value, a bad `--broker-qty`, `--broker-average-cost` or `--acquisition-unit-cost`; for `parayabuck tax`, a bad `--start`/`--end`/`--since` date, a `--year` out of range, or no subcommand. |
 
-Known gaps, not yet fixed: a failed event-journal read makes `ops events` print
-`[]` and exit 0; WARNING log lines share stdout, so a `--json` output can be
-preceded by a log line on the paths that warn; and a cleanly stopped engine
-whose last snapshot is older than the tolerance reports CRITICAL (exit 2).
-Read those three before you page on exit 2 or parse `--json`.
+WARNING and other log lines go to stderr, so `--json` output on stdout stays
+parseable. The `tax` commands exit 1 on a failure (a missing rate file, a ledger
+error, an unexpected exception) and print one line, never a traceback.
+`tax rates-fetch` refuses, and writes nothing, when a fetched USD/TRY rate differs
+from a stored one for the same day; it names the two files it wrote on success.
+Known gap, not yet wired: a failed event-journal read still makes `ops events`
+print `[]` and exit 0. `EventJournal.query(strict=True)` raises instead, and the
+ops CLI does not pass it yet.
 
 Sharing a bundle: the bundle masks account ids to `***` plus their last four
 characters (`expected_account_id`, `account_id`, `account_number` in the

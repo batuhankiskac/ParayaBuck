@@ -379,21 +379,46 @@ def current_account_id(conn: sqlite3.Connection) -> str | None:
         return None
 
 
-def latest_decision_row(conn: sqlite3.Connection, columns: str = "*") -> Any:
+def expected_session_id(conn: sqlite3.Connection) -> str | None:
+    """Session the engine recorded last (newest one with an account); None when unknown.
+
+    ``ops explain latest`` answers for this session: a decision missing from it
+    is the finding, so the previous session's decision must not stand in for it.
+    """
+    try:
+        if not _table_exists(conn, "portfolio_runtime_sessions"):
+            return None
+        row = conn.execute(
+            "SELECT session_id FROM portfolio_runtime_sessions "
+            "WHERE account_id IS NOT NULL AND account_id != '' "
+            "ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        return str(row[0]) if row is not None and row[0] else None
+    except sqlite3.Error:
+        return None
+
+
+def latest_decision_row(conn: sqlite3.Connection, columns: str = "*", *, session_id: str | None = None) -> Any:
     """Newest ``portfolio_decisions`` row of the current account (None when none).
 
     Scoped to :func:`current_account_id` so a pre-rotation account's decision
     is never served as current; unscoped only when the account is unknown.
+    With ``session_id``, only that session's decisions are considered.
     """
     account_id = current_account_id(conn)
     decision_columns = {str(info[1]) for info in conn.execute("PRAGMA table_info(portfolio_decisions)")}
+    clauses: list[str] = []
+    params: list[str] = []
     if account_id is not None and "account_id" in decision_columns:
-        return conn.execute(
-            f"SELECT {columns} FROM portfolio_decisions WHERE account_id = ? ORDER BY decision_timestamp DESC LIMIT 1",
-            (account_id,),
-        ).fetchone()
+        clauses.append("account_id = ?")
+        params.append(account_id)
+    if session_id is not None:
+        clauses.append("session_id = ?")
+        params.append(session_id)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return conn.execute(
-        f"SELECT {columns} FROM portfolio_decisions ORDER BY decision_timestamp DESC LIMIT 1"
+        f"SELECT {columns} FROM portfolio_decisions{where} ORDER BY decision_timestamp DESC LIMIT 1",
+        tuple(params),
     ).fetchone()
 
 
@@ -432,6 +457,9 @@ _NO_TRADE_PATTERNS: dict[str, str] = {
     "external": "EXTERNAL_OWNERSHIP",
     "market_disabled": "MARKET_DISABLED",
     "no_target": "NO_TARGET_CHANGE",
+    # The engine's own hold reasons (decision summary no_trade_reason).
+    "signal_source_mismatch": "SIGNAL_SOURCE_MISMATCH",
+    "signal_adjustment_unverified": "SIGNAL_ADJUSTMENT_UNVERIFIED",
 }
 
 
@@ -459,6 +487,7 @@ __all__ = [
     "ambiguous_orders",
     "current_account_id",
     "decision_reconstruction",
+    "expected_session_id",
     "find_stuck_rebalances",
     "latest_decision_row",
     "map_no_trade_reason",

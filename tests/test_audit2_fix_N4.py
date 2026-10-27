@@ -190,7 +190,7 @@ def test_trading_state_and_health_enums_are_shown_in_turkish() -> None:
     assert 'CIRCUIT_BREAKER: "Güvenlik kilidi devrede"' in dashboard
     assert 'UNKNOWN: "Bilinmiyor"' in dashboard
     assert 'DEGRADED: "Kısıtlı"' in dashboard
-    assert 'setText("opsTradingState", TRADING_STATE_LABELS[data.trading_state]' in dashboard
+    assert "TRADING_STATE_LABELS[tradingState] || tradingState" in dashboard
 
 
 # --- D2-10-18: the owner-facing numbers carry their units and meaning ---------

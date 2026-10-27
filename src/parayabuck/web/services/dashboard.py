@@ -342,15 +342,21 @@ def _dashboard_market_status(
     enabled: bool,
     market_health: dict[str, Any],
     health: dict[str, Any] | None,
+    latched: bool = False,
 ) -> str:
-    """active | warming | halted | disabled | engine states."""
+    """active | warming | halted | degraded | disabled | engine states."""
     if not enabled:
         return "disabled"
     if engine_state in {"stopped", "error", "stop_failed", "stopping", "starting"}:
         return engine_state
-    if (health or {}).get("circuit_breaker_reason"):
+    # A degraded or warming engine is not trading normally, whatever the market health says.
+    if engine_state == "degraded":
+        return "degraded"
+    if engine_state == "warming_up":
+        return "warming"
+    if engine_state == "halted" or (health or {}).get("circuit_breaker_reason"):
         return "halted"
-    if market_health.get("entry_halt_reason"):
+    if market_health.get("entry_halt_reason") or latched:
         return "halted"
     if market_health.get("warming_symbols"):
         return "warming"
@@ -405,6 +411,10 @@ def _dashboard_market_card(
         }
     enabled = bool(selection.enabled)
     market_health = dict((health or {}).get("markets", {}).get(market_key, {}) or {})
+    # The entry-risk latch (daily loss or drawdown) blocks new entries for the market.
+    latched = bool(((health or {}).get("entry_risk_latch") or {}).get(market_key))
+    # Without an account snapshot the positions are unknown: nulls, not a flat book.
+    account_known = account.get("source") != "unavailable"
     catch_up = dict(market_health.get("catch_up") or {})
     # The strategy card counts only the bot-managed slice of each position:
     # shares the bot did not open (external or manual) are not its allocation.
@@ -440,7 +450,7 @@ def _dashboard_market_card(
     return {
         "enabled": enabled,
         "name": selection.name,
-        "status": _dashboard_market_status(engine_state, enabled, market_health, health),
+        "status": _dashboard_market_status(engine_state, enabled, market_health, health, latched=latched),
         "strategy": {
             "name": (meta or {}).get("name") or selection.name,
             "display_name": (meta or {}).get("display_name"),
@@ -452,8 +462,8 @@ def _dashboard_market_card(
         },
         "eligible_pool": (meta or {}).get("candidate_pool_size"),
         "observation_set_size": (meta or {}).get("observation_set_size"),
-        "positions_count": len(positions),
-        "current_allocation_pct": (market_value / equity) * 100,
+        "positions_count": len(positions) if account_known else None,
+        "current_allocation_pct": (market_value / equity) * 100 if account_known else None,
         "maximum_allocation_pct": float(selection.maximum_allocation or 0.0) * 100,
         "last_decision_at": (decision or {}).get("timestamp"),
         "next_rebalance_at": _dashboard_next_rebalance_at(
@@ -465,7 +475,7 @@ def _dashboard_market_card(
             "at": catch_up.get("at"),
             "next_boundary_after": catch_up.get("next_boundary_after"),
         },
-        "holdings": holdings,
+        "holdings": holdings if account_known else None,
     }
 
 
@@ -473,12 +483,17 @@ def _dashboard_market_card(
 _DASHBOARD_INCIDENT_LIMIT = 50
 
 
-def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-    """Active safety incidents + latest risk-state row for the account."""
+def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
+    """Active safety incidents + latest risk-state row for the account.
+
+    Incidents are None when the ledger could not be read: an empty list would
+    render as "no active incident" for a failed read.
+    """
     account_id = _dashboard_account_id()
     connection = _dashboard_readonly_connection()
     if connection is None:
-        return [], None
+        # No ledger file yet means no incidents; a file that cannot be opened is unknown.
+        return ([] if not _dashboard_db_path().exists() else None), None
     try:
         incident_rows = connection.execute(
             """
@@ -499,7 +514,7 @@ def _dashboard_ledger_risk() -> tuple[list[dict[str, Any]], dict[str, Any] | Non
             (account_id,),
         ).fetchall()
     except sqlite3.Error:
-        return [], None
+        return None, None
     finally:
         _dashboard_release(connection)
     incidents = [
@@ -565,7 +580,7 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
     limits = getattr(cfg, "risk", None) if cfg is not None else None
     incidents, risk_state = _dashboard_ledger_risk()
     capacity = _dashboard_buy_capacity()
-    return {
+    panel: dict[str, Any] = {
         "gross_exposure_pct": (gross / equity) * 100,
         "gross_exposure_limit_pct": (
             float(getattr(limits, "max_gross_exposure_pct", _RISK_DEFAULTS.max_gross_exposure_pct) or 0.0) * 100
@@ -587,19 +602,35 @@ def _dashboard_risk(cfg: Any, health: dict[str, Any] | None, account: dict[str, 
         "risk_epoch": risk_state,
         "buy_capacity": capacity,
     }
+    if account.get("source") == "unavailable":
+        # No account snapshot was ever fetched: the zeros above are placeholders, not balances.
+        for key in (
+            "gross_exposure_pct",
+            "cash_pct",
+            "equity_exposure_pct",
+            "external_exposure_pct",
+            "daily_pnl",
+        ):
+            panel[key] = None
+    return panel
 
 
 def _dashboard_execution() -> dict[str, Any]:
-    """Execution panel: open orders + recent fills with decision lineage."""
+    """Execution panel: open orders + recent fills with decision lineage.
+
+    A list that could not be read is None, never an empty list ("no orders").
+    """
     account_id = _dashboard_account_id()
     connection = _dashboard_readonly_connection()
     if connection is None:
+        # No ledger file yet means no orders or fills; a file that cannot be opened is unknown.
+        absent = not _dashboard_db_path().exists()
         return {
-            "open_orders": [],
-            "recent_fills": [],
+            "open_orders": [] if absent else None,
+            "recent_fills": [] if absent else None,
         }
-    order_rows: list[Any] = []
-    fill_rows: list[Any] = []
+    order_rows: list[Any] | None = None
+    fill_rows: list[Any] | None = None
     try:
         from parayabuck.portfolio.runtime_service import TERMINAL_ORDER_STATUSES_SQL
 
@@ -647,44 +678,52 @@ def _dashboard_execution() -> dict[str, Any]:
             "strategy": str(strategy_name) if strategy_name else None,
         }
 
-    open_orders = [
-        {
-            "client_order_id": str(row[0]),
-            "symbol": str(row[1]),
-            "market": str(row[2]),
-            "side": str(row[3]),
-            "quantity": float(row[4] or 0.0),
-            "status": str(row[5]),
-            "reference_price": float(row[6]) if row[6] is not None else None,
-            "created_at": str(row[7]),
-            "lineage": _lineage(row[8], row[9]),
-        }
-        for row in order_rows
-    ]
-    recent_fills = []
-    for row in fill_rows:
-        price = float(row[6] or 0.0)
-        reference = float(row[9]) if row[9] is not None else None
-        direction = 1.0 if str(row[4]).lower() == "buy" else -1.0
-        slippage_bps = ((price - reference) / reference) * 10000 * direction if reference and reference > 0 else None
-        fill_entry = {
-            "activity_id": str(row[0]),
-            "client_order_id": str(row[1]),
-            "symbol": str(row[2]),
-            "market": str(row[3]),
-            "side": str(row[4]),
-            "quantity": float(row[5] or 0.0),
-            "price": price,
-            "fee": float(row[7] or 0.0),
-            "slippage": float(row[8] or 0.0),
-            "reference_price": reference,
-            "slippage_bps": slippage_bps,
-            "realized_pnl": float(row[10]) if row[10] is not None else None,
-            "unrealized_pnl": float(row[11]) if row[11] is not None else None,
-            "occurred_at": str(row[12]),
-            "lineage": _lineage(row[13], row[14]),
-        }
-        recent_fills.append(fill_entry)
+    open_orders = (
+        None
+        if order_rows is None
+        else [
+            {
+                "client_order_id": str(row[0]),
+                "symbol": str(row[1]),
+                "market": str(row[2]),
+                "side": str(row[3]),
+                "quantity": float(row[4] or 0.0),
+                "status": str(row[5]),
+                "reference_price": float(row[6]) if row[6] is not None else None,
+                "created_at": str(row[7]),
+                "lineage": _lineage(row[8], row[9]),
+            }
+            for row in order_rows
+        ]
+    )
+    recent_fills: list[dict[str, Any]] | None = None
+    if fill_rows is not None:
+        recent_fills = []
+        for row in fill_rows:
+            price = float(row[6] or 0.0)
+            reference = float(row[9]) if row[9] is not None else None
+            direction = 1.0 if str(row[4]).lower() == "buy" else -1.0
+            slippage_bps = (
+                ((price - reference) / reference) * 10000 * direction if reference and reference > 0 else None
+            )
+            fill_entry = {
+                "activity_id": str(row[0]),
+                "client_order_id": str(row[1]),
+                "symbol": str(row[2]),
+                "market": str(row[3]),
+                "side": str(row[4]),
+                "quantity": float(row[5] or 0.0),
+                "price": price,
+                "fee": float(row[7] or 0.0),
+                "slippage": float(row[8] or 0.0),
+                "reference_price": reference,
+                "slippage_bps": slippage_bps,
+                "realized_pnl": float(row[10]) if row[10] is not None else None,
+                "unrealized_pnl": float(row[11]) if row[11] is not None else None,
+                "occurred_at": str(row[12]),
+                "lineage": _lineage(row[13], row[14]),
+            }
+            recent_fills.append(fill_entry)
     return {
         "open_orders": open_orders,
         "recent_fills": recent_fills,
@@ -809,6 +848,11 @@ def _dashboard_health(
     # build's shared connection, not a full runtime_metrics() pass over a
     # second connection.
     restart_count = _dashboard_restart_count()
+    # The breaker shows only the strongest reason; every reason in force decides the tile.
+    breaker = (health or {}).get("circuit_breaker_reason")
+    halts = {str(item) for item in ((health or {}).get("halt_reasons") or [])}
+    if breaker:
+        halts.add(str(breaker))
     return {
         "engine_state": _manager_engine_state(),
         "healthy": (health or {}).get("healthy"),
@@ -825,7 +869,7 @@ def _dashboard_health(
         "reconciliation": {
             "last_at": (health or {}).get("last_reconciliation_at"),
             # Every breaker reason a reconciliation or protection failure latches.
-            "failed": (health or {}).get("circuit_breaker_reason") in _RECONCILIATION_BREAKER_REASONS,
+            "failed": bool(halts & _RECONCILIATION_BREAKER_REASONS),
         },
         "database": _dashboard_database_state(),
         "last_heartbeat": max(heartbeats).isoformat() if heartbeats else None,

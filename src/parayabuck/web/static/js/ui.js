@@ -115,10 +115,17 @@
   function badgeClass(status) {
     const s = String(status || "").toLowerCase();
     if (["ok", "active", "running", "healthy"].indexOf(s) !== -1) return "badge ok";
-    if (["blocked", "degraded", "warming", "warming_up", "starting", "stopping"].indexOf(s) !== -1) return "badge warn";
-    if (["critical", "crashed", "halted", "error", "stop_failed"].indexOf(s) !== -1) return "badge bad";
+    if (["blocked", "degraded", "warming", "warming_up", "starting", "stopping", "entry_blocked", "rebalance_blocked"].indexOf(s) !== -1) return "badge warn";
+    if (["critical", "crashed", "halted", "error", "stop_failed", "circuit_breaker", "market_halted"].indexOf(s) !== -1) return "badge bad";
     return "badge";
   }
+  // Breaker codes a non-expert owner reads on screen; an unknown code is shown as it arrives.
+  const BREAKER_LABELS = {
+    ownership_drift: "sahiplik uyuşmazlığı", reconciliation_failed: "mutabakat hatası",
+    reconciliation_bug_suspected: "mutabakat hatası şüphesi", protection_failure: "koruma hatası",
+    ambiguous_order_state: "belirsiz emir durumu", operator_halt: "operatör durdurması"
+  };
+  function breakerLabel(code) { return BREAKER_LABELS[code] || String(code); }
 
   // ---------- toasts ----------
   function toast(message, level) {
@@ -244,7 +251,7 @@
   const STATE_LABELS = {
     running: "Çalışıyor", stopped: "Durdu", starting: "Başlatılıyor", warming_up: "Isınıyor",
     degraded: "Kısıtlı çalışıyor", halted: "Güvenlik kilidi devrede", stopping: "Durduruluyor",
-    stop_failed: "Durdurma hatası", error: "Hata"
+    stop_failed: "Durdurma hatası", error: "Hata", unknown: "Bilinmiyor"
   };
   const ACTIVE_STATES = ["running", "warming_up", "degraded", "halted"];
   const listeners = { status: [], stream: [] };
@@ -264,7 +271,7 @@
     renderMode();
     const dot = byId("statusDot");
     if (dot) dot.className = "dot " + shell.state;
-    setText("statusText", STATE_LABELS[shell.state] || shell.state);
+    setText("statusText", STATE_LABELS[shell.state] || "Bilinmiyor");
     const start = byId("startBtn");
     const stop = byId("stopBtn");
     const reset = byId("resetSafetyBtn");
@@ -316,7 +323,7 @@
     // "Kilidi doğrula" only means something while a lock is in force; a degraded engine without one has nothing to reset.
     const resetBtn = byId("resetSafetyBtn");
     if (resetBtn && !breaker) resetBtn.hidden = true;
-    if (breaker) { messages.push("Güvenlik kilidi devrede (" + breaker + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz."); danger = true; }
+    if (breaker) { messages.push("Güvenlik kilidi devrede (" + breakerLabel(breaker) + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz."); danger = true; }
     if (status.engine_error) { messages.push("Motor hatası: " + status.engine_error); danger = true; }
     const retry = status.engine && status.engine.retry;
     if (retry) messages.push("Motor otomatik yeniden deneniyor (deneme " + retry.attempt + "), yaklaşık " + fmt.duration(retry.retry_in_seconds) + " sonra.");
@@ -338,6 +345,10 @@
       renderStatus(await api.fetchJson("/api/status"));
     } catch (e) {
       setText("marketStatusText", "Sunucuya ulaşılamıyor — yeniden deneniyor…");
+      // A failed poll must not keep the last state (its green pill and story) on screen.
+      renderEngineState("unknown");
+      const unknown = Object.assign({}, shell.status || {}, { state: "unknown", unavailable: true });
+      listeners.status.forEach(function (fn) { try { fn(unknown); } catch (err) { console.error(err); } });
     } finally {
       statusInFlight = false;
     }
@@ -601,6 +612,7 @@
     setText: setText,
     emptyRow: emptyRow,
     badgeClass: badgeClass,
+    breakerLabel: breakerLabel,
     isNum: isNum,
     toast: toast,
     onStatus: function (fn) { listeners.status.push(fn); if (shell.status) fn(shell.status); },

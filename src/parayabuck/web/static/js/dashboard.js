@@ -20,8 +20,15 @@
     const STRATEGY_STATUS = {
       active: "Aktif", warming: "Isınıyor", halted: "Güvenlik kilidi devrede",
       disabled: "Kapalı", stopped: "Motor kapalı", starting: "Başlatılıyor", stopping: "Durduruluyor",
-      error: "Hata", stop_failed: "Durdurma hatası", unknown: "Bilinmiyor", unavailable: "Yok"
+      error: "Hata", stop_failed: "Durdurma hatası", unknown: "Bilinmiyor", unavailable: "Yok",
+      degraded: "Kısıtlı çalışıyor"
     };
+    const LATCH_LABELS = { daily_loss_limit: "günlük kayıp sınırı aşıldı", portfolio_drawdown_halt: "zirveden düşüş sınırı aşıldı" };
+    const TRADING_STATE_LABELS = {
+      ACTIVE: "Aktif", ENTRY_BLOCKED: "Alım kilitli", REBALANCE_BLOCKED: "Dengeleme kilitli",
+      MARKET_HALTED: "Piyasa durduruldu", CIRCUIT_BREAKER: "Güvenlik kilidi devrede", STOPPED: "Motor kapalı", UNKNOWN: "Bilinmiyor"
+    };
+    const OVERALL_HEALTH_LABELS = { OK: "Sağlıklı", DEGRADED: "Kısıtlı", BLOCKED: "Engelli", CRITICAL: "Kritik", UNKNOWN: "Bilinmiyor" };
     const CATCH_UP = {
       submitted: "Uygulandı", sell_phase_submitted: "Uygulandı (satış)", catch_up_superseded: "Gerek yok",
       duplicate_decision: "Gerek yok", already_invested: "Zaten yatırımda", warming_up: "Isınma bekleniyor",
@@ -52,6 +59,16 @@
       return s;
     }
     function symbolBase(symbol) { return String(symbol || "").split("/")[0].slice(0, 4); }
+    // A check time already past means the scheduled check is due or was missed while the engine was down.
+    function nextCheckText(iso) {
+      if (!iso) return null;
+      const t = new Date(iso).getTime();
+      if (Number.isFinite(t) && t < Date.now() - 45000) return "bekleniyor";
+      return fmt.relative(iso);
+    }
+    function latchEntries(risk) {
+      return Object.entries((risk && risk.entry_risk_latch) || {}).filter(function (e) { return e[1]; });
+    }
     function sideBadge(side) {
       const s = String(side || "").toLowerCase();
       if (s === "buy") return el("span", { className: "badge ok", text: "Alış" });
@@ -237,27 +254,38 @@
       const opHalt = status && status.operator_halt && status.operator_halt.active ? status.operator_halt : null;
       if (opHalt) items.push(storyItem("bad", "lock", "Operatör durdurması etkin.", "Motor başlatılamaz; kaldırmak için sunucuda parayabuck resume çalıştırılmalı."));
       else if (!state) items.push(storyItem("", "clock", "Durum yükleniyor…"));
-      else if (breaker || state === "halted") items.push(storyItem("bad", "lock", "Güvenlik kilidi devrede.", "Bot yeni alım yapmıyor" + (breaker ? " (" + breaker + ")" : "") + "."));
+      else if (state === "unknown") items.push(storyItem("warn", "alert", "Durum alınamadı.", "Sunucuya ulaşılamıyor; aşağıdaki bilgiler eski olabilir."));
+      else if (breaker || state === "halted") items.push(storyItem("bad", "lock", "Güvenlik kilidi devrede.", "Bot yeni alım yapmıyor" + (breaker ? " (" + PB.breakerLabel(breaker) + ")" : "") + "."));
       else if (state === "running") items.push(storyItem("ok", "activity", "Bot çalışıyor", "ve piyasayı izliyor."));
       else if (state === "warming_up" || state === "starting") items.push(storyItem("warn", "clock", "Bot hazırlanıyor.", "Geçmiş verileri yüklüyor; birazdan karar vermeye başlayacak."));
       else if (state === "degraded") items.push(storyItem("warn", "alert", "Bot kısıtlı çalışıyor.", "Bazı veriler gecikiyor; yeni alımlar durabilir."));
       else if (state === "stopped") items.push(storyItem("", "pause", "Bot kapalı.", "İşlem yapmıyor — üstteki “Başlat” ile çalıştırabilirsiniz."));
-      else items.push(storyItem("bad", "alert", "Motor sorunlu:", (status.engine_error || state) + "."));
+      else if (state === "stopping") items.push(storyItem("warn", "pause", "Bot durduruluyor.", "Yeni işlem açılmıyor."));
+      else if (state === "stop_failed") items.push(storyItem("bad", "alert", "Bot durdurulamadı.", "Durdurma tamamlanamadı; sunucu günlüğüne bakın."));
+      else items.push(storyItem("bad", "alert", "Motor sorunlu:", (status.engine_error || STRATEGY_STATUS[state] || "bilinmeyen durum") + "."));
 
       [["equity", "trend", "Hisse"]].forEach(function (spec) {
         const card = ov[spec[0]];
         if (!card || card.unavailable) return;
         if (card.enabled === false) { items.push(storyItem("", spec[1], spec[2] + " stratejisi kapalı.")); return; }
         const names = holdingsSentence(card);
-        const next = card.next_rebalance_at ? " Sıradaki kontrol " + fmt.relative(card.next_rebalance_at) + "." : "";
-        if (names) items.push(storyItem("info", spec[1], spec[2] + ": " + names, "tutuluyor — portföyün " + fmt.pct(card.current_allocation_pct) + "'i." + next));
+        const nextAt = nextCheckText(card.next_rebalance_at);
+        const next = nextAt ? " Sıradaki kontrol " + nextAt + "." : "";
+        if (card.holdings === null) items.push(storyItem("", spec[1], spec[2] + ": hesap verisi yok.", ""));
+        else if (names) items.push(storyItem("info", spec[1], spec[2] + ": " + names, "tutuluyor — portföyün " + fmt.pct(card.current_allocation_pct) + "'i." + next));
         else items.push(storyItem("", spec[1], spec[2] + ": pozisyon yok,", "bu kısım nakitte bekliyor." + next));
       });
 
       const risk = ov.risk;
-      if (risk && !risk.unavailable && !risk.circuit_breaker && view.account) {
-        const dd = ddPct(view.account);
-        items.push(storyItem("ok", "shield", "Risk limitleri içinde.", "Zirveden düşüş " + fmt.pct(dd) + " (sınır " + fmt.pct(risk.max_drawdown_pct, 0) + ")."));
+      // "Within limits" only when no entry latch is set and an account snapshot exists.
+      const accountKnown = !!view.account && isNum(view.account.equity);
+      if (risk && !risk.unavailable && !risk.circuit_breaker) {
+        const latched = latchEntries(risk).map(function (e) { return LATCH_LABELS[e[1]] || String(e[1]); }).join(", ");
+        if (latched) items.push(storyItem("bad", "lock", "Yeni alımlar durduruldu.", latched.charAt(0).toUpperCase() + latched.slice(1) + "."));
+        else if (accountKnown) {
+          const dd = ddPct(view.account);
+          items.push(storyItem("ok", "shield", "Risk limitleri içinde.", "Zirveden düşüş " + fmt.pct(dd) + " (sınır " + fmt.pct(risk.max_drawdown_pct, 0) + ")."));
+        }
       }
       list.replaceChildren.apply(list, items);
     }
@@ -268,9 +296,11 @@
     }
     function renderAllocation(risk) {
       if (!risk || risk.unavailable) return;
-      const eq = Math.max(0, Number(risk.equity_exposure_pct) || 0);
+      // Null shares mean no account snapshot: an empty donut and dashes, never a 0% invested.
+      const known = isNum(risk.equity_exposure_pct) && isNum(risk.cash_pct);
+      const eq = known ? Math.max(0, Number(risk.equity_exposure_pct)) : 0;
       // Cash is the same figure the cash meter shows; 100 - equity would count other holdings as cash.
-      const cash = Math.max(0, Number(risk.cash_pct) || 0);
+      const cash = known ? Math.max(0, Number(risk.cash_pct)) : 0;
       const C = 2 * Math.PI * 50;
       let offset = 0;
       [["donutEquity", eq], ["donutCash", cash]].forEach(function (pair) {
@@ -281,9 +311,9 @@
         circle.setAttribute("stroke-dashoffset", (-offset).toFixed(2));
         offset += len;
       });
-      setText("donutInvested", fmt.pct(eq, 0));
-      setText("allocEquity", fmt.pct(eq));
-      setText("allocCash", fmt.pct(cash));
+      setText("donutInvested", known ? fmt.pct(eq, 0) : "—");
+      setText("allocEquity", known ? fmt.pct(eq) : "—");
+      setText("allocCash", known ? fmt.pct(cash) : "—");
     }
 
     // ---------- strategies ----------
@@ -296,7 +326,7 @@
       setText(prefix + "Signal", cadence(strategy.signal_timeframe));
       setText(prefix + "Rebalance", cadence(strategy.rebalance_cadence));
       setText(prefix + "Obs", isNum(card.observation_set_size) ? String(card.observation_set_size) : "—");
-      setText(prefix + "Positions", String(card.positions_count || 0));
+      setText(prefix + "Positions", isNum(card.positions_count) ? String(card.positions_count) : "—");
       setText(prefix + "Allocation", fmt.pct(card.current_allocation_pct) + " / en fazla " + fmt.pct(card.maximum_allocation_pct, 0));
       const bar = byId(prefix + "AllocBar");
       if (bar) {
@@ -304,7 +334,7 @@
         bar.style.width = (max > 0 ? Math.min(100, (Number(card.current_allocation_pct) || 0) / max * 100) : 0) + "%";
       }
       const next = byId(prefix + "NextRebalance");
-      if (next) { next.textContent = card.next_rebalance_at ? fmt.relative(card.next_rebalance_at) : "—"; next.title = fmt.dateTime(card.next_rebalance_at); }
+      if (next) { next.textContent = nextCheckText(card.next_rebalance_at) || "—"; next.title = fmt.dateTime(card.next_rebalance_at); }
       const cu = card.startup_catch_up || {};
       const status = cu.status || "not_attempted";
       const cuEl = byId(prefix + "StartupCatchUp");
@@ -319,6 +349,7 @@
       }
       const tbody = byId(prefix + "HoldingsBody");
       const holdings = card.holdings || [];
+      if (card.holdings === null) { PB.emptyRow(tbody, 5, "Hesap verisi yok"); return; }
       if (!holdings.length) { PB.emptyRow(tbody, 5, "Pozisyon yok"); return; }
       tbody.replaceChildren.apply(tbody, holdings.map(function (h) {
         const sym = el("span", { className: "sym" }, [el("span", { className: "sym-logo", text: symbolBase(h.symbol) }), h.symbol]);
@@ -346,14 +377,17 @@
         if (historyRow) historyRow.hidden = true;
         return;
       }
-      const votes = isNum(t.votes_up) && isNum(t.votes_total)
+      // The signal may be up while the strategy holds cash: the hold symbol is not tradable.
+      const inCash = t.state === "hold_symbol_unavailable";
+      const votes = !inCash && isNum(t.votes_up) && isNum(t.votes_total)
         ? " (" + Number(t.votes_up) + "/" + Number(t.votes_total) + " gösterge)" : "";
-      const trendText = t.in_trend === true ? "Yukarı"
+      const trendText = inCash ? "Nakitte · sembol yok"
+        : t.in_trend === true ? "Yukarı"
         : t.state === "early_reentry" ? "Erken giriş"
         : t.in_trend === false ? "Aşağı"
         : t.state === "insufficient_history" ? "Veri yetersiz" : "—";
       badge.textContent = trendText;
-      badge.className = "badge" + (t.in_trend === true ? " ok" : t.state === "early_reentry" ? " info" : t.in_trend === false ? " warn" : "");
+      badge.className = "badge" + (inCash ? " warn" : t.in_trend === true ? " ok" : t.state === "early_reentry" ? " info" : t.in_trend === false ? " warn" : "");
       setText("trendStateText", trendText + votes);
 
       const symbol = t.signal_symbol ? t.signal_symbol + " " : "";
@@ -448,20 +482,26 @@
     function renderRisk(risk) {
       if (!risk || risk.unavailable) return;
       const a = view.account || {};
+      // Without an account snapshot the account-derived meters show a dash, not a zero.
+      const known = isNum(a.equity);
       const eq = Number(a.equity) || 0;
       const daily = Number(a.daily_pnl !== undefined ? a.daily_pnl : risk.daily_pnl) || 0;
       const lossPct = eq - daily > 0 ? Math.max(0, -daily) / (eq - daily) * 100 : 0;
       const box = byId("riskMeters");
       if (box) {
         box.replaceChildren(
-          meter("Zirveden düşüş", ddPct(a), risk.max_drawdown_pct, { note: "Bu sınır aşılırsa bot tüm yeni alımları durdurur." }),
-          meter("Bugünkü kayıp", lossPct, risk.daily_loss_limit_pct, { digits: 2, note: "Günlük kayıp sınırı aşılırsa o gün yeni alım yapılmaz." }),
+          meter("Zirveden düşüş", known ? ddPct(a) : null, risk.max_drawdown_pct, { note: "Bu sınır aşılırsa bot tüm yeni alımları durdurur." }),
+          meter("Bugünkü kayıp", known ? lossPct : null, risk.daily_loss_limit_pct, { digits: 2, note: "Günlük kayıp sınırı aşılırsa o gün yeni alım yapılmaz." }),
           meter("Yatırımdaki pay (brüt)", risk.gross_exposure_pct, risk.gross_exposure_limit_pct),
           meter("Nakit tamponu", risk.cash_pct, risk.cash_buffer_limit_pct, { minimum: true })
         );
       }
-      setText("riskCircuitBadge", risk.circuit_breaker ? "Güvenlik kilidi: " + risk.circuit_breaker : "Limitler içinde", risk.circuit_breaker ? "badge bad" : "badge ok");
-      const latch = Object.entries(risk.entry_risk_latch || {}).filter(function (e) { return e[1]; }).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
+      const latchOn = latchEntries(risk).length > 0;
+      setText("riskCircuitBadge",
+        risk.circuit_breaker ? "Güvenlik kilidi: " + PB.breakerLabel(risk.circuit_breaker)
+          : latchOn ? "Alım kilitli" : "Limitler içinde",
+        risk.circuit_breaker ? "badge bad" : latchOn ? "badge warn" : "badge ok");
+      const latch = latchEntries(risk).map(function (e) { return LATCH_LABELS[e[1]] || String(e[1]); }).join(", ");
       setText("riskEntryLatch", latch || "Yok — alım serbest", latch ? "neg" : "pos");
       const epoch = risk.risk_epoch;
       // The reset rebases the peak, so the baseline shown is the peak equity.
@@ -475,10 +515,12 @@
       setText("riskGrossHeadroom", ready ? fmt.money(cap.available_gross_buy_headroom) : "—");
       setText("riskCommittedBuy", ready && cap.committed_buy_notional !== null ? fmt.money(cap.committed_buy_notional) : "bilinmiyor");
       setText("riskCashHeadroom", ready ? fmt.money(cap.available_cash_buy_headroom) : "—");
-      const incidents = risk.safety_incidents || [];
+      const incidents = risk.safety_incidents;
       const box2 = byId("riskIncidents");
       if (box2) {
-        if (!incidents.length) box2.replaceChildren(el("div", { className: "incident ok" }, [PB.icon("check"), el("span", { text: "Aktif güvenlik olayı yok" })]));
+        // null: the ledger read failed; an empty list would read as "no incident".
+        if (incidents === null) box2.replaceChildren(el("div", { className: "incident warn" }, [PB.icon("alert"), el("span", { text: "Güvenlik olayı kaydı okunamadı" })]));
+        else if (!incidents.length) box2.replaceChildren(el("div", { className: "incident ok" }, [PB.icon("check"), el("span", { text: "Aktif güvenlik olayı yok" })]));
         else box2.replaceChildren.apply(box2, incidents.map(function (i) {
           return el("div", { className: "incident" }, [PB.icon("alert"), el("span", { text: i.reason + " · " + fmt.dateTime(i.activated_at) })]);
         }));
@@ -488,12 +530,14 @@
     // ---------- trades ----------
     function renderExecution(ex) {
       if (!ex || ex.unavailable) return;
-      const fills = ex.recent_fills || [];
-      const orders = ex.open_orders || [];
-      setText("fillsCount", String(fills.length));
-      setText("ordersCount", String(orders.length));
+      // null: the ledger read failed, which is not the same as an empty list.
+      const fills = ex.recent_fills;
+      const orders = ex.open_orders;
+      setText("fillsCount", fills ? String(fills.length) : "—");
+      setText("ordersCount", orders ? String(orders.length) : "—");
       const fBody = byId("recentFillsBody");
-      if (!fills.length) PB.emptyRow(fBody, 7, "Henüz işlem yok");
+      if (!fills) PB.emptyRow(fBody, 7, "İşlem kaydı okunamadı");
+      else if (!fills.length) PB.emptyRow(fBody, 7, "Henüz işlem yok");
       else fBody.replaceChildren.apply(fBody, fills.map(function (f) {
         const slip = f.slippage_bps;
         return el("tr", null, [
@@ -503,7 +547,8 @@
         ]);
       }));
       const oBody = byId("openOrdersBody");
-      if (!orders.length) PB.emptyRow(oBody, 6, "Bekleyen emir yok");
+      if (!orders) PB.emptyRow(oBody, 6, "Emir kaydı okunamadı");
+      else if (!orders.length) PB.emptyRow(oBody, 6, "Bekleyen emir yok");
       else oBody.replaceChildren.apply(oBody, orders.map(function (o) {
         const lin = o.lineage || {};
         return el("tr", null, [
@@ -537,8 +582,9 @@
       }
       if (badge) badge.title = degraded.length ? "Niyet kontrolü uyarıları: " + degraded.join(", ") : "";
       const markets = h.markets || {};
-      const dataOk = (markets.equity || {}).stream_healthy !== false;
-      setText("healthData", dataOk ? "Güncel" : "Gecikme var", dataOk ? "pos" : "neg");
+      // No runtime means no market feed to vouch for: unknown, not "current".
+      const dataOk = markets.equity ? markets.equity.stream_healthy !== false : null;
+      setText("healthData", dataOk === null ? "Bilinmiyor" : dataOk ? "Güncel" : "Gecikme var", dataOk === null ? "" : dataOk ? "pos" : "neg");
       const fresh = h.account_freshness || {};
       setText("healthAccount", (fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
       setText("healthHeartbeat", h.last_heartbeat ? fmt.relative(h.last_heartbeat) : "—");
@@ -576,15 +622,11 @@
         chips("eqSymbols", u.equity.observation_set);
       }
     }
-    // Health enums arrive as English codes; the owner reads these labels.
-    const HEALTH_LABELS = { OK: "Sağlıklı", DEGRADED: "Kısıtlı", BLOCKED: "Engelli", CRITICAL: "Kritik", UNKNOWN: "Bilinmiyor" };
-    const TRADING_STATE_LABELS = {
-      ACTIVE: "Aktif", ENTRY_BLOCKED: "Alım engelli", REBALANCE_BLOCKED: "Dengeleme kilitli", MARKET_HALTED: "Piyasa durduruldu",
-      CIRCUIT_BREAKER: "Güvenlik kilidi devrede", STOPPED: "Motor kapalı", UNKNOWN: "Bilinmiyor"
-    };
     function renderOps(data) {
-      setText("opsOverall", HEALTH_LABELS[data.overall_health] || data.overall_health || "Bilinmiyor", PB.badgeClass(data.overall_health));
-      setText("opsTradingState", TRADING_STATE_LABELS[data.trading_state] || data.trading_state || "Bilinmiyor", PB.badgeClass(data.trading_state));
+      const overall = String(data.overall_health || "UNKNOWN").toUpperCase();
+      const tradingState = String(data.trading_state || "UNKNOWN").toUpperCase();
+      setText("opsOverall", OVERALL_HEALTH_LABELS[overall] || overall, PB.badgeClass(overall));
+      setText("opsTradingState", TRADING_STATE_LABELS[tradingState] || tradingState, PB.badgeClass(tradingState));
       setText("opsSnapshotAge", "Anlık görüntü yaşı: " + fmt.duration(data.snapshot_age_seconds) + " · " + fmt.dateTime(data.as_of));
       const box = byId("opsChecks");
       const checks = data.checks || [];
@@ -653,16 +695,20 @@
       if (taxBusy) return;
       taxBusy = true;
       try { renderTax(await api.fetchJson("/api/dashboard/tax-ytd")); }
-      catch (e) { console.error("tax", e); }
+      catch (e) { console.error("tax", e); renderTax({ status: "unavailable" }); }
       finally { taxBusy = false; }
     }
     function renderTax(t) {
       const set = function (id, text) { const el = document.getElementById(id); if (el) el.textContent = text; };
-      if (!t || t.unavailable) { set("taxStatus", "—"); return; }
+      const clearFigures = function () {
+        ["taxNetGain", "taxEstimate", "taxDividends", "taxThreshold"].forEach(function (id) { set(id, "—"); });
+      };
+      if (!t || t.unavailable) { set("taxStatus", "—"); clearFigures(); return; }
       if (t.status !== "ok") {
-        // Read failures are not "waiting": say what failed.
+        // Read failures are not "waiting": say what failed, and drop the last figures beside it.
         const labels = { rates_missing: "oran eksik", ledger_error: "defter hatası", unavailable: "alınamadı", error: "hata", tables_missing: "tablo yok" };
         set("taxStatus", t.income_declaration_status || labels[t.status] || "bekliyor");
+        clearFigures();
         set("taxNote", t.error || "");
         return;
       }
@@ -684,14 +730,24 @@
     async function refreshOverview() {
       if (overviewBusy) return;
       overviewBusy = true;
-      try { renderOverview(await api.fetchJson("/api/dashboard/overview")); }
+      try {
+        const data = await api.fetchJson("/api/dashboard/overview");
+        if (data && data.unavailable) markOverviewStale();
+        else renderOverview(data);
+      }
       catch (e) {
         // The panels keep the last good values; mark them stale instead of silently aging.
         console.error("overview", e);
-        const fresh = byId("accountFreshness");
-        if (fresh) { fresh.className = "freshness stale"; fresh.title = "Son güncelleme başarısız; gösterilen değerler eski olabilir."; }
+        markOverviewStale();
       }
       finally { overviewBusy = false; }
+    }
+    function markOverviewStale() {
+      const fresh = byId("accountFreshness");
+      if (!fresh) return;
+      fresh.className = "freshness stale";
+      fresh.title = "Son güncelleme başarısız; gösterilen değerler eski olabilir.";
+      fresh.replaceChildren(el("span", { className: "dot" }), el("span", { text: "güncellenemedi" }));
     }
     let opsBusy = false;
     async function refreshOps() {
@@ -705,7 +761,12 @@
         let eventsFailed = false;
         let decisionFailed = false;
         try { events = (await api.fetchJson("/api/ops/events?limit=12")).events || []; } catch (_) { eventsFailed = true; }
-        try { decision = (await api.fetchJson("/api/ops/decisions/latest")).decision || null; } catch (_) { decisionFailed = true; }
+        try {
+          const latest = await api.fetchJson("/api/ops/decisions/latest");
+          decision = latest.decision || null;
+          // A failed read answers 200 with `unavailable` and `error`; "no decision yet" carries no error.
+          decisionFailed = latest.unavailable === true && Boolean(latest.error);
+        } catch (_) { decisionFailed = true; }
         renderOps(Object.assign({}, status, { events: events, decision: decision, eventsFailed: eventsFailed, decisionFailed: decisionFailed }));
       }
       catch (e) { const box = byId("opsChecks"); if (box) box.replaceChildren(el("p", { className: "empty-note", text: "Operasyon durumu alınamadı: " + e.message })); }

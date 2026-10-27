@@ -516,6 +516,10 @@ class EngineRuntime:
             # Read by AccountService.account(): shortfall drift is collected
             # into ``drift_locked_symbols`` instead of raised. Off = unchanged.
             self.broker.per_symbol_drift_lock = True
+        if getattr(config.risk, "adjust_for_cash_flows", False) is True:
+            # Read by AccountService.account(): same-day deposits/withdrawals
+            # net out of daily P&L and the peak (F9-2). Off = unchanged.
+            self.broker.adjust_for_cash_flows = True
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
         self.trading_updates = AlpacaTradingUpdateStream(api_key, secret_key, self.paper, self._on_trade_update)

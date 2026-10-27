@@ -96,7 +96,11 @@ The portfolio/risk layer alone:
   postponed when its fill session is one of the last 10 NYSE sessions of
   December, whatever its size, and re-evaluated at every later decision; exits,
   entries, up-resizes and risk-driven reductions are never deferred
-  (`docs/research/gain_band_integration_v1.md`);
+  (`docs/research/gain_band_integration_v1.md`). A volatility-driven trim is an
+  ordinary downsize here, so the gain band and the December deferral can hold
+  it: realised exposure can then sit above the `vol_target` weight (for example
+  0.98 × 38 % = 37.2 %) until a later decision re-evaluates it. The backtest
+  applies the same rules, so live and backtest stay in parity;
 - latches entries on daily-loss / drawdown breaches (production; backtests
   record shadow events and keep trading); a drawdown halt persists until an
   operator risk-epoch reset;

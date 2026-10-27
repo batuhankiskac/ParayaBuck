@@ -326,7 +326,7 @@ def _trade_runtime(repository: _TradeRepository) -> tuple[EngineRuntime, dict[st
     def persist(_account: AccountSnapshot) -> None:
         record["persist_threads"].append(threading.get_ident())
 
-    def advance(market: Market) -> None:
+    def advance(market: Market, **_kwargs: object) -> None:
         record["advance"].append(market)
 
     def reconcile() -> None:

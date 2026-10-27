@@ -172,7 +172,7 @@ def _trade_engine(repository: _TradeRepository) -> tuple[EngineRuntime, list[str
     engine._last_account_snapshot_at = now
     engine.config = SimpleNamespace(account_poll_interval_seconds=15.0, maximum_account_age_for_entry_seconds=30.0)
     engine._persist_risk_state = lambda *_args, **_kwargs: None
-    engine._advance_portfolio_rebalance = lambda _market: calls.append("advance")  # type: ignore[method-assign]
+    engine._advance_portfolio_rebalance = lambda _market, **_kwargs: calls.append("advance")  # type: ignore[method-assign]
     engine._schedule_reconcile = lambda: calls.append("reconcile")  # type: ignore[method-assign]
     return engine, calls
 

@@ -107,7 +107,7 @@ def _fill_runtime(account_error: Exception | None) -> EngineRuntime:
     runtime._circuit_breaker_reason = None
     runtime._state = "running"
     runtime._persist_risk_state = lambda *_args, **_kwargs: None
-    runtime._advance_portfolio_rebalance = lambda _market: None
+    runtime._advance_portfolio_rebalance = lambda _market, **_kwargs: None
     return runtime
 
 

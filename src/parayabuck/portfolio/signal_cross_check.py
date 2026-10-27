@@ -14,7 +14,11 @@ Alpaca consolidated SIP daily bar, fetched after the close) and compares:
   session costs more than an unchecked one).
 
 Independently of the trend, ``close_divergence`` flags any symbol whose two
-closes differ by more than ``close_divergence_bps``.
+closes differ by more than ``close_divergence_bps``, and ``weight_divergence``
+flags a gap between the two sources' target weights larger than the
+rebalance band (the close gap alone can move the weight past the band, which
+the trend comparison does not see). Both are alerts: they never change the
+trade decision.
 
 Everything here is pure and deterministic; the runtime owns fetching,
 retry timing and alerting. The offline backtest has one data source and
@@ -92,6 +96,8 @@ class CrossCheckOutcome:
     close_divergence_bps: float = 0.0
     reason: str | None = None
     attempts: int = 0
+    weight_gap: float = 0.0
+    weight_divergence: bool = False
 
     @property
     def hold(self) -> bool:
@@ -117,6 +123,8 @@ class CrossCheckOutcome:
             "hold": self.hold,
             "reason": self.reason,
             "attempts": self.attempts,
+            "weight_gap": self.weight_gap,
+            "weight_divergence": self.weight_divergence,
         }
 
     def summary(self) -> str:
@@ -135,6 +143,12 @@ class CrossCheckOutcome:
                 f"signal cross-check {session}: sources disagree on the trend "
                 f"(IEX stream {primary.trend_state}, SIP {secondary.trend_state}; close gaps {gaps}); "
                 "holding the current position this session"
+            )
+        if self.weight_divergence and not self.close_divergence and primary is not None and secondary is not None:
+            return (
+                f"signal cross-check {session}: sources agree on the trend, but the target weights differ by "
+                f"{self.weight_gap:.4f} (IEX stream {primary.weight:.4f}, SIP {secondary.weight:.4f}); "
+                "alert only, the primary decision is unchanged"
             )
         return f"signal cross-check {session}: sources agree; close gaps {gaps} exceed the divergence threshold"
 
@@ -199,12 +213,15 @@ def compare_sources(
     *,
     close_divergence_bps: float,
     attempts: int = 0,
+    rebalance_band: float | None = None,
 ) -> CrossCheckOutcome:
     """Decide on both sources and classify their agreement.
 
     ``history`` is the stored signal history (prior sessions); each source's
     bars replace the decision session's tail for their symbols, so the two
-    decisions differ only in the session-close bar.
+    decisions differ only in the session-close bar. ``rebalance_band`` (a
+    weight fraction) enables the target-weight comparison: the sources'
+    target weights may differ by at most that band.
     """
     session = signal_session_date(decision_timestamp)
     symbols = cross_check_symbols(strategy)
@@ -227,6 +244,8 @@ def compare_sources(
             gaps[symbol] = (primary[symbol].close / secondary[symbol].close - 1.0) * 10_000.0
     divergent = tuple(sorted(symbol for symbol, gap in gaps.items() if abs(gap) > close_divergence_bps))
     status = STATUS_TREND_MISMATCH if primary_decision.trend_state != secondary_decision.trend_state else STATUS_AGREE
+    weight_gap = abs(primary_decision.weight - secondary_decision.weight)
+    weight_divergence = rebalance_band is not None and weight_gap > rebalance_band
     return CrossCheckOutcome(
         status,
         session,
@@ -236,6 +255,8 @@ def compare_sources(
         close_divergence_symbols=divergent,
         close_divergence_bps=close_divergence_bps,
         attempts=attempts,
+        weight_gap=round(weight_gap, 6),
+        weight_divergence=weight_divergence,
     )
 
 
@@ -299,6 +320,8 @@ class SignalCrossCheckCoordinator:
         retry_interval: timedelta = timedelta(seconds=60),
         close_divergence_bps: float = 50.0,
         session_close: Callable[[date], datetime] = nyse_close_utc,
+        session_deadline: Callable[[date], datetime] | None = None,
+        rebalance_band: float | None = None,
     ) -> None:
         self.enabled = enabled
         self.sip_embargo = sip_embargo
@@ -306,6 +329,11 @@ class SignalCrossCheckCoordinator:
         self.retry_interval = retry_interval
         self.close_divergence_bps = close_divergence_bps
         self._session_close = session_close
+        # The decision batch's own hard deadline for the session (the engine's
+        # retry window). The cross-check never waits past it: a parked batch
+        # expires there, so a later first attempt would be wasted.
+        self._session_deadline = session_deadline
+        self.rebalance_band = rebalance_band
         self._pending: dict[date, _PendingCheck] = {}
         self.last_outcome: CrossCheckOutcome | None = None
 
@@ -349,7 +377,17 @@ class SignalCrossCheckCoordinator:
         if state is None:
             close = self._session_close(session)
             earliest = max(now, close + self.sip_embargo)
-            state = _PendingCheck(earliest + self.retry_window, close, earliest)
+            deadline = earliest + self.retry_window
+            if self._session_deadline is not None:
+                hard = self._session_deadline(session)
+                if now < hard:
+                    # The engine expires a parked batch at ``hard``. Resolve one
+                    # retry interval earlier, so the last attempt (and the
+                    # primary-source decision after it) lands before expiry.
+                    resolve_by = hard - self.retry_interval
+                    earliest = min(earliest, resolve_by)
+                    deadline = min(deadline, resolve_by)
+            state = _PendingCheck(deadline, close, earliest)
             self._pending[session] = state
         if now < state.next_attempt:
             return CrossCheckStep("defer", retry_at=state.next_attempt)
@@ -386,6 +424,7 @@ class SignalCrossCheckCoordinator:
                 decision_timestamp,
                 close_divergence_bps=self.close_divergence_bps,
                 attempts=state.attempts,
+                rebalance_band=self.rebalance_band,
             )
         self.last_outcome = outcome
         return CrossCheckStep("proceed", outcome)

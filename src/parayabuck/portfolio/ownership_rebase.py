@@ -42,14 +42,10 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from parayabuck.core.split_ratios import KNOWN_SPLIT_RATIOS
 from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.portfolio.ownership_rebase")
-
-# Standard split and reverse-split ratios a US equity issuer uses (n-for-1
-# and its reciprocal). A non-standard ratio is deliberately absent: it must
-# halt for an operator, never be guessed at.
-KNOWN_SPLIT_RATIOS: tuple[float, ...] = (0.1, 0.125, 0.2, 0.25, 1 / 3, 0.5, 2.0, 3.0, 4.0, 5.0)
 
 # Alpaca reports quantities to 9 decimals; a relative band absorbs that noise.
 QUANTITY_TOLERANCE = 1e-6

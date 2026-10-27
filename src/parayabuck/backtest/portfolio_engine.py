@@ -460,13 +460,12 @@ class PortfolioBacktestEngine:
         self._drawdown_liquidation_state: DrawdownLiquidationState | None = (
             DrawdownLiquidationState() if getattr(drawdown_liquidation, "enabled", False) else None
         )
-        self.risk_overlay = (
-            PortfolioRiskOverlay(risk_limits, drawdown_liquidation=drawdown_liquidation)
-            if risk_limits is not None
-            else None
-        )
+        # A missing limits object gets the shipped defaults, exactly as the live
+        # overlay does (audit T2-2-1): None must not silently disable the overlay
+        # and the cash buffer while live keeps them.
+        self.risk_overlay = PortfolioRiskOverlay(risk_limits, drawdown_liquidation=drawdown_liquidation)
         # The cash buffer a cash-limited BUY may not spend into.
-        self.minimum_cash = risk_limits.minimum_cash if risk_limits is not None else 0.0
+        self.minimum_cash = self.risk_overlay.limits.minimum_cash
         self.maximum_allocation = maximum_allocation
         # Offline backtests default to SHADOW drawdown halts (the alpha curve
         # keeps trading; breaches are recorded as events). Production-policy
@@ -717,20 +716,28 @@ class PortfolioBacktestEngine:
         acquisition timestamp sits one microsecond before the first bar so they
         are active from the first snapshot. With no initial positions and no
         initial cash this is a no-op, so the flat-cash default is unchanged.
+        A holding without a bar on the first session is refused rather than
+        valued at a later close (audit T2-2-2).
         """
         if not self._initial_positions and self._initial_cash_input is None:
             return
         if not ordered:
             raise ValueError("initial_positions require at least one processed bar")
+        first_session = ordered[0].timestamp.date()
         first_closes: dict[str, float] = {}
         for bar in ordered:
+            if bar.timestamp.date() > first_session:
+                break
             if bar.symbol in self._initial_positions and bar.symbol not in first_closes:
                 first_closes[bar.symbol] = bar.close
                 if len(first_closes) == len(self._initial_positions):
                     break
         missing = sorted(set(self._initial_positions) - set(first_closes))
         if missing:
-            raise ValueError(f"initial positions have no bars to value them: {missing}")
+            raise ValueError(
+                f"initial positions have no bars on the first session {first_session.isoformat()} "
+                f"to value them: {missing}"
+            )
         value = sum(quantity * first_closes[symbol] for symbol, (quantity, _) in self._initial_positions.items())
         if self._initial_cash_input is None:
             cash = self.starting_equity - value

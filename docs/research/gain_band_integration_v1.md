@@ -139,6 +139,18 @@ indexation) and differs from A1 on 0.78 % of the main-path sessions.
 - **Band-vs-`g_frac` floor.** A1u floors the aggregated gain at 0 and applies
   no per-lot floor (PREREGISTRATION §4.1), which is what shipped: a loss lot
   offsets a gain lot, and a net-loss sale reports `g_frac = 0` (tier 1).
+- **The USD fraction is not the tax ledger's basis (audit T2-10-3).** The
+  band's `g_frac` is USD FIFO on the bot's managed lots (ownership events), with
+  no FX and no Yİ-ÜFE indexation. The tax ledger (`tax/ledger.py`) books
+  TRY-indexed lots from fills. The band is a tax-timing device, so the mismatch
+  changes when a trim is held, not what is taxed. The TL shadow
+  (`gain_fraction_tl_shadow`) records the TL view in metadata only.
+- **Fallbacks are visible but do not change the order (audit T2-10-4).** When
+  the lot book is unusable the constant band decides the resize, logs a WARNING
+  and records one `gain_band_fallback` entry in the decision metadata. The
+  December calendar failure turns the deferral off and logs a WARNING on each
+  decision while the calendar is unavailable; it records no metadata and raises
+  no operator alert yet.
 - **The research numbers are not production numbers.** v3 ran on the research
   tax engine with a synthetic QLD leg, TRY/INDEXED gains for A1 and 4 bps × m
   costs; the integration's own evidence is the parity/golden suite above.

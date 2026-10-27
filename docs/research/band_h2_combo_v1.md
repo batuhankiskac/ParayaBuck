@@ -274,6 +274,19 @@ Both devices are cheap state on top of the existing rebalance decision:
 A production change would still need the usual strategy-version bump, a new golden backtest, a
 Stage B replay and a fresh config/live-authorization digest. None of that was done here.
 
+### 8.1 Shipped-code notes (audit 2026-10-28, T2-10-1)
+
+- **The deferral is sign-blind, on purpose.** `in_december_deferral_window`
+  does not look at the gain. A loss-realising trim in the window is postponed
+  to the first January decision, so the loss is booked in the next tax year and
+  cannot offset this year's gains. The owner kept this behaviour (decision 8.3
+  of `docs/audit/FINDINGS-2026-10-27.md`) because it is the pre-registered K
+  composition. A sign-aware deferral is a research candidate to judge after the
+  Turkish tax review, not a fix.
+- **Calendar failure.** If the NYSE calendar cannot be read, the window is empty
+  and the ordinary rule executes (see the planner docstring in
+  `execution/portfolio.py`).
+
 ## 9. Amendments and honesty notes
 
 **A1. Four implementation fixes, all made before the first complete run and none touching an arm,

@@ -30,6 +30,7 @@ ARM_NAME = {"D1": "HRP sleeve", "D2": "HERC sleeve", "D3": "inverse-vol sleeve"}
 SLEEVE = ("IEF", "GLD", "BIL")
 SLEEVE_BAND = 0.02  # per-leg resize band of the sleeve legs; QLD keeps C0_BAND (0.5 pp)
 N_PRIOR_TRIALS = 372  # registry count (gates_v1 / protocol); DSR N = 372 + 3 arms
+N_TRIALS = N_PRIOR_TRIALS + len(ARM_METHOD)  # 375
 MODE = "progressive"
 PRE_POST = {"pre_2020": ("2000-03-09", "2019-12-31"), "post_2020": ("2020-01-01", "2026-09-29")}
 
@@ -106,10 +107,16 @@ def harness(days, o, c, w_r2, fx, ufe, R, P):
 
 
 def arms_run(days, o, c, w_r2, fx, ufe, R, P):
-    out = {"windows": {}, "pre_post_2020": {}, "pre_tax_main": {}, "weights_last": {}}
+    out = {"windows": {}, "pre_post_2020": {}, "pre_tax_main": {}, "weights_last": {}, "weight_stats": {}}
     Wm = {arm: monthly_weights(days, R, ARM_METHOD[arm]) for arm in ARM_METHOD}
     for arm in ARM_METHOD:
         out["weights_last"][arm] = [float(x) for x in Wm[arm][-1]]
+        live = Wm[arm][Wm[arm].sum(axis=1) > 0]
+        out["weight_stats"][arm] = {
+            "sessions_with_sleeve": int(live.shape[0]),
+            "ief_mean": float(live[:, 0].mean()), "gld_mean": float(live[:, 1].mean()),
+            "bil_mean": float(live[:, 2].mean()), "bil_min": float(live[:, 2].min()),
+            "ief_max": float(live[:, 0].max()), "gld_max": float(live[:, 1].max())}
     band_k = np.array([fe_sim.C0_BAND])
     band_s = np.array([fe_sim.C0_BAND] + [SLEEVE_BAND] * 3)
     T = len(days) - 1
@@ -130,7 +137,7 @@ def arms_run(days, o, c, w_r2, fx, ufe, R, P):
         for arm in ARM_METHOD:
             ops, cls, wts = leg_panels(w_r2, Wm[arm], o, c, P)
             r = run(ops, cls, wts, days, fx, ufe, i0, i1, 100_000.0, MODE, band_s)
-            out["windows"][wn][arm] = _row(r)
+            out["windows"][wn][arm] = _row(r, dsr_trials=N_TRIALS)
     # pre / post 2020 split of the after-tax $100k result
     for pw, (a, b) in PRE_POST.items():
         i0, i1 = fe_study.window_indices(days, a, b)
@@ -144,7 +151,7 @@ def arms_run(days, o, c, w_r2, fx, ufe, R, P):
     return out
 
 
-def _row(r):
+def _row(r, dsr_trials=None):
     years = float(r["years"]) if "years" in r else float("nan")
     row = {"after_tax_cagr": float(r["cagr_usd_liquidated"]), "max_dd": float(r["max_dd_nav_usd"]),
            "sells_per_year": float(r["sells"]) / years if years else float("nan"),
@@ -153,6 +160,16 @@ def _row(r):
     legs = r.get("_legs", {})
     row["legs"] = {k: {kk: float(vv) for kk, vv in v.items() if isinstance(vv, (int, float, np.floating))}
                    for k, v in legs.items()} if isinstance(legs, dict) else {}
+    if dsr_trials is not None:
+        from scipy.stats import kurtosis, skew
+        nav = np.asarray(r["_nav"], dtype=np.float64)
+        rr = np.diff(np.log(nav))
+        rr = rr[np.isfinite(rr)]
+        sr = float(rr.mean() / rr.std(ddof=1))
+        t = int(rr.size)
+        row["dsr"] = stats.dsr(sr, t, float(skew(rr)), float(kurtosis(rr, fisher=False)),
+                               dsr_trials, stats.var_trials_floor(t))
+        row["daily_sr"] = sr
     return row
 
 
@@ -164,11 +181,26 @@ def main(argv):
         print(json.dumps(out["harness"], indent=1, default=str))
         return
     if "--run" in argv:
+        from research.gates_v1 import provenance
+
         out = arms_run(days, o, c, w_r2, fx, ufe, R, P)
         out["study"] = NAME
-        out["wall_clock_s"] = round(time.time() - t0, 2)
+        man = json.loads((HERE / "DATA_MANIFEST.json").read_text())
+        out["provenance"] = provenance.stamp({k: str(C.ROOT / k) for k in man["inputs"]}, cwd=str(C.ROOT))
+        out["control_K_anchor"] = "band_h2_combo_v1/RESULTS.json after_tax_windows.100k (see SUMMARY.txt)"
         (HERE / "RESULTS.json").write_text(json.dumps(out, indent=1, sort_keys=True, default=str))
-        print("wrote RESULTS.json", round(time.time() - t0, 1), "s")
+        wall = time.time() - t0
+        lines = [f"hrp_sleeve_v1 --run wall clock: {wall:.2f} s (includes data build and numba cache load)"]
+        for a in ("K", "D1", "D2", "D3"):
+            if a == "K":
+                k = out["windows"]["2000_03_to_2026_09"]["K"]
+                lines.append(f"K after-tax 2000/2010/2017: " + " / ".join(
+                    f"{out['windows'][w]['K']['after_tax_cagr']*100:.2f}" for w in C.TAX_WINDOWS))
+            else:
+                lines.append(f"{a} after-tax 2000/2010/2017: " + " / ".join(
+                    f"{out['windows'][w][a]['after_tax_cagr']*100:.2f}" for w in C.TAX_WINDOWS))
+        (HERE / "SUMMARY.txt").write_text("\n".join(lines) + "\n")
+        print("\n".join(lines))
 
 
 if __name__ == "__main__":

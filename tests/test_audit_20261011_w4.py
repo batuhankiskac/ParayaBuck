@@ -231,7 +231,7 @@ def test_unreadable_config_selects_paper_display_broker(tmp_path: Path, monkeypa
     import parayabuck.execution.alpaca as alpaca_module
 
     monkeypatch.setattr(alpaca_module, "AlpacaBroker", _Broker)
-    manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    manager.get_paper_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
     manager._refresh_account_snapshot()
     assert seen["paper"] is True
     assert manager.is_paper_mode() is False  # badge still fails open

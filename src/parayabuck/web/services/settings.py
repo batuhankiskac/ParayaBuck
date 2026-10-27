@@ -115,6 +115,68 @@ def _ensure_writable(path: Any) -> None:
         )
 
 
+def _read_raw_config(path: Any) -> dict[str, Any]:
+    """The settings YAML as a mapping; {} when missing or unreadable (blocking I/O)."""
+    if not path.exists():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def _restore_env(path: Any, previous: str | None) -> None:
+    """Put the .env back as it was before a save that failed after rotating a key."""
+    try:
+        if previous is None:
+            path.unlink(missing_ok=True)
+        else:
+            atomic_write(path, previous, 0o600)
+    except Exception:
+        log.critical("Could not roll back %s after a failed settings save; check the credentials file", path)
+
+
+def _write_settings_files(
+    manager: Any,
+    cfg_raw: dict[str, Any],
+    api_key: str,
+    secret_key: str,
+    has_credential_change: bool,
+) -> None:
+    """Write the credentials, then the config, then reset the account broker (blocking I/O).
+
+    Runs in a worker thread. If the config write fails after the .env was
+    rotated, the .env is restored, so the stored key pair never runs ahead of
+    settings.yaml.
+    """
+    env_before: str | None = None
+    if has_credential_change:
+        env_before = manager.env_path.read_text(encoding="utf-8") if manager.env_path.exists() else None
+        _atomic_update_credentials(manager.env_path, api_key, secret_key)
+    try:
+        atomic_write(
+            manager.config_path,
+            yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
+        )
+    except Exception:
+        if has_credential_change:
+            _restore_env(manager.env_path, env_before)
+        raise
+    manager.reset_broker()
+
+
+async def _best_effort_restart(manager: Any, reason: str) -> None:
+    """Start the engine again after an aborted settings save; never raises.
+
+    Closes the settings write window first, since the window refuses starts.
+    """
+    manager.end_settings_write()
+    try:
+        await asyncio.to_thread(manager.start_engine)
+    except Exception as exc:
+        log.warning("%s: best-effort engine restart did not succeed: %s", reason, exc)
+
+
 class SettingsService:
     """Transactional settings persistence."""
 
@@ -123,6 +185,10 @@ class SettingsService:
         self._lock: asyncio.Lock = settings_lock or asyncio.Lock()
 
     async def get_settings(self) -> dict[str, Any]:
+        # YAML, .env and mode reads: kept off the event loop.
+        return await asyncio.to_thread(self._build_settings_view)
+
+    def _build_settings_view(self) -> dict[str, Any]:
         manager = self.manager
         # The drawer shows and edits the PAPER key pair only (B3): in PAPER
         # mode that is the configured pair, in LIVE mode the PAPER names.
@@ -186,19 +252,15 @@ class SettingsService:
 
         async with self._lock:
             if payload.expected_config_digest is not None:
-                current = _current_digest()
+                current = await asyncio.to_thread(_current_digest)
                 if current != payload.expected_config_digest:
                     raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
-            raw_before: dict[str, Any] = {}
-            if manager.config_path.exists():
-                try:
-                    raw_before = yaml.safe_load(manager.config_path.read_text(encoding="utf-8")) or {}
-                except Exception:
-                    raw_before = {}
+            raw_before: dict[str, Any] = await asyncio.to_thread(_read_raw_config, manager.config_path)
             old_paper_before = manager.is_paper_mode()
 
-            validated = manager._validated_settings_payload(payload)
+            # Validation writes and re-parses the settings file: off the event loop.
+            validated = await asyncio.to_thread(manager._validated_settings_payload, payload)
             cfg_raw = validated.cfg_raw
             old_app = validated.old_app
             api_key = validated.api_key
@@ -302,7 +364,7 @@ class SettingsService:
 
             is_no_op = not has_web_only_change and not has_runtime_change
 
-            active_runtime = manager.has_active_runtime()
+            active_runtime = await asyncio.to_thread(manager.has_active_runtime)
             needs_restart = has_runtime_change
             if active_runtime and needs_restart and not payload.restart_engine:
                 raise ValueError("Stop the bot before saving settings without a restart")
@@ -318,7 +380,7 @@ class SettingsService:
                 }
 
             if payload.expected_config_digest is not None:
-                latest = _current_digest()
+                latest = await asyncio.to_thread(_current_digest)
                 if latest != payload.expected_config_digest:
                     raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
@@ -329,48 +391,51 @@ class SettingsService:
             if has_credential_change:
                 _ensure_writable(manager.env_path)
 
+            # From here until the files are written, starts are refused: a manual
+            # or auto start in the stop→write window would read a half-written config.
+            manager.begin_settings_write()
             was_stopped_for_restart = False
-            if restart_engine:
-                await asyncio.to_thread(manager.stop_engine)
-                was_stopped_for_restart = True
-                if manager.engine_state != "stopped":
-                    raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
-                if payload.expected_config_digest is not None:
-                    latest2 = _current_digest()
-                    if latest2 != payload.expected_config_digest:
-                        try:
-                            await asyncio.to_thread(manager.start_engine)
-                        except Exception as exc2:
-                            log.warning("Conflict after stop; best-effort restart failed: %s", exc2)
+            try:
+                if restart_engine:
+                    await asyncio.to_thread(manager.stop_engine)
+                    was_stopped_for_restart = True
+                    if manager.engine_state != "stopped":
+                        raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
+                    if payload.expected_config_digest is not None:
+                        latest2 = await asyncio.to_thread(_current_digest)
+                        if latest2 != payload.expected_config_digest:
+                            await _best_effort_restart(manager, "Conflict after stop")
+                            raise HTTPException(
+                                status_code=409, detail="Configuration has changed; refresh and try again"
+                            )
+
+                if not was_stopped_for_restart and payload.expected_config_digest is not None:
+                    latest3 = await asyncio.to_thread(_current_digest)
+                    if latest3 != payload.expected_config_digest:
                         raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
 
-            if not was_stopped_for_restart and payload.expected_config_digest is not None:
-                latest3 = _current_digest()
-                if latest3 != payload.expected_config_digest:
-                    raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
-
-            try:
-                if has_credential_change:
-                    _atomic_update_credentials(manager.env_path, api_key, secret_key)
-                atomic_write(
-                    manager.config_path,
-                    yaml.safe_dump(cfg_raw, sort_keys=False, default_flow_style=False),
-                )
-                manager.reset_broker()
-            except Exception as exc:
-                # Never strand a stopped engine: put it back, then report the
-                # original failure.
-                if was_stopped_for_restart:
-                    log.warning(
-                        "Settings save failed after the engine was stopped (%s); "
-                        "attempting best-effort restart to avoid leaving the bot down",
-                        exc,
+                try:
+                    await asyncio.to_thread(
+                        _write_settings_files,
+                        manager,
+                        cfg_raw,
+                        api_key,
+                        secret_key,
+                        has_credential_change,
                     )
-                    try:
-                        await asyncio.to_thread(manager.start_engine)
-                    except Exception as exc2:
-                        log.warning("Best-effort restart after failed save did not succeed: %s", exc2)
-                raise
+                except Exception as exc:
+                    # Never strand a stopped engine: put it back, then report the
+                    # original failure.
+                    if was_stopped_for_restart:
+                        log.warning(
+                            "Settings save failed after the engine was stopped (%s); "
+                            "attempting best-effort restart to avoid leaving the bot down",
+                            exc,
+                        )
+                        await _best_effort_restart(manager, "Settings save failed")
+                    raise
+            finally:
+                manager.end_settings_write()
             if has_credential_change:
                 manager.invalidate_live_arming()
             restart_error: str | None = None

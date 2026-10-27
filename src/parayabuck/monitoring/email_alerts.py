@@ -71,6 +71,7 @@ class _Outgoing:
     fields: dict[str, object]
     created_at: datetime
     test: bool = False
+    throttle_key: str = ""
 
 
 def _smtp_credentials(env: Mapping[str, str] | None = None) -> tuple[str, str]:
@@ -240,7 +241,11 @@ class EmailAlertSink:
         self._sleep = sleep
         self._queue: queue.Queue[_Outgoing | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
         self._lock = threading.Lock()
+        # Throttle clock per key, started only by a successful send (see process_one).
         self._last_sent: dict[str, float] = {}
+        # Keys queued but not yet sent, with the time they were queued: a repeat
+        # of one of them inside the window is coalesced, not queued again.
+        self._pending: dict[str, float] = {}
         self._sent_times: deque[float] = deque()
         self.sent = 0
         self.failed = 0
@@ -268,6 +273,9 @@ class EmailAlertSink:
             last = self._last_sent.get(throttle_key)
             if last is not None and window > 0 and now - last < window:
                 return False
+            queued_at = self._pending.get(throttle_key)
+            if queued_at is not None and window > 0 and now - queued_at < window:
+                return False
             while self._sent_times and now - self._sent_times[0] >= 3600.0:
                 self._sent_times.popleft()
             if len(self._sent_times) >= int(self.settings.max_per_hour):
@@ -275,20 +283,18 @@ class EmailAlertSink:
                 rate_limited = True
             else:
                 rate_limited = False
-                self._last_sent[throttle_key] = now
                 self._sent_times.append(now)
-                if len(self._last_sent) > _THROTTLE_KEYS_MAX:
-                    for key in [k for k, t in self._last_sent.items() if now - t >= window]:
-                        del self._last_sent[key]
+                self._pending[throttle_key] = now
         if rate_limited:
             _record_delivery_failure(kind, "rate_limited", f"more than {self.settings.max_per_hour} e-mails this hour")
             return False
-        item = _Outgoing(kind, str(message), dict(fields), datetime.now(UTC))
+        item = _Outgoing(kind, str(message), dict(fields), datetime.now(UTC), throttle_key=throttle_key)
         try:
             self._queue.put_nowait(item)
         except queue.Full:
             with self._lock:
                 self.dropped += 1
+                self._pending.pop(throttle_key, None)
             _record_delivery_failure(kind, "queue_full", "e-mail queue is full")
             return False
         return True
@@ -342,6 +348,14 @@ class EmailAlertSink:
                 self._deliver_with_retry(item)
                 with self._lock:
                     self.sent += 1
+                    # The throttle window starts at a successful send. A failed
+                    # delivery leaves the next repeat free to be queued and retried.
+                    now = self._clock()
+                    self._last_sent[item.throttle_key] = now
+                    window = max(0.0, float(self.settings.min_interval_minutes)) * 60.0
+                    if len(self._last_sent) > _THROTTLE_KEYS_MAX:
+                        for key in [k for k, t in self._last_sent.items() if now - t >= window]:
+                            del self._last_sent[key]
             except Exception as exc:
                 with self._lock:
                     self.failed += 1
@@ -350,11 +364,15 @@ class EmailAlertSink:
                 log.warning("Alert e-mail for kind=%s not delivered: %s", item.kind, detail)
                 _record_delivery_failure(item.kind, type(exc).__name__, detail)
         finally:
+            if item is not None:
+                with self._lock:
+                    self._pending.pop(item.throttle_key, None)
             self._queue.task_done()
         return True
 
     def _run(self) -> None:
-        while not self._closed:
+        # close() only stops intake: alerts already queued are still delivered
+        while not (self._closed and self._queue.empty()):
             try:
                 self.process_one(timeout=1.0)
             except Exception:  # pragma: no cover - the worker must never die

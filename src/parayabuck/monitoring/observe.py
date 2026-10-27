@@ -8,6 +8,7 @@ on observability. Failures are counted via journal metrics and reported by the
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from parayabuck.monitoring.journal import emit_journal
@@ -17,6 +18,11 @@ log = logging.getLogger("parayabuck.monitoring.observe")
 
 # ------------------------------------------------------------------ dedup state
 _last_state: dict[str, str] = {}
+# A clean reconciliation runs every minute; it is journaled at most once an hour
+# per phase, and again right after any reconciliation failure, drift or recovery
+# (the soak auditor treats a later success as the proof an incident ended).
+_RECONCILIATION_SUCCESS_INTERVAL_SECONDS = 3600.0
+_reconciliation_success_emitted_at: dict[str, float] = {}
 
 
 def _emit_safely(**kwargs: Any) -> None:
@@ -38,6 +44,12 @@ def _dedup(key: str, new: str) -> bool:
 
 def reset_dedup_for_tests() -> None:
     _last_state.clear()
+    _reconciliation_success_emitted_at.clear()
+
+
+def note_reconciliation_alert() -> None:
+    """A reconciliation failure, drift or recovery was raised: the next clean run is journaled."""
+    _reconciliation_success_emitted_at.clear()
 
 
 # ------------------------------------------------------------------ runtime
@@ -79,6 +91,11 @@ def on_runtime_health_recovered(*, session_id: str | None = None) -> None:
 
 # ------------------------------------------------------------------ reconciliation
 def on_reconciliation_complete(*, phase: str, session_id: str | None = None) -> None:
+    now = time.monotonic()
+    last = _reconciliation_success_emitted_at.get(phase)
+    if last is not None and now - last < _RECONCILIATION_SUCCESS_INTERVAL_SECONDS:
+        return
+    _reconciliation_success_emitted_at[phase] = now
     _emit_safely(
         kind="reconciliation_succeeded",
         message=f"{phase} reconciliation completed without drift",

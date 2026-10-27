@@ -33,6 +33,8 @@ log = logging.getLogger("parayabuck.monitoring.alerts")
 
 _DEFAULT_THROTTLE_SECONDS = 60.0
 _THROTTLE_KEYS_MAX = 4096
+# Alerts that end or start a reconciliation episode: observe re-journals the next clean run after them.
+_RECONCILIATION_ALERT_KINDS = frozenset({"reconciliation_failure", "reconciliation_recovered", "broker_local_drift"})
 
 _lock = threading.Lock()
 _throttle_seconds = _DEFAULT_THROTTLE_SECONDS
@@ -100,6 +102,10 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
         if kind not in ALERT_KINDS:
             log.error("Ignored alert with unknown kind=%r", kind)
             return
+        if kind in _RECONCILIATION_ALERT_KINDS:
+            from parayabuck.monitoring import observe
+
+            observe.note_reconciliation_alert()
         throttle_key = _throttle_key(kind, dict(fields))
         with _lock:
             throttle = _throttle_seconds

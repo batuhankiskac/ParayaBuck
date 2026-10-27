@@ -283,6 +283,16 @@ def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> Heal
 _RECONCILE_INTERVAL_SECONDS = 60.0
 
 
+def _heartbeat_tolerance_seconds(config: Config) -> float:
+    """Heartbeat age past which the runtime is stale: 90 s, or three snapshot intervals.
+
+    The snapshot is written once per ``snapshot_interval_seconds``, so a fixed
+    90 s tolerance reads a healthy runtime as dead whenever the configured
+    interval is longer than that.
+    """
+    return max(90.0, 3.0 * float(config.observability.snapshot_interval_seconds))
+
+
 def _account_stale_seconds(config: Config) -> float:
     """Age of ``last_reconciliation_at`` past which the account is stale.
 
@@ -714,7 +724,7 @@ def evaluate_health(
             health_snapshot = None
 
     checks: list[HealthCheck] = []
-    checks.append(_check_runtime_heartbeat(snapshot_path, now))
+    checks.append(_check_runtime_heartbeat(snapshot_path, now, _heartbeat_tolerance_seconds(config)))
     checks.append(_check_workers(health_snapshot, now, config))
     checks.append(_check_queue(health_snapshot, config))
     checks.append(_check_account(health_snapshot, now, config))
@@ -796,6 +806,9 @@ def _derive_trading_state(health_snapshot: dict[str, Any] | None, checks: list[H
         # check if any worker critical would still be active? But if running and no block => ACTIVE
         for c in checks:
             if c.code in {"runtime_heartbeat", "workers"} and c.status in {HealthStatus.CRITICAL, HealthStatus.UNKNOWN}:
+                return TradingState.UNKNOWN
+            # A missed scheduled decision: the process is alive but not trading, so never ACTIVE
+            if c.code == "intent_watchdog" and c.status == HealthStatus.CRITICAL:
                 return TradingState.UNKNOWN
         return TradingState.ACTIVE
     return TradingState.UNKNOWN

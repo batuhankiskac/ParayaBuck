@@ -32,15 +32,20 @@ import queue
 import sqlite3
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from parayabuck.monitoring.events import EMAIL_ALERT_KINDS
 from parayabuck.monitoring.operational_event import OperationalEvent, redact_fields
 
 if TYPE_CHECKING:
     from parayabuck.config import ObservabilityConfig
+
+# Halts, incidents and operator-attention signals. emit() commits these before it
+# reports them written, so a crash right after the call cannot lose them.
+SAFETY_JOURNAL_KINDS: frozenset[str] = EMAIL_ALERT_KINDS
 
 log = logging.getLogger("parayabuck.monitoring.journal")
 
@@ -264,9 +269,10 @@ class EventJournal:
             self._flush_batch(batch)
             batch.clear()
 
-    def _flush_batch(self, batch: list[OperationalEvent]) -> None:
+    def _flush_batch(self, batch: list[OperationalEvent]) -> bool:
+        """Write one batch in a single transaction; True only once it is committed."""
         if not batch:
-            return
+            return True
         try:
             conn = self._connect()
             try:
@@ -312,11 +318,13 @@ class EventJournal:
                     self._retention_cleanup(conn)
             finally:
                 conn.close()
+            return True
         except Exception:
             with self._lock:
                 self._stats.failed += len(batch)
                 self._stats.last_failure_at = datetime.now(UTC).isoformat()
             log.warning("journal batch write failed for %d events", len(batch), exc_info=True)
+            return False
 
     def _retention_cleanup(self, conn: sqlite3.Connection) -> None:
         try:
@@ -341,12 +349,18 @@ class EventJournal:
     def emit(self, event: OperationalEvent) -> bool:
         """Enqueue event for durable write. Never raises, never blocks trading.
 
-        Returns True if queued, False if dropped (queue full).
+        Returns True if queued, False if dropped (queue full). Safety kinds
+        (``SAFETY_JOURNAL_KINDS``) are committed in the caller's thread before
+        emit returns, so True means the row is on disk. Fields are redacted here
+        too, so every write path stores the redacted copy.
         A read-only handle never writes: emit is a no-op returning False.
         """
         if getattr(self, "_read_only", False):
             return False
         try:
+            event = replace(event, fields=redact_fields(event.fields))
+            if event.kind in SAFETY_JOURNAL_KINDS:
+                return self._flush_batch([event])
             # ensure writer started lazily
             if not self._started:
                 self.start()
@@ -487,14 +501,22 @@ _global_lock = threading.Lock()
 _global_is_configured = False
 
 
+_isolated_journals: dict[str, EventJournal] = {}
+
+
 def get_journal(path: str | Path | None = None) -> EventJournal:
     global _global_journal
     with _global_lock:
         if _global_journal is None:
             _global_journal = EventJournal(path or DEFAULT_JOURNAL_PATH)
         elif path is not None and str(path) != str(_global_journal.path):
-            # allow tests to request isolated path
-            return EventJournal(path)
+            # allow tests to request isolated path; one handle (and one writer
+            # thread) per path, not a new never-stopped writer on every call
+            key = str(path)
+            isolated = _isolated_journals.get(key)
+            if isolated is None:
+                isolated = _isolated_journals[key] = EventJournal(path)
+            return isolated
         return _global_journal
 
 

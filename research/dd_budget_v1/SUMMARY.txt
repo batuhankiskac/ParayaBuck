@@ -1,0 +1,8 @@
+dd_budget_v1 SUMMARY (numbers from RESULTS.json)
+wall_clock_seconds_run: 18.0
+passing arms: none
+K: pre CAGR base 15.76% max DD 46.67% after tax 2000/2010/2017 10.75/15.24/23.97% sells/yr 10.2 exposure(vote-on) 1.754
+R2: pre CAGR base 15.48% max DD 46.76% after tax 2000/2010/2017 10.16/14.71/22.89% sells/yr 29.6 exposure(vote-on) 1.754
+U1: pre CAGR base 14.99% max DD 40.43% after tax 2000/2010/2017 10.35/13.90/21.71% sells/yr 9.1 exposure(vote-on) 1.728
+U2: pre CAGR base 14.58% max DD 43.81% after tax 2000/2010/2017 10.02/13.67/21.15% sells/yr 8.9 exposure(vote-on) 1.718
+U3: pre CAGR base 14.92% max DD 40.19% after tax 2000/2010/2017 10.26/13.72/21.29% sells/yr 9.2 exposure(vote-on) 1.723

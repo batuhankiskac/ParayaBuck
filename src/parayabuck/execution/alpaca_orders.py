@@ -18,6 +18,7 @@ Responsibility:
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Any
 
@@ -79,6 +80,12 @@ class OrderService:
             rules = self.asset_trading_rules(order.symbol, order.market)
         except Exception as exc:
             raise DefiniteOrderRejection(f"Portfolio order {order.client_order_id} not submitted: {exc}") from exc
+        # NaN and inf compare false against every floor, so they would pass the
+        # size and notional guards below. Refuse them before any comparison.
+        if not (math.isfinite(order.quantity) and math.isfinite(order.reference_price)):
+            raise DefiniteOrderRejection(
+                f"Portfolio order {order.client_order_id} not submitted: non-finite quantity or reference price"
+            )
         quantity = Decimal(str(order.quantity))
         increment = Decimal(str(rules.quantity_increment))
         quantity = floor_increment_decimal(quantity, increment)

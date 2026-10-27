@@ -558,13 +558,20 @@ Known modelling differences (accepted, not bugs):
 external cash moves count as trading P&L. Off, a deposit, a withdrawal or a
 journal (`CSD`, `CSW`, `JNLC` activities) moves the day's P&L, the daily-loss
 latch input and the drawdown peak, as it always has. On, the account snapshot
-reads the day's net external cash from the broker's activities and subtracts
-it from the daily P&L, from the drawdown peak (which tracks equity net of that
-cash) and so from the figures the latches read. If the activities read fails,
-that poll is not adjusted and a warning is logged. The runtime copies the flag
-onto the broker when the engine is built (`runtime.py`); `execution/alpaca_account.py` reads it. The default keeps
-today's figures; turning the flag on changes the risk inputs and is an owner
-decision.
+reads the net external cash from the broker's activities (today's and the
+history before today) and subtracts today's part from the daily P&L. The
+drawdown peak is kept on equity net of all external cash since the account
+began, so a deposit that settles a day later is not read as a gain (T2-4-1).
+The peak only moves on a confirmed read: a possible new high is checked against
+a fresh activities read, and a poll whose activities read fails leaves the peak
+where it is. The reported peak is shifted by the same net cash, so the figures
+the latches read stay on trading performance. A failed read logs a warning and
+the daily P&L for that poll is not adjusted. The runtime copies the flag onto
+the broker when the engine is built (`runtime.py`); `execution/alpaca_account.py`
+reads it. The default keeps today's figures; turning the flag on changes the
+risk inputs and is an owner decision. If the flag was ever on before this
+change, the stored peak may hold a deposit-inflated value; check it before the
+flag is turned on again.
 
 ## State, backup and restore
 

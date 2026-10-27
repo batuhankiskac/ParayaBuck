@@ -49,6 +49,11 @@ log = get_logger("parayabuck.portfolio.ownership_rebase")
 
 # Alpaca reports quantities to 9 decimals; a relative band absorbs that noise.
 QUANTITY_TOLERANCE = 1e-6
+# Absolute floor of the same-share-count band: Alpaca's 9-decimal noise on a
+# small holding. Drift detection, the reconcile MATCH bucket, the ownership
+# classifier and the rebase expected-owned check all use this one band
+# (T2-4-3), so a difference is classified the same way everywhere.
+QUANTITY_MATCH_FLOOR = 1e-8
 
 # A reverse split pays cash in lieu for fractional shares, so the broker count
 # can sit up to about one share below the exact ratio. Applies to reductions
@@ -166,7 +171,8 @@ def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[lis
     is larger than the open quantity by more than the relative
     :data:`QUANTITY_TOLERANCE` (with a 1e-9 absolute floor). Such a fill
     cannot come from a consistent book; truncating it silently would hide it.
-    An increase without a cost basis, or a split with no open lots, raises too.
+    An increase without a cost basis, a buy without a finite positive unit
+    cost, or a split with no open lots, raises too.
     """
     lots: list[list[float]] = []  # FIFO [quantity, price]
     quantity = 0.0
@@ -206,8 +212,17 @@ def _replay_lots(events: Iterable[tuple[str, float, float | None]]) -> tuple[lis
             cost += amount * float(price)
             continue
         if kind == BUY:
-            if price is None or price <= 0 or amount <= 0:
+            if amount <= 0:
                 continue
+            # A buy with no usable price has no cost to carry. Dropping it would
+            # book the later sales of its shares at zero P&L, so it raises like
+            # an acquisition with a bad unit cost (T2-4-5).
+            if price is None or not math.isfinite(float(price)) or float(price) <= 0:
+                raise LotBookInconsistency(
+                    sell_quantity=amount,
+                    open_quantity=quantity,
+                    detail="a buy needs a finite positive unit cost",
+                )
             lots.append([amount, float(price)])
             quantity += amount
             cost += amount * float(price)
@@ -425,7 +440,11 @@ def classify_share_change(
     post = float(post_boundary_quantity)
     if not (math.isfinite(owned) and math.isfinite(broker) and math.isfinite(post)) or owned < 0 or broker < 0:
         raise ValueError("Share quantities must be finite and non-negative")
-    if owned <= 1e-12 or broker <= 1e-12 or abs(broker - owned) <= max(1e-12, owned * QUANTITY_TOLERANCE):
+    if (
+        owned <= 1e-12
+        or broker <= 1e-12
+        or abs(broker - owned) <= max(QUANTITY_MATCH_FLOOR, owned * QUANTITY_TOLERANCE)
+    ):
         return ShareChange(MATCH, owned, broker, 1.0, "owned quantity matches the broker position")
     whole_ratio = broker / owned
     pre_owned = owned - post

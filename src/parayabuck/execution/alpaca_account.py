@@ -41,7 +41,7 @@ from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import EmptyPositionsReadError, OwnershipDriftError
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
-from parayabuck.portfolio.ownership_rebase import QUANTITY_TOLERANCE
+from parayabuck.portfolio.ownership_rebase import QUANTITY_MATCH_FLOOR, QUANTITY_TOLERANCE
 from parayabuck.utils import is_crypto
 from parayabuck.utils.objects import field_value
 
@@ -55,11 +55,9 @@ __all__ = ["AccountService", "flat_broker_reconcile_scope", "quantities_agree"]
 # broker fault, not as a flat account.
 _FLAT_BROKER_ALLOWED: ContextVar[bool] = ContextVar("parayabuck_flat_broker_allowed", default=False)
 
-# Alpaca reports quantities to 9 decimals: this absolute floor absorbs that
-# noise for small holdings. Drift detection and the reconcile MATCH bucket
-# share ``quantities_agree`` so a share count is classified the same way
+# Drift detection and the reconcile MATCH bucket share ``quantities_agree``
+# (floor: ``QUANTITY_MATCH_FLOOR``) so a share count is classified the same way
 # everywhere.
-QUANTITY_MATCH_FLOOR = 1e-8
 
 _NEW_YORK = ZoneInfo("America/New_York")
 # Same-day external cash movements: deposits, withdrawals and journals.
@@ -111,50 +109,71 @@ def _account_status(account: Any) -> str | None:
     return str(getattr(raw, "value", raw)).strip().upper()
 
 
-def _read_same_day_external_flows(client: Any, trading_day: date) -> float:
-    """Net external cash moved into the account on ``trading_day``.
+def _read_external_flow_rows(client: Any, after: date | None) -> list[tuple[str, float]]:
+    """``(activity date, signed amount)`` of each external cash activity.
 
+    ``after`` is exclusive on the date (``None`` reads the whole history).
     Deposits count positive, withdrawals negative, journals as reported.
     Raises on any malformed row or an unfinished page so the caller keeps the
     unadjusted behaviour instead of trusting a partial sum.
     """
-    total = 0.0
+    rows: list[tuple[str, float]] = []
     seen_tokens: set[str] = set()
     page_token: str | None = None
     while True:
         query: dict[str, Any] = {
             "activity_types": ",".join(EXTERNAL_CASH_FLOW_ACTIVITY_TYPES),
-            # ``after`` is exclusive on the date: yesterday includes today.
-            "after": (trading_day - timedelta(days=1)).isoformat(),
             "direction": "asc",
             "page_size": _CASH_FLOW_PAGE_SIZE,
         }
+        if after is not None:
+            # ``after`` is exclusive on the date: yesterday includes today.
+            query["after"] = after.isoformat()
         if page_token is not None:
             query["page_token"] = page_token
         page = client.get(_ACTIVITIES_PATH, query)
         if not isinstance(page, list):
             raise ValueError("Alpaca activities response is not a list")
         for row in page:
-            if str(field_value(row, "date", "") or "")[:10] != trading_day.isoformat():
-                continue
+            day = str(field_value(row, "date", "") or "")[:10]
             activity_type = str(field_value(row, "activity_type", "") or "").upper()
             raw_amount = field_value(row, "net_amount", None)
             amount = float(raw_amount) if raw_amount is not None else math.nan
             if not math.isfinite(amount):
                 raise ValueError(f"Alpaca {activity_type or 'cash'} activity has a non-finite amount")
             if activity_type == "CSD":
-                total += abs(amount)
+                rows.append((day, abs(amount)))
             elif activity_type == "CSW":
-                total -= abs(amount)
+                rows.append((day, -abs(amount)))
             elif activity_type == "JNLC":
-                total += amount
+                rows.append((day, amount))
         if len(page) < _CASH_FLOW_PAGE_SIZE:
-            return total
+            return rows
         token = str(field_value(page[-1], "id", "") or "") if page else ""
         if not token or token in seen_tokens:
             raise ValueError("Alpaca activity pagination did not advance")
         seen_tokens.add(token)
         page_token = token
+
+
+def _read_same_day_external_flows(client: Any, trading_day: date) -> float:
+    """Net external cash moved into the account on ``trading_day``."""
+    day = trading_day.isoformat()
+    rows = _read_external_flow_rows(client, after=trading_day - timedelta(days=1))
+    return math.fsum(amount for row_day, amount in rows if row_day == day)
+
+
+def _read_external_flow_totals(client: Any, trading_day: date) -> tuple[float, float]:
+    """Net external cash before ``trading_day`` and on it, from the whole history.
+
+    The peak is kept on equity net of every external flow since the account
+    began (T2-4-1), so the history before today is needed, not only today.
+    """
+    day = trading_day.isoformat()
+    rows = _read_external_flow_rows(client, after=None)
+    before = math.fsum(amount for row_day, amount in rows if row_day < day)
+    on_day = math.fsum(amount for row_day, amount in rows if row_day == day)
+    return before, on_day
 
 
 @contextmanager
@@ -186,25 +205,38 @@ class AccountService:
         # Last previous-close equity seen with its New York trading day; a
         # missing ``last_equity`` on the same day reuses it instead of flat.
         self._last_equity_seen: tuple[date, float] | None = None
-        # (day, net external flow, monotonic read time) of the last good read.
-        self._cash_flow_cache: tuple[date, float, float] | None = None
+        # (day, net external cash before the day, net on the day, monotonic read
+        # time) of the last good read of the activities history.
+        self._cash_flow_cache: tuple[date, float, float, float] | None = None
 
-    def _same_day_external_flows(self, client: Any, trading_day: date) -> float:
-        """Net same-day external cash flow; 0.0 (current behaviour) on failure."""
+    def _external_flow_totals(
+        self, client: Any, trading_day: date, *, fresh: bool = False
+    ) -> tuple[float, float] | None:
+        """``(before, on day)`` net external cash; None when the history is unknown.
+
+        Served from the cache for ``_CASH_FLOW_CACHE_SECONDS`` unless ``fresh``.
+        A failed read is logged and returns None, so the caller never trusts a
+        partial history.
+        """
         cached = self._cash_flow_cache
         now = time.monotonic()
-        if cached is not None and cached[0] == trading_day and now - cached[2] <= _CASH_FLOW_CACHE_SECONDS:
-            return cached[1]
+        if (
+            not fresh
+            and cached is not None
+            and cached[0] == trading_day
+            and now - cached[3] <= _CASH_FLOW_CACHE_SECONDS
+        ):
+            return cached[1], cached[2]
         try:
-            flow = _read_same_day_external_flows(client, trading_day)
+            before, on_day = _read_external_flow_totals(client, trading_day)
         except Exception as exc:
             log.warning(
                 "Cash-flow activities unavailable; day P&L and peak are not adjusted this poll: %s",
                 exc,
             )
-            return 0.0
-        self._cash_flow_cache = (trading_day, flow, now)
-        return flow
+            return None
+        self._cash_flow_cache = (trading_day, before, on_day, now)
+        return before, on_day
 
     # -- blocked helpers -------------------------------------------------
 
@@ -434,12 +466,29 @@ class AccountService:
             previous_equity = seen[1]
         else:
             self._last_equity_seen = (trading_day, previous_equity)
-        # Same-day external cash moves are not trading P&L. Off by default:
-        # the flag lives in ``risk.adjust_for_cash_flows`` and the runtime
-        # copies it onto the broker.
-        cash_flows = 0.0
-        if getattr(broker, "adjust_for_cash_flows", False) is True:
-            cash_flows = self._same_day_external_flows(client, trading_day)
+        # External cash moves are not trading P&L. Off by default: the flag lives
+        # in ``risk.adjust_for_cash_flows`` and the runtime copies it onto the
+        # broker. On, today's net cash is netted out of the daily P&L, and the
+        # peak is kept on equity net of every external flow since the account
+        # began (T2-4-1), so a deposit that settles a day later is not a gain.
+        adjust_cash = getattr(broker, "adjust_for_cash_flows", False) is True
+        cash_flows = 0.0  # today's net external cash; 0.0 when unadjusted or unknown
+        reported_flows = 0.0  # all external cash the reported peak is shifted by
+        flow_totals: tuple[float, float] | None = None
+        if adjust_cash:
+            flow_totals = self._external_flow_totals(client, trading_day)
+            if flow_totals is not None and equity - sum(flow_totals) > broker._peak_equity:
+                # A possible new high. Confirm the history fresh, not from the
+                # cache, before the peak can move: a deposit posted inside the
+                # cache window must not be read as a gain. A failed read leaves
+                # the peak where it is.
+                flow_totals = self._external_flow_totals(client, trading_day, fresh=True)
+            if flow_totals is not None:
+                cash_flows = flow_totals[1]
+                reported_flows = sum(flow_totals)
+            elif self._cash_flow_cache is not None:
+                # Unknown this poll: shift the reported peak by the last good total.
+                reported_flows = sum(self._cash_flow_cache[1:3])
         # Optional: only the LIVE gap-safe BUY cap reads it; an absent or
         # unparsable value leaves that cap on cash alone.
         non_marginable_buying_power: float | None = None
@@ -639,9 +688,13 @@ class AccountService:
                 # must not re-raise the new one. The next poll reads afresh (C2-4-1).
                 raise RuntimeError("Risk epoch changed during the account read; snapshot discarded, next poll re-reads")
             old_peak = broker._peak_equity
-            # The high-water mark tracks equity net of today's external cash,
-            # so a same-day deposit or withdrawal never reads as a gain or loss.
-            broker._peak_equity = max(broker._peak_equity, equity - cash_flows)
+            if not adjust_cash:
+                broker._peak_equity = max(broker._peak_equity, equity)
+            elif flow_totals is not None:
+                # The high-water mark tracks equity net of every external flow
+                # since the account began, so a deposit or withdrawal never reads
+                # as a gain or loss. Unknown flows never move it (T2-4-1).
+                broker._peak_equity = max(broker._peak_equity, equity - sum(flow_totals))
             peak_equity = broker._peak_equity
             if peak_equity != old_peak or self._peak_save_pending:
                 try:
@@ -665,9 +718,9 @@ class AccountService:
         snapshot = AccountSnapshot(
             cash=cash,
             equity=equity,
-            # Reported against raw equity: adding today's net cash back keeps
-            # drawdown measured on trading performance, not on the transfer.
-            peak_equity=peak_equity + cash_flows,
+            # Reported against raw equity: adding the net external cash back
+            # keeps drawdown measured on trading performance, not on transfers.
+            peak_equity=peak_equity + reported_flows,
             daily_pnl=daily_pnl,
             positions=tuple(positions),
             realized_pnl=daily_pnl - intraday_unrealized,

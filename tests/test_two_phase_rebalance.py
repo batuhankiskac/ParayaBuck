@@ -165,8 +165,10 @@ def _fill(
     *,
     cumulative: float | None = None,
     status: str = "fill",
-    activity_id: str = "activity-1",
+    activity_id: str | None = None,
 ) -> None:
+    # Default id is per order: a broker fill id is unique, and two orders
+    # sharing one would collide in portfolio_fills (F2-4-2 refuses that).
     repository.apply_trade_update(
         client_order_id=order.client_order_id,
         broker_order_id="broker-" + order.client_order_id,
@@ -174,7 +176,7 @@ def _fill(
         cumulative_filled_quantity=(cumulative if cumulative is not None else order.quantity),
         average_fill_price=order.reference_price,
         occurred_at=order.decision_timestamp,
-        activity_id=activity_id,
+        activity_id=activity_id or f"activity-1:{order.client_order_id}",
         fee=0.0,
         realized_pnl=0.0,
         unrealized_pnl=0.0,

@@ -90,12 +90,14 @@ def test_working_and_terminal_transitions_still_apply(tmp_path) -> None:
     assert _row(repo)["status"] == "canceled"
 
 
-def test_done_for_day_order_can_resume_working(tmp_path) -> None:
-    # Alpaca resumes a done_for_day order on the next session.
+def test_done_for_day_order_is_not_revived_by_late_working_event(tmp_path) -> None:
+    # done_for_day is final: a late working-status event must not pull the
+    # row back into open_orders (Alpaca does not resume the order).
     repo, _ = _submitted_order(tmp_path)
     _update(repo, "done_for_day", 0.0, None, "dfd-1")
     _update(repo, "new", 0.0, None, "new-1")
-    assert _row(repo)["status"] == "new"
+    assert _row(repo)["status"] == "done_for_day"
+    assert repo.open_orders("acct") == ()
 
 
 def test_update_without_price_keeps_persisted_fill_price(tmp_path) -> None:

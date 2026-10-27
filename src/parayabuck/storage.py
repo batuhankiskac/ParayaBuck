@@ -142,6 +142,30 @@ class SQLiteStore:
             self._references -= 1
 
 
+# Version of the runtime database schema this code writes, kept in SQLite's
+# ``user_version``. Bump it with every additive or destructive migration. A
+# database stamped with a higher version was written by newer code, and an
+# older build must not read or migrate it (a rollback would misread rows it
+# does not understand), so it is refused before any DDL runs.
+RUNTIME_SCHEMA_VERSION = 1
+
+
+def check_runtime_schema_version(connection: sqlite3.Connection) -> None:
+    """Refuse to migrate a database stamped by a newer schema than this code knows."""
+    stored = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    if stored > RUNTIME_SCHEMA_VERSION:
+        raise StorageInitializationError(
+            f"Runtime database schema version {stored} is newer than this build supports "
+            f"({RUNTIME_SCHEMA_VERSION}); refusing to open it. Run the matching newer build or restore "
+            "a backup taken by this build."
+        )
+
+
+def stamp_runtime_schema_version(connection: sqlite3.Connection) -> None:
+    """Record this build's schema version; called inside the migration transaction."""
+    connection.execute(f"PRAGMA user_version = {int(RUNTIME_SCHEMA_VERSION)}")
+
+
 def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:
     """Drop an unmigrated legacy journal ``orders`` table.
 
@@ -168,4 +192,11 @@ def migrate_legacy_decision_orders(connection: sqlite3.Connection) -> bool:
     return True
 
 
-__all__ = ["SQLiteStore", "StorageInitializationError", "migrate_legacy_decision_orders"]
+__all__ = [
+    "RUNTIME_SCHEMA_VERSION",
+    "SQLiteStore",
+    "StorageInitializationError",
+    "check_runtime_schema_version",
+    "migrate_legacy_decision_orders",
+    "stamp_runtime_schema_version",
+]

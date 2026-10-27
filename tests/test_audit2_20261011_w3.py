@@ -391,16 +391,19 @@ def _buy_100_at_10(repo: PortfolioStateRepository) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "kwargs",
-    [{"broker_average_cost": 20.0}, {"kind": "split_rebase"}],
-)
-def test_operator_reverse_split_rebase_rescales_cost_basis(tmp_path: Path, kwargs: dict[str, Any]) -> None:
-    """Q1C-1/Q1C-4: an operator 1:2 reverse-split rebase rescales the lots."""
+def test_operator_reverse_split_rebase_rescales_cost_basis(tmp_path: Path) -> None:
+    """Q1C-1/Q1C-4: an operator 1:2 reverse-split rebase rescales the lots.
+
+    The corroborating broker average cost is the only accepted proof: an
+    explicit ``kind="split_rebase"`` without it no longer rescales (F10-2), so
+    that parametrised case was removed."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     try:
         _buy_100_at_10(repo)
-        assert repo.rebase_ownership_to_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 50.0, **kwargs) == 50.0
+        assert (
+            repo.rebase_ownership_to_broker_quantity(ACCOUNT, SYMBOL, Market.EQUITY, 50.0, broker_average_cost=20.0)
+            == 50.0
+        )
         assert repo.owned_quantities(ACCOUNT, Market.EQUITY)[SYMBOL] == pytest.approx(50.0)
         assert repo.owned_cost_bases(ACCOUNT, SYMBOL, Market.EQUITY) == pytest.approx((20.0, 20.0))
     finally:

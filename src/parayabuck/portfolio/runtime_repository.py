@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict
+import sqlite3
+import threading
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -25,17 +27,23 @@ from parayabuck.execution.portfolio import (
 from parayabuck.logger import get_logger
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.ownership_rebase import (
+    ACQUIRE,
+    ACQUISITION_KIND,
     ADJUST,
     BUY,
     FOREIGN_SELL_KIND,
+    MATCH,
     QUANTITY_TOLERANCE,
     SELL,
     SPLIT,
     SPLIT_ADJUST,
     SPLIT_REBASE_KIND,
+    UNKNOWN,
     LotBookInconsistency,
+    ShareChange,
     _replay_lots,
     classify_share_change,
+    format_quantity,
     open_position_cost_bases,
     open_position_lots,
 )
@@ -178,11 +186,75 @@ def _upsert_drawdown_liquidation_state(
     )
 
 
+OPERATOR_REBASE_KIND = "operator_rebase"
+# ``OwnershipRebasePlan.booking_kind`` values that write nothing.
+NO_BOOKING = "none"
+REFUSED_BOOKING = "refused"
+# A stale-ownership clear: the broker showed no position, so the repository
+# cleared the shares. A real SELL submitted after the clear consumes it.
+STALE_CLEAR_KIND = "stale_ownership_clear"
+
+
+class OwnershipRebaseRefused(ValueError):
+    """An operator ownership rebase that the ledger cannot book safely."""
+
+
+@dataclass(frozen=True)
+class OwnershipRebasePlan:
+    """What an operator rebase onto a broker count would book.
+
+    ``booking_kind`` is the ``portfolio_ownership_adjustments.kind`` that would
+    be written (``split_rebase`` rescales the lots, ``operator_acquisition``
+    seeds a lot at the stated cost, ``operator_rebase`` depletes like a sale),
+    ``none`` when nothing changes, or ``refused`` with the reason in ``reason``.
+    ``split_effective_at`` is the instant a split takes effect, or None.
+    """
+
+    owned_quantity: float
+    broker_quantity: float
+    booking_kind: str
+    adjustment_quantity: float
+    reason: str
+    split_effective_at: datetime | None = None
+
+    @property
+    def refused(self) -> bool:
+        return self.booking_kind == REFUSED_BOOKING
+
+
+class _ReadOnlyStore(SQLiteStore):
+    """Connection that cannot write. Used only by operator dry runs.
+
+    It skips the constructor's directory creation and pragmas, so nothing on
+    disk is created or changed, and a missing database fails to open.
+    """
+
+    def __init__(self, path: str | Path) -> None:  # noqa: D107 - intentionally not calling super()
+        self.path = Path(path)
+        self.connection = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, check_same_thread=False)
+        self.lock = threading.RLock()
+        self._references = 0
+        self._closed = False
+
+
 class PortfolioStateRepository:
     def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
         self.store = store or SQLiteStore(path)
         self._owns_store = store is None
         self._migrate()
+
+    @classmethod
+    def open_read_only(cls, path: str | Path) -> PortfolioStateRepository:
+        """Read-only view of an existing decision database for operator dry runs.
+
+        No DDL, migration, WAL switch or identity write runs, so the dry run
+        never creates or upgrades the file. A missing file raises
+        ``sqlite3.OperationalError``.
+        """
+        repository = cls.__new__(cls)
+        repository.store = _ReadOnlyStore(path)
+        repository._owns_store = True
+        return repository
 
     def _migrate(self) -> None:
         # Refuse a newer schema before any DDL touches it.
@@ -393,6 +465,10 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     "ALTER TABLE portfolio_ownership_adjustments ADD COLUMN sign REAL NOT NULL DEFAULT -1.0"
                 )
+            if "unit_cost" not in adjustment_columns:
+                # Unit cost seeds the lot of an operator acquisition; no
+                # earlier row carries one (NULL), and none is ever priced.
+                self.store.connection.execute("ALTER TABLE portfolio_ownership_adjustments ADD COLUMN unit_cost REAL")
             self._ensure_hot_path_indexes()
             # Epoch for monotonic peak: old history must not undo an explicit
             # operator risk-epoch reset. The epoch is stored alongside
@@ -1166,12 +1242,17 @@ class PortfolioStateRepository:
         kind: str,
         note: str,
         sign: float = -1.0,
+        *,
+        effective_at: datetime | None = None,
+        unit_cost: float | None = None,
     ) -> None:
+        """``effective_at`` places a split at the instant it took effect, so the
+        replay rescales only the lots open then (default: now)."""
         self.store.connection.execute(
             """INSERT INTO portfolio_ownership_adjustments(
                 adjustment_id, account_id, symbol, market, quantity, sign, kind,
-                note, created_at, consumed_quantity
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""",
+                note, created_at, consumed_quantity, unit_cost
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)""",
             (
                 uuid4().hex,
                 account_id,
@@ -1181,7 +1262,8 @@ class PortfolioStateRepository:
                 float(sign),
                 kind,
                 note,
-                datetime.now(UTC).isoformat(),
+                (effective_at or datetime.now(UTC)).isoformat(),
+                unit_cost,
             ),
         )
 
@@ -1461,6 +1543,7 @@ class PortfolioStateRepository:
                         fill_delta,
                         fill_price,
                         float(fee or 0.0),
+                        order_created_at=order_created_at,
                     )
                     if side == "sell"
                     else realized_pnl
@@ -1595,9 +1678,18 @@ class PortfolioStateRepository:
         symbols as owned for a different (live) account. Legacy crypto rows
         are skipped: the equity-only runtime never owns a crypto holding.
         Delegates pure net calculation to ``runtime_ownership`` for testability.
+        Raises ``OwnershipInconsistency`` (a ``RuntimeError``) on negative net.
+        """
+        return self._net_quantities(account_id, market, allow_negative=False)
+
+    def _net_quantities(self, account_id: str, market: Market | None, *, allow_negative: bool) -> dict[str, float]:
+        """Net ownership; ``allow_negative`` keeps negative entries for the operator path.
+
+        Filled quantities are summed per symbol and side in SQL, so the read
+        does not grow with the whole order history.
         """
         query = """
-            SELECT o.symbol, o.side, o.cumulative_filled_quantity
+            SELECT o.symbol, o.side, SUM(o.cumulative_filled_quantity)
             FROM portfolio_orders o
             JOIN portfolio_decisions d ON d.decision_id = o.decision_id
             JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -1607,6 +1699,7 @@ class PortfolioStateRepository:
         if market is not None:
             query += " AND o.market = ?"
             params = (*params, market.value)
+        query += " GROUP BY o.symbol, o.side"
         with self.store.lock:
             rows = self.store.connection.execute(query, params).fetchall()
             # An adjustment belongs to the market it was raised for; without
@@ -1630,7 +1723,7 @@ class PortfolioStateRepository:
         # Pure computation delegated
         order_tuples = [(str(r[0]), str(r[1]), float(r[2] or 0.0)) for r in rows]
         adj_tuples = [(str(r[0]), float(r[1] or 0.0)) for r in adjustments]
-        return net_owned_quantities(order_tuples, adj_tuples)
+        return net_owned_quantities(order_tuples, adj_tuples, allow_negative=allow_negative)
 
     def owned_symbols(self, account_id: str = "unknown", market: Market | None = None) -> set[str]:
         """Symbols the portfolio path still owns: net filled quantity > 0.
@@ -1685,13 +1778,21 @@ class PortfolioStateRepository:
         account_id: str,
         symbol: str,
         market: Market,
+        *,
+        consumable_clears_after: datetime | None = None,
+        consumable_quantity: float = 0.0,
     ) -> list[tuple[datetime, str, float, float | None, float]]:
         """Chronological ownership events of one symbol for one account.
 
         ``(occurred_at, kind, quantity, price, fee)`` for every fill and every
         outstanding ownership adjustment, ordered the way the FIFO replay
-        consumes them: fills before adjustments at the same instant, matching
-        ``open_position_cost_bases``' documented replay.
+        consumes them: a split takes effect before the fills at its instant,
+        other adjustments follow the fills, matching ``open_position_cost_bases``.
+
+        ``consumable_clears_after`` with ``consumable_quantity`` takes out the
+        stale-clear shares that a real SELL submitted at that instant would
+        consume (the rule of ``_consume_ownership_adjustments_tx``), so a late
+        exit is replayed against the lots as they stood before the clear.
         """
         with self.store.lock:
             fills = self.store.connection.execute(
@@ -1704,9 +1805,10 @@ class PortfolioStateRepository:
                 (account_id, symbol, market.value),
             ).fetchall()
             adjustments = self.store.connection.execute(
-                """SELECT created_at, sign * (quantity - consumed_quantity), kind
+                """SELECT created_at, sign * (quantity - consumed_quantity), kind, unit_cost
                    FROM portfolio_ownership_adjustments
-                   WHERE account_id = ? AND symbol = ? AND market = ? AND consumed_quantity < quantity""",
+                   WHERE account_id = ? AND symbol = ? AND market = ? AND consumed_quantity < quantity
+                   ORDER BY created_at""",
                 (account_id, symbol, market.value),
             ).fetchall()
         events: list[tuple[tuple[datetime, int], tuple[str, float, float | None, float]]] = []
@@ -1714,15 +1816,32 @@ class PortfolioStateRepository:
             kind = BUY if str(side).lower() == "buy" else SELL
             instant = _parse_instant(occurred_at)
             events.append(((instant, 0), (kind, float(quantity), float(price), float(fee or 0.0))))
-        for created_at, signed_quantity, adjustment_kind in adjustments:
-            # A booked reverse split rescales the open lots (fewer shares,
-            # same total cost); every other reduction depletes like a sale.
-            event_kind = (
-                SPLIT_ADJUST if str(adjustment_kind) == SPLIT_REBASE_KIND and float(signed_quantity) < 0 else ADJUST
-            )
-            events.append(
-                ((_parse_instant(created_at), 1), (event_kind, float(signed_quantity), None, 0.0)),
-            )
+        # Stale clears a real SELL would consume, oldest first (same rule as
+        # ``_consume_ownership_adjustments_tx``), are taken out of the replay.
+        remaining_consumable = float(consumable_quantity) if consumable_clears_after is not None else 0.0
+        for created_at, signed_quantity, adjustment_kind, unit_cost in adjustments:
+            instant = _parse_instant(created_at)
+            signed = float(signed_quantity)
+            kind_text = str(adjustment_kind)
+            if (
+                consumable_clears_after is not None
+                and kind_text == STALE_CLEAR_KIND
+                and signed < 0
+                and remaining_consumable > 1e-12
+                and _at_or_before(consumable_clears_after, created_at)
+            ):
+                taken = min(-signed, remaining_consumable)
+                remaining_consumable -= taken
+                signed += taken
+                if signed >= -1e-12:
+                    continue
+            if kind_text == SPLIT_REBASE_KIND:
+                # A split takes effect before the fills of its own instant.
+                events.append(((instant, -1), (SPLIT_ADJUST, signed, None, 0.0)))
+            elif kind_text == ACQUISITION_KIND and signed > 0:
+                events.append(((instant, 1), (ACQUIRE, signed, None if unit_cost is None else float(unit_cost), 0.0)))
+            else:
+                events.append(((instant, 1), (ADJUST, signed, None, 0.0)))
         events.sort(key=lambda item: item[0])
         return [(occurred_at, *event) for (occurred_at, _), event in events]
 
@@ -1760,11 +1879,20 @@ class PortfolioStateRepository:
         account_id: str,
         symbol: str,
         market: Market,
+        *,
+        consumable_clears_after: datetime | None = None,
+        consumable_quantity: float = 0.0,
     ) -> list[tuple[str, float, float | None]]:
         """Ownership events in the FIFO replay's shape: a buy's price is its
         effective unit cost (fill price plus that fill's fee per unit)."""
         events: list[tuple[str, float, float | None]] = []
-        for _, kind, quantity, price, fee in self._owned_events(account_id, symbol, market):
+        for _, kind, quantity, price, fee in self._owned_events(
+            account_id,
+            symbol,
+            market,
+            consumable_clears_after=consumable_clears_after,
+            consumable_quantity=consumable_quantity,
+        ):
             if kind == BUY and price is not None and quantity > 0:
                 events.append((kind, quantity, price + fee / quantity))
             else:
@@ -1779,6 +1907,8 @@ class PortfolioStateRepository:
         sell_quantity: float,
         sell_price: float,
         sell_fee: float,
+        *,
+        order_created_at: datetime | None = None,
     ) -> float:
         """Realized P&L of one SELL, FIFO against the bot's own lots.
 
@@ -1789,12 +1919,25 @@ class PortfolioStateRepository:
         consumed. Returns 0.0 for a non-sale or non-finite input, and 0.0 with
         a warning when the lot book cannot cover the sale: the audit value
         must never block booking the fill.
+
+        ``order_created_at`` is the sale's order time. A stale clear that this
+        sale will consume is left out of the replay: the clear had removed the
+        lots before the sale, so without that the sale would find nothing to
+        sell and book 0.0 (the consume runs after this P&L is computed).
         """
         quantity = float(sell_quantity)
         if not (math.isfinite(quantity) and quantity > 0 and math.isfinite(sell_price) and math.isfinite(sell_fee)):
             return 0.0
         try:
-            lots, open_quantity, _ = _replay_lots(self._fifo_replay_events(account_id, symbol, market))
+            lots, open_quantity, _ = _replay_lots(
+                self._fifo_replay_events(
+                    account_id,
+                    symbol,
+                    market,
+                    consumable_clears_after=order_created_at,
+                    consumable_quantity=quantity,
+                )
+            )
             remaining = quantity
             cost_of_consumed = 0.0
             for lot_quantity, unit_cost in lots:
@@ -1828,6 +1971,10 @@ class PortfolioStateRepository:
         then halts with an actionable incident for the operator to rebase
         explicitly).
 
+        A split is booked at the instant it took effect (see
+        ``_share_change_with_split_boundary``), so fills booked after it keep
+        their own cost basis instead of being rescaled with the old lots.
+
         Read and write share one lock hold, so a concurrent fill can never be
         rebased onto a stale owned quantity.
         """
@@ -1835,14 +1982,12 @@ class PortfolioStateRepository:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if owned <= 1e-12 or not math.isfinite(broker_quantity) or broker_quantity <= 0:
                 return None
-            bases = self.owned_cost_bases(account_id, symbol, market)
-            change = classify_share_change(
-                owned,
-                broker_quantity,
-                owned_average_cost=bases[0] if bases else None,
-                broker_average_cost=broker_average_cost,
-                owned_average_cost_candidates=bases[1:],
+            change, effective_at = self._share_change_with_split_boundary(
+                account_id, symbol, market, owned, broker_quantity, broker_average_cost
             )
+            if change.kind == MATCH:
+                self._resolve_surplus_alerts(account_id, symbol, market)
+                return None
             if not change.rebasable and broker_quantity > owned:
                 self._alert_unconfirmed_surplus(account_id, symbol, market, owned, broker_quantity, change.reason)
             if not change.rebasable:
@@ -1850,34 +1995,93 @@ class PortfolioStateRepository:
                     "Ownership rebase declined: account=%s symbol=%s owned=%s broker=%s reason=%s",
                     account_id,
                     symbol,
-                    owned,
-                    broker_quantity,
+                    format_quantity(owned),
+                    format_quantity(broker_quantity),
                     change.reason,
                 )
                 return None
+            note = (
+                f"{change.reason}; owned {format_quantity(owned)} -> {format_quantity(broker_quantity)} "
+                f"(ratio {change.ratio:g}, operator rebase available: "
+                "parayabuck ops rebase-ownership)"
+            )
+            if effective_at is not None:
+                note += f"; split effective {effective_at.isoformat()}"
             self._insert_ownership_adjustment_tx(
                 account_id,
                 symbol,
                 market,
                 abs(change.adjustment_quantity),
                 kind=SPLIT_REBASE_KIND if change.kind == SPLIT else FOREIGN_SELL_KIND,
-                note=(
-                    f"{change.reason}; owned {owned:g} -> {broker_quantity:g} "
-                    f"(ratio {change.ratio:g}, operator rebase available: "
-                    "parayabuck ops rebase-ownership)"
-                ),
+                note=note,
                 sign=1.0 if change.adjustment_quantity > 0 else -1.0,
+                effective_at=effective_at,
             )
+            self._resolve_surplus_alerts(account_id, symbol, market)
         log.warning(
             "Ownership rebased on broker quantity: account=%s symbol=%s owned=%s -> %s kind=%s reason=%s",
             account_id,
             symbol,
-            owned,
-            broker_quantity,
+            format_quantity(owned),
+            format_quantity(broker_quantity),
             change.kind,
             change.reason,
         )
         return broker_quantity
+
+    def _resolve_surplus_alerts(self, account_id: str, symbol: str, market: Market) -> None:
+        """Forget the surplus alerts of a symbol that reconciles now.
+
+        A later surplus on the same symbol is a new episode and alerts again
+        (C7-3: the once-per-episode key must not outlive the episode)."""
+        alerted = self.__dict__.get("_surplus_alerts")
+        if not alerted:
+            return
+        for key in [key for key in alerted if key[:3] == (account_id, market.value, symbol)]:
+            alerted.discard(key)
+
+    def _share_change_with_split_boundary(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        owned: float,
+        broker_quantity: float,
+        broker_average_cost: float | None,
+    ) -> tuple[ShareChange, datetime | None]:
+        """Classify the gap and find the instant of a split that explains it.
+
+        A split can land while fills are still booking: a DAY BUY at 09:30:02
+        after a 09:30:00 ex-date leaves the whole-position ratio off, and the
+        split is then missed. So when the plain classification is not a split,
+        each fill boundary is tried, latest first. The quantity booked at or
+        after that boundary is held out of the ratio, and the split is
+        accepted only when that ratio is a standard one and the total cost
+        basis corroborates it. The returned instant is the split's effective
+        time: the replay rescales only the lots that were open then.
+        """
+        events = self._owned_events(account_id, symbol, market)
+        try:
+            bases = open_position_cost_bases((kind, quantity, price) for _, kind, quantity, price, _ in events)
+        except LotBookInconsistency:
+            bases = ()
+        costs: dict[str, Any] = {
+            "owned_average_cost": bases[0] if bases else None,
+            "owned_average_cost_candidates": bases[1:],
+            "broker_average_cost": broker_average_cost,
+        }
+        change = classify_share_change(owned, broker_quantity, **costs)
+        if change.kind == SPLIT:
+            return change, None
+        for index in range(len(events) - 1, 0, -1):
+            instant, kind = events[index][0], events[index][1]
+            if kind not in (BUY, SELL) or events[index - 1][0] >= instant:
+                continue
+            post = sum(-event[2] if event[1] == SELL else event[2] for event in events[index:])
+            candidate = classify_share_change(owned, broker_quantity, post_boundary_quantity=post, **costs)
+            if candidate.kind == SPLIT:
+                return candidate, instant
+        return change, None
 
     def _alert_unconfirmed_surplus(
         self,
@@ -1900,10 +2104,13 @@ class PortfolioStateRepository:
         if key in alerted:
             return
         message = (
-            f"Broker holds {broker_quantity:g} {symbol} but the bot owns {owned:g} and no fill or "
-            f"confirmed split explains the surplus ({reason}). The surplus is treated as external. "
-            "If a forward split happened, adopt it with "
-            f"`parayabuck ops rebase-ownership {symbol} --broker-qty {broker_quantity:g} --confirm`."
+            f"Broker holds {format_quantity(broker_quantity)} {symbol} but the bot owns {format_quantity(owned)} "
+            f"and no fill or confirmed split explains the surplus ({reason}). The surplus is treated as external. "
+            "If a forward split happened, adopt it with the broker's average entry price: "
+            f"`parayabuck ops rebase-ownership {symbol} --broker-qty {format_quantity(broker_quantity)} "
+            f"--broker-average-cost <price> --confirm {format_quantity(owned)}`. "
+            "If the bot did not buy these shares, book them as an acquisition with "
+            "--acquisition-unit-cost <price> instead."
         )
         log.error("Unconfirmed ownership surplus: account=%s %s", account_id, message)
         try:
@@ -1913,7 +2120,7 @@ class PortfolioStateRepository:
                 "paper_incident",
                 message=message,
                 category="ownership_surplus_unconfirmed",
-                incident_id=f"ownership_surplus:{market.value}:{symbol}:{broker_quantity:g}",
+                incident_id=f"ownership_surplus:{market.value}:{symbol}:{format_quantity(broker_quantity)}",
                 symbol=symbol,
                 market=market.value,
                 owned_quantity=owned,
@@ -1924,6 +2131,98 @@ class PortfolioStateRepository:
             return
         alerted.add(key)
 
+    def plan_ownership_rebase(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        broker_quantity: float,
+        *,
+        broker_average_cost: float | None = None,
+        unit_cost: float | None = None,
+        expected_owned: float | None = None,
+    ) -> OwnershipRebasePlan:
+        """What an operator rebase onto ``broker_quantity`` would book, written nowhere.
+
+        The dry run prints this plan, and ``rebase_ownership_to_broker_quantity``
+        runs the same plan again inside its transaction before it writes.
+
+        Booking rules. A split books only with corroboration from
+        ``broker_average_cost`` (the lots are rescaled at the split instant).
+        An increase without that proof needs ``unit_cost`` and books an
+        acquisition lot at that cost; without either it is refused. A decrease
+        without the proof depletes the lots like a sale. The plan is refused
+        while non-terminal orders exist (the broker count is not final), when
+        the owned quantity is not ``expected_owned``, and when net ownership is
+        already negative (the operator must repair the ledger first).
+        """
+        if not math.isfinite(broker_quantity) or broker_quantity < 0:
+            raise ValueError("Broker quantity must be finite and non-negative")
+        if unit_cost is not None and (not math.isfinite(unit_cost) or unit_cost <= 0):
+            raise ValueError("Unit cost must be finite and positive")
+        with self.store.lock:
+            owned = self._net_quantities(account_id, market, allow_negative=True).get(symbol, 0.0)
+            adjustment = broker_quantity - owned
+
+            def plan(kind: str, reason: str, effective_at: datetime | None = None) -> OwnershipRebasePlan:
+                return OwnershipRebasePlan(owned, broker_quantity, kind, adjustment, reason, effective_at)
+
+            if abs(adjustment) <= 1e-12:
+                return plan(NO_BOOKING, "ownership already matches the broker quantity")
+            if expected_owned is not None and abs(owned - expected_owned) > max(
+                1e-9, expected_owned * QUANTITY_TOLERANCE
+            ):
+                return plan(
+                    REFUSED_BOOKING,
+                    f"owned quantity is {format_quantity(owned)}, not the {format_quantity(expected_owned)} the "
+                    "dry run showed; the ledger changed, so run the dry run again",
+                )
+            if owned < -1e-9:
+                return plan(
+                    REFUSED_BOOKING,
+                    f"net ownership is negative ({format_quantity(owned)}); the lot book cannot be rebased "
+                    "automatically and needs an operator repair",
+                )
+            pending = self.open_orders(account_id)
+            if pending:
+                return plan(
+                    REFUSED_BOOKING,
+                    f"{len(pending)} non-terminal portfolio order(s) for account {account_id}; wait for them to "
+                    "settle (or stop the engine) so the broker quantity is final",
+                )
+            change, effective_at = self._share_change_with_split_boundary(
+                account_id, symbol, market, owned, broker_quantity, broker_average_cost
+            )
+            if adjustment > 0:
+                if change.kind == SPLIT:
+                    if unit_cost is not None:
+                        return plan(
+                            REFUSED_BOOKING,
+                            "the broker average cost corroborates a split; drop --acquisition-unit-cost",
+                        )
+                    return plan(SPLIT_REBASE_KIND, change.reason, effective_at)
+                if unit_cost is None:
+                    return plan(
+                        REFUSED_BOOKING,
+                        "broker holds more shares than owned and no split is corroborated; pass "
+                        "--broker-average-cost for a split, or --acquisition-unit-cost to book the extra shares "
+                        "as an acquisition",
+                    )
+                return plan(
+                    ACQUISITION_KIND,
+                    f"acquisition of {format_quantity(adjustment)} shares at a unit cost of {unit_cost}",
+                )
+            if unit_cost is not None:
+                return plan(REFUSED_BOOKING, "--acquisition-unit-cost books an increase; this change is a decrease")
+            if change.kind == SPLIT:
+                return plan(SPLIT_REBASE_KIND, change.reason, effective_at)
+            reason = (
+                change.reason
+                if change.kind == UNKNOWN
+                else "no corroborated split: the difference is booked as a sale and depletes the oldest lots first"
+            )
+            return plan(OPERATOR_REBASE_KIND, reason)
+
     def rebase_ownership_to_broker_quantity(
         self,
         account_id: str,
@@ -1931,52 +2230,58 @@ class PortfolioStateRepository:
         market: Market,
         broker_quantity: float,
         *,
-        kind: str = "operator_rebase",
         note: str = "",
         broker_average_cost: float | None = None,
-    ) -> float | None:
+        unit_cost: float | None = None,
+        expected_owned: float | None = None,
+    ) -> float:
         """Operator-verified adoption of the broker's share count.
 
-        Unconditional by design: the operator has read the real position off
-        the broker. Read and write share one lock hold, so the resulting
-        owned quantity is exactly ``broker_quantity``. A zero-owned symbol
-        adopts a positive broker quantity as an explicit increase (the
-        recovery the surplus alert prescribes); adopting zero from zero is
-        a no-op that still returns the broker quantity.
-
-        A decrease is booked as a reverse split (``split_rebase``: the open
-        lots are rescaled, not sold) when the caller passes that ``kind``
-        explicitly, or when ``broker_average_cost`` corroborates a standard
-        split ratio exactly as the automatic reconcile path requires.
-        Otherwise it depletes the lots like a sale.
+        The booking rules are those of :meth:`plan_ownership_rebase`. The plan
+        and the write share one ``BEGIN IMMEDIATE`` transaction, so the open
+        order check, the owned read and the adjustment insert see one state even
+        against another process (F8-3). A refused plan raises
+        :class:`OwnershipRebaseRefused` and leaves the ledger unchanged.
+        Returns the broker quantity.
         """
-        if not math.isfinite(broker_quantity) or broker_quantity < 0:
-            raise ValueError("Broker quantity must be finite and non-negative")
-        with self.store.lock, self.store.connection:
-            owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
-            if abs(broker_quantity - owned) <= 1e-12:
-                return broker_quantity
-            if kind == "operator_rebase" and 1e-12 < broker_quantity < owned and broker_average_cost is not None:
-                bases = self.owned_cost_bases(account_id, symbol, market)
-                change = classify_share_change(
-                    owned,
+        with self.store.lock:
+            connection = self.store.connection
+            if connection.in_transaction:
+                raise RuntimeError("Ownership rebase needs an idle connection; a transaction is already open")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                plan = self.plan_ownership_rebase(
+                    account_id,
+                    symbol,
+                    market,
                     broker_quantity,
-                    owned_average_cost=bases[0] if bases else None,
                     broker_average_cost=broker_average_cost,
-                    owned_average_cost_candidates=bases[1:],
+                    unit_cost=unit_cost,
+                    expected_owned=expected_owned,
                 )
-                if change.kind == SPLIT:
-                    kind = SPLIT_REBASE_KIND
-                    note = note or f"operator rebase: {change.reason}; owned {owned:g} -> {broker_quantity:g}"
-            self._insert_ownership_adjustment_tx(
-                account_id,
-                symbol,
-                market,
-                abs(broker_quantity - owned),
-                kind=kind,
-                note=note or f"operator rebase onto the broker count: {owned:g} -> {broker_quantity:g}",
-                sign=1.0 if broker_quantity > owned else -1.0,
-            )
+                if plan.refused:
+                    raise OwnershipRebaseRefused(plan.reason)
+                if plan.booking_kind != NO_BOOKING:
+                    self._insert_ownership_adjustment_tx(
+                        account_id,
+                        symbol,
+                        market,
+                        abs(plan.adjustment_quantity),
+                        kind=plan.booking_kind,
+                        note=note
+                        or (
+                            f"operator rebase onto the broker count: {format_quantity(plan.owned_quantity)} -> "
+                            f"{format_quantity(broker_quantity)}; {plan.reason}"
+                        ),
+                        sign=1.0 if plan.adjustment_quantity > 0 else -1.0,
+                        effective_at=plan.split_effective_at,
+                        unit_cost=unit_cost if plan.booking_kind == ACQUISITION_KIND else None,
+                    )
+                    self._resolve_surplus_alerts(account_id, symbol, market)
+                connection.commit()
+            except BaseException:
+                connection.rollback()
+                raise
         return broker_quantity
 
     def operations_snapshot(self, account_id: str) -> dict[str, object]:

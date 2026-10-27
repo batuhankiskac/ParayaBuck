@@ -384,11 +384,19 @@ def test_rebase_cli_is_a_dry_run_by_default(tmp_path: Path, capsys: pytest.Captu
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     db = str(tmp_path / "runtime.sqlite3")
 
-    assert _cli(tmp_path, SYMBOL, "--broker-qty", "200", "--db", db, "--account-id", ACCOUNT) == 0
+    # A doubling is only bookable with the broker cost proof (F10-2); without
+    # it the dry run is now a refusal, so the proof is passed here.
+    assert (
+        _cli(
+            tmp_path, SYMBOL, "--broker-qty", "200", "--broker-average-cost", "25", "--db", db, "--account-id", ACCOUNT
+        )
+        == 0
+    )
 
     output = capsys.readouterr().out
     assert "Dry run" in output
     assert "200" in output
+    assert "split rescale" in output
     assert _owned(repo) == pytest.approx(100.0)
 
 
@@ -406,17 +414,22 @@ def test_rebase_cli_confirm_writes_the_audited_adjustment(tmp_path: Path, capsys
         db,
         "--account-id",
         ACCOUNT,
+        "--broker-average-cost",
+        "25",
         "--note",
         "QLD 2:1 split verified on the broker",
         "--confirm",
+        "100",
     )
 
     assert exit_code == 0
     assert "Ownership rebased" in capsys.readouterr().out
     assert _owned(repo) == pytest.approx(200.0)
     rows = repo.ownership_adjustments(ACCOUNT)
+    # The corroborated split is booked as a split (the old test accepted any
+    # increase as an operator_rebase that rescaled every lot).
     assert [(row["kind"], row["sign"], row["note"]) for row in rows] == [
-        ("operator_rebase", 1.0, "QLD 2:1 split verified on the broker")
+        ("split_rebase", 1.0, "QLD 2:1 split verified on the broker")
     ]
 
 
@@ -440,6 +453,7 @@ def test_rebase_cli_books_a_corroborated_reverse_split_as_a_split_rebase(
         "--account-id",
         ACCOUNT,
         "--confirm",
+        "100",
     )
 
     assert exit_code == 0
@@ -505,6 +519,7 @@ def test_rebase_cli_refuses_while_orders_are_open(tmp_path: Path, capsys: pytest
         "--account-id",
         ACCOUNT,
         "--confirm",
+        "100",
     )
 
     assert exit_code == 1
@@ -526,6 +541,7 @@ def test_rebase_cli_reports_nothing_to_rebase(tmp_path: Path, capsys: pytest.Cap
         "--account-id",
         ACCOUNT,
         "--confirm",
+        "100",
     )
 
     assert exit_code == 0
@@ -563,7 +579,9 @@ def test_rebase_cli_fails_instead_of_falling_back_to_the_default_config(
     broken = tmp_path / "broken.yaml"
     broken.write_text("runtime: {mode: backtest}\n", encoding="utf-8")
 
-    exit_code = main(["--config", str(broken), "ops", "rebase-ownership", SYMBOL, "--broker-qty", "200", "--confirm"])
+    exit_code = main(
+        ["--config", str(broken), "ops", "rebase-ownership", SYMBOL, "--broker-qty", "200", "--confirm", "100"]
+    )
 
     assert exit_code == 2
     assert "Cannot load the configuration" in capsys.readouterr().err
@@ -598,8 +616,10 @@ def test_open_position_cost_bases_follow_fifo_and_average_cost() -> None:
     assert fifo == pytest.approx(20.0)  # the 10.0 lot was sold first
     assert average == pytest.approx(15.0)
     assert open_position_cost_bases([*events, ("sell", 10.0, 30.0)]) == ()
-    # A split rebase doubles the shares and halves the lot prices.
-    assert open_position_cost_bases([*events, ("adjust", 10.0, None)]) == pytest.approx((10.0, 7.5))
+    # A split rebase doubles the shares and halves the lot prices. A plain
+    # positive ``adjust`` has no cost basis and is refused (F10-2), see
+    # tests/test_audit_fix_W11.py.
+    assert open_position_cost_bases([*events, ("split_adjust", 10.0, None)]) == pytest.approx((10.0, 7.5))
 
 
 def test_unconfirmed_surplus_on_a_bot_owned_symbol_alerts_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

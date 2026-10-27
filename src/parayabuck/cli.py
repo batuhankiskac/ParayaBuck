@@ -206,13 +206,36 @@ def _parser() -> argparse.ArgumentParser:
         "--broker-average-cost",
         type=float,
         default=None,
-        help="average entry price read off the broker position; lets a decrease that matches a "
-        "standard reverse-split ratio be booked as a split rescale instead of a sale",
+        help="average entry price read off the broker position. It is the proof of a split: when the broker "
+        "count is a standard split of the owned quantity and this price equals our total cost over the "
+        "broker's share count, the change is booked as a split (lots rescaled at the split instant). "
+        "Without it a decrease is booked as a sale (oldest lots depleted) and an increase is refused unless "
+        "--acquisition-unit-cost is given",
     )
-    rebase_p.add_argument("--account-id", default=None, help="defaults to the latest runtime session's account")
+    rebase_p.add_argument(
+        "--acquisition-unit-cost",
+        type=float,
+        default=None,
+        help="unit cost of shares the bot did not buy (a foreign purchase on the shared key). Books the "
+        "increase as an acquisition lot at this cost; refused when --broker-average-cost already "
+        "corroborates a split, and invalid for a decrease",
+    )
+    rebase_p.add_argument(
+        "--account-id",
+        default=None,
+        help="defaults to the latest runtime session's account; must be broker.expected_account_id when set",
+    )
     rebase_p.add_argument("--note", default="", help="audit note recorded with the adjustment")
     rebase_p.add_argument("--db", default=None, help="decision DB path override")
-    rebase_p.add_argument("--confirm", action="store_true", help="write the adjustment (dry run without it)")
+    rebase_p.add_argument(
+        "--confirm",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="OWNED",
+        help="write the adjustment. OWNED is the owned quantity the dry run printed; the write is refused if the "
+        "ledger now holds a different quantity. Without --confirm nothing is written",
+    )
     return parser
 
 
@@ -1708,15 +1731,20 @@ def _ops_bundle(args: argparse.Namespace) -> int:
 
 def _ops_rebase_ownership(args: argparse.Namespace) -> int:
     """Adopt the broker's share count for one symbol (the recovery for a
-    stock split or a foreign trade the runtime could not prove).
+    stock split, an acquisition or a foreign trade the runtime could not prove).
 
-    Dry run by default: the plan is printed and nothing is written without
-    ``--confirm``. The broker quantity is an operator input on purpose — this
-    is the verified recovery path, not a second guess at the broker. An
-    audited adjustment row records the change; open orders are refused because
-    the broker quantity they would move is not final yet.
+    Dry run by default: the booking that ``--confirm`` would write is printed
+    and nothing is written. The broker quantity is an operator input on purpose:
+    this is the verified recovery path, not a second guess at the broker. The
+    booking rules are those of ``PortfolioStateRepository.plan_ownership_rebase``.
+    A dry run opens the database read-only and never creates or migrates it.
     """
-    from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
+    from parayabuck.portfolio.ownership_rebase import format_quantity
+    from parayabuck.portfolio.runtime_repository import (
+        NO_BOOKING,
+        OwnershipRebaseRefused,
+        PortfolioStateRepository,
+    )
 
     symbol = canonical_symbol(str(args.symbol).strip().upper(), Market.EQUITY)
     broker_qty = float(args.broker_qty)
@@ -1732,16 +1760,45 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
-    db_path = getattr(args, "db", None)
-    if not db_path:
-        # A write command must never fall back to the default config: that
-        # could rebase ownership in a different database than the engine's.
-        try:
-            db_path = load_config(getattr(args, "config", None)).runtime.decision_db_path
-        except Exception as exc:
-            print(f"Cannot load the configuration ({exc}); fix it or pass --db explicitly.", file=sys.stderr)
+    unit_cost = getattr(args, "acquisition_unit_cost", None)
+    if unit_cost is not None:
+        unit_cost = float(unit_cost)
+        if not isfinite(unit_cost) or unit_cost <= 0:
+            print(
+                f"Invalid --acquisition-unit-cost {args.acquisition_unit_cost!r}: must be finite and > 0",
+                file=sys.stderr,
+            )
             return 2
-    repository = PortfolioStateRepository(db_path)
+    confirm_value = getattr(args, "confirm", None)
+    confirmed = confirm_value is not None
+    expected_owned: float | None = None
+    if confirmed:
+        if confirm_value == "":
+            print(
+                "--confirm needs the owned quantity the dry run printed, e.g. --confirm 100",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            expected_owned = float(confirm_value)
+        except ValueError:
+            expected_owned = float("nan")
+        if not isfinite(expected_owned) or expected_owned < 0:
+            print(f"Invalid --confirm {confirm_value!r}: must be the owned quantity, finite and >= 0", file=sys.stderr)
+            return 2
+    try:
+        config = load_config(getattr(args, "config", None))
+    except Exception as exc:
+        # A write must never fall back to the default config: that could
+        # rebase ownership in a different database than the engine's, and the
+        # symbol and account checks below need the configuration.
+        print(f"Cannot load the configuration ({exc}); fix it or pass --config explicitly.", file=sys.stderr)
+        return 2
+    db_path = getattr(args, "db", None) or config.runtime.decision_db_path
+    if not Path(db_path).is_file():
+        print(f"Decision database not found: {db_path}. Nothing was created.", file=sys.stderr)
+        return 1
+    repository = PortfolioStateRepository(db_path) if confirmed else PortfolioStateRepository.open_read_only(db_path)
     try:
         account_id = getattr(args, "account_id", None) or repository.latest_account_id()
         if not account_id:
@@ -1750,54 +1807,83 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        owned = repository.owned_quantities(account_id, Market.EQUITY).get(symbol, 0.0)
-        if owned <= 1e-12 and broker_qty <= 1e-12:
-            print(f"{symbol}: account {account_id} owns nothing and the broker holds nothing; nothing to rebase.")
-            return 0
-        if owned <= 1e-12 and not getattr(args, "confirm", False):
-            print(f"{symbol}: account {account_id} owns nothing; nothing to rebase.", file=sys.stderr)
-            print("Re-run with --confirm to adopt the broker quantity as an explicit operator rebase.")
-            return 1
-        pending = repository.open_orders(account_id)
-        if pending:
+        pinned_account = config.broker.expected_account_id
+        if pinned_account and account_id != pinned_account:
             print(
-                f"Refusing: {len(pending)} non-terminal portfolio order(s) for account {account_id}. "
-                "Wait for them to settle (or stop the engine) so the broker quantity is final.",
+                f"Refusing: account {account_id} is not the configured broker.expected_account_id ({pinned_account}).",
                 file=sys.stderr,
             )
             return 1
-        note = str(getattr(args, "note", "") or "").strip()
-        print(f"Symbol      : {symbol} (market equity)")
-        print(f"Account     : {account_id}")
-        print(f"Database    : {db_path}")
-        print(f"Owned now   : {owned:g}")
-        print(f"Broker says : {broker_qty:g}")
-        print(f"Adjustment  : {broker_qty - owned:+g} ({'increase' if broker_qty > owned else 'decrease'})")
-        if abs(broker_qty - owned) <= 1e-12:
-            print("Nothing to do: ownership already matches the broker quantity.")
-            return 0
-        if not getattr(args, "confirm", False):
-            print("Dry run. Re-run with --confirm to write the audited adjustment.")
-            return 0
-        repository.rebase_ownership_to_broker_quantity(
+        plan = repository.plan_ownership_rebase(
             account_id,
             symbol,
             Market.EQUITY,
             broker_qty,
-            note=note,
             broker_average_cost=broker_average_cost,
+            unit_cost=unit_cost,
+            expected_owned=expected_owned,
         )
+        universe = {canonical_symbol(str(s).strip().upper(), Market.EQUITY) for s in config.universe.equity.symbols}
+        if symbol not in universe and plan.owned_quantity <= 1e-12:
+            print(
+                f"Refusing: {symbol} is not in the configured equity universe and account {account_id} owns none "
+                "of it. Check the symbol.",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"Symbol      : {symbol} (market equity)")
+        print(f"Account     : {account_id}")
+        print(f"Database    : {db_path}")
+        print(f"Owned now   : {format_quantity(plan.owned_quantity)}")
+        print(f"Broker says : {format_quantity(broker_qty)}")
+        if plan.booking_kind == NO_BOOKING:
+            print("Nothing to do: ownership already matches the broker quantity.")
+            return 0
+        if plan.refused:
+            print(f"Refusing: {plan.reason}", file=sys.stderr)
+            return 1
+        direction = "increase" if plan.adjustment_quantity > 0 else "decrease"
+        print(f"Adjustment  : {format_quantity(plan.adjustment_quantity)} ({direction})")
+        print(f"Booking     : {_REBASE_BOOKING_TEXT[plan.booking_kind]}")
+        print(f"Reason      : {plan.reason}")
+        if not confirmed:
+            print(
+                f"Dry run. Re-run with --confirm {format_quantity(plan.owned_quantity)} to write the audited adjustment."
+            )
+            return 0
+        try:
+            repository.rebase_ownership_to_broker_quantity(
+                account_id,
+                symbol,
+                Market.EQUITY,
+                broker_qty,
+                note=str(getattr(args, "note", "") or "").strip(),
+                broker_average_cost=broker_average_cost,
+                unit_cost=unit_cost,
+                expected_owned=expected_owned,
+            )
+        except OwnershipRebaseRefused as exc:
+            print(f"Refusing: {exc}", file=sys.stderr)
+            return 1
         log.warning(
-            "Operator ownership rebase: account=%s symbol=%s owned=%s -> %s",
+            "Operator ownership rebase: account=%s symbol=%s owned=%s -> %s booking=%s",
             account_id,
             symbol,
-            owned,
-            broker_qty,
+            format_quantity(plan.owned_quantity),
+            format_quantity(broker_qty),
+            plan.booking_kind,
         )
         print("Ownership rebased. Reset the safety lock once reconciliation is clean.")
         return 0
     finally:
         repository.close()
+
+
+_REBASE_BOOKING_TEXT = {
+    "split_rebase": "split rescale (lots keep their total cost, rescaled at the split instant)",
+    "operator_acquisition": "acquisition (a new lot at the stated unit cost)",
+    "operator_rebase": "sale-like depletion (the oldest lots are sold first)",
+}
 
 
 def _load_bars(

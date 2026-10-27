@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import RiskStatePersistenceError  # noqa: E402
 from parayabuck.logger import get_logger
 from parayabuck.utils.io import atomic_write
@@ -83,6 +84,9 @@ class RiskPeakService:
         self._peak_account_id: str | None = None
         self._peak_reconciled: bool = False
         self._broker_account_id: str | None = None
+        # Set when no sidecar and no persisted high-water existed: the next
+        # saved peak is the bootstrap baseline and is announced once.
+        self._bootstrap_pending: bool = False
         if ledger is None:
             data = _parse_sidecar_file(self._peak_state_path)
             if data is not None:
@@ -189,13 +193,18 @@ class RiskPeakService:
                     for (payload_str,) in rows:
                         try:
                             p = json.loads(payload_str)
+                            # A row without its peak is not a zero peak: fail closed.
+                            if not isinstance(p, dict) or "peak_equity" not in p:
+                                raise RiskStatePersistenceError(f"risk_state row for {account_id} lacks peak_equity")
                             pe = int(p.get("peak_epoch", 0) or 0)
-                            pk = float(p.get("peak_equity", 0))
+                            pk = float(p["peak_equity"])
                             if not math.isfinite(pk) or pk < 0:
                                 continue
                             if pe not in best or pk > best[pe]:
                                 best[pe] = pk
                         except (KeyboardInterrupt, SystemExit):
+                            raise
+                        except RiskStatePersistenceError:
                             raise
                         except Exception:
                             continue
@@ -290,7 +299,14 @@ class RiskPeakService:
                 is_legacy, sidecar_peak, sidecar_epoch = True, peak, epoch_val
         persisted_peak, persisted_epoch = self.query_persisted_peak(account_id)
         if sidecar_peak is None and persisted_peak is None:
+            # Genuine first run or lost state: the baseline becomes the first
+            # observed equity (recorded and announced by save_peak_equity).
             peak_final, epoch_final = 0.0, 0
+            self._bootstrap_pending = True
+            log.warning(
+                "No peak sidecar or persisted high-water for account=%s; drawdown baseline bootstraps from the first observed equity",
+                account_id,
+            )
         elif sidecar_peak is None and persisted_peak is not None:
             peak_final, epoch_final = float(persisted_peak), int(persisted_epoch or 0)
         elif sidecar_peak is not None and persisted_peak is None:
@@ -366,8 +382,28 @@ class RiskPeakService:
             atomic_write(self._peak_state_path, payload)
         except (KeyboardInterrupt, SystemExit):
             raise
+        if self._bootstrap_pending and self._peak_equity > 0:
+            self._bootstrap_pending = False
+            emit_execution_alert(
+                "paper_incident",
+                message=f"Drawdown baseline bootstrapped at {self._peak_equity:.2f}: no peak sidecar or persisted high-water existed",
+                category="peak_bootstrap",
+                account_id=resolved,
+                baseline_equity=self._peak_equity,
+            )
 
-    def reset_peak_equity(self, equity: float, account_id: str | None = None) -> None:
+    def reset_peak_equity(
+        self, equity: float, account_id: str | None = None, *, expected_epoch: int | None = None
+    ) -> bool:
+        """Start a new peak epoch at ``equity``; False when nothing changed.
+
+        The sidecar is the commit point: it is written before any in-memory
+        state moves, so a failed write leaves the peak, epoch and account as
+        they were. ``expected_epoch`` is the epoch the caller's snapshot was
+        taken against; a newer epoch already active means the reset was
+        applied (or superseded) meanwhile, so it is a no-op instead of a
+        second re-baseline at whatever equity is current.
+        """
         if equity <= 0:
             raise ValueError("Cannot reset the equity peak to a non-positive value")
         resolved = account_id or self._peak_account_id or self._broker_account_id
@@ -375,25 +411,65 @@ class RiskPeakService:
             raise RuntimeError("Cannot reset peak before account is known (peak is account-scoped)")
         resolved = str(resolved)
         _, persisted_epoch = self.query_persisted_peak(resolved)
-        current_epoch = int(self._peak_epoch or 0)
+        active_epoch = int(self._peak_epoch or 0)
+        if expected_epoch is not None:
+            if active_epoch > int(expected_epoch):
+                log.info(
+                    "Risk epoch %d already superseded by epoch %d; peak reset is a no-op",
+                    int(expected_epoch),
+                    active_epoch,
+                )
+                return False
+            if active_epoch < int(expected_epoch):
+                raise RiskStatePersistenceError(
+                    f"Peak epoch regressed for {resolved}: active {active_epoch}, expected {int(expected_epoch)}"
+                )
+        current_epoch = active_epoch
         if persisted_epoch is not None:
             current_epoch = max(current_epoch, int(persisted_epoch))
+        new_epoch = current_epoch + 1
+        atomic_write(self._peak_state_path, json.dumps({"account_id": resolved, "peak_equity": float(equity), "epoch": new_epoch}))
         self._peak_epoch, self._peak_equity, self._peak_account_id, self._peak_reconciled = (
-            current_epoch + 1,
+            new_epoch,
             float(equity),
             resolved,
             True,
         )
-        try:
-            self.save_peak_equity(resolved)
-        except (KeyboardInterrupt, SystemExit):
-            raise
+        self._bootstrap_pending = False
         log.warning(
             "Equity peak rebased to %.2f (epoch %d, %s)",
             self._peak_equity,
             self._peak_epoch,
             "paper" if self._paper else "live",
         )
+        return True
+
+    def restore_peak_state(self, state: tuple[float, int, str | None, bool]) -> None:
+        """Roll the peak back to ``state`` (taken before ``reset_peak_equity``).
+
+        Used when a reset's downstream steps fail after the sidecar commit, so
+        the rebase is not left applied in one store and not the other.
+        """
+        peak, epoch, account_id, reconciled = state
+        self._peak_equity, self._peak_epoch, self._peak_account_id, self._peak_reconciled = (
+            float(peak),
+            int(epoch),
+            account_id,
+            bool(reconciled),
+        )
+        resolved = account_id or self._broker_account_id
+        if not resolved:
+            return  # reset never reached the sidecar without an account
+        payload = json.dumps({"account_id": str(resolved), "peak_equity": float(peak), "epoch": int(epoch)})
+        try:
+            atomic_write(self._peak_state_path, payload)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            log.error(
+                "Could not restore the peak sidecar after a failed risk-epoch reset; the file may still hold the new epoch",
+                exc_info=True,
+            )
 
 
 __all__ = ["RiskPeakService", "RiskStatePersistenceError", "resolve_peak_state_path"]

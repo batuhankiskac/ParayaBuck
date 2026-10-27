@@ -273,9 +273,10 @@ def test_any_settings_cap_or_host_change_voids_the_standing_authorization(
     config = _live_config(tmp_path)
     _write_standing(config)
     assert standing_authorization_status(config).valid
-    # An unrelated settings edit (log level) voids it ...
-    assert standing_authorization_status(_live_config(tmp_path, log_level="DEBUG")).status == STANDING_INVALID
-    # ... so does the dollar cap ...
+    # An unrelated settings edit (app log level) no longer voids it: only the
+    # trading-relevant sections are fingerprinted (S8-7) ...
+    assert standing_authorization_status(_live_config(tmp_path, log_level="DEBUG")).status == STANDING_VALID
+    # ... but the dollar cap still does ...
     assert standing_authorization_status(_live_config(tmp_path, cap=5000.0)).status == STANDING_INVALID
     # ... and another trading host.
     monkeypatch.setattr(live_authorization, "trading_host_identity", lambda: "host-b")

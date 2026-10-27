@@ -5,6 +5,7 @@ import hmac
 import json
 import math
 import os
+import stat
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -16,6 +17,25 @@ from parayabuck.config import DrawdownLiquidationConfig, read_credential
 
 class LiveApprovalError(RuntimeError):
     pass
+
+
+# The approval HMAC key is public while it still holds the tracked template
+# value from .env.example (or any other "replace_with..." template text), so
+# such a key can never sign or verify a LIVE approval.
+APPROVAL_KEY_PLACEHOLDER_PREFIX = "replace_with"
+APPROVAL_KEY_MIN_LENGTH = 32
+
+
+def _check_approval_key(secret: str) -> None:
+    if len(secret) < APPROVAL_KEY_MIN_LENGTH:
+        raise ValueError(f"Operator approval HMAC key must contain at least {APPROVAL_KEY_MIN_LENGTH} characters")
+    if secret.strip().lower().startswith(APPROVAL_KEY_PLACEHOLDER_PREFIX):
+        raise ValueError("Operator approval HMAC key is the .env.example placeholder; set a real random key")
+
+
+def _signatures_equal(left: str, right: str) -> bool:
+    """Constant-time equality for any str: compare_digest rejects non-ASCII str."""
+    return hmac.compare_digest(left.encode("utf-8", "surrogatepass"), right.encode("utf-8", "surrogatepass"))
 
 
 # --- Separate LIVE credentials (docs/live_readiness_v1.md B3) ---------------
@@ -122,6 +142,7 @@ def verify_account_environment(
 # and manual engine start until `parayabuck resume` removes it. Any existing
 # marker, however unreadable, counts as a halt (fail closed).
 HALT_MARKER_FILENAME = "OPERATOR_HALT"
+HALT_MARKER_MAX_BYTES = 64 * 1024
 
 
 def operator_halt_marker_path(runtime_dir: str | os.PathLike[str]) -> Path:
@@ -143,11 +164,22 @@ def read_operator_halt(marker: str | os.PathLike[str]) -> dict[str, Any] | None:
     path = Path(marker)
     if not os.path.lexists(os.fspath(path)):
         return None
+    unreadable = {"reason": "unreadable halt marker", "created_at": None, "user": None}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # O_NOFOLLOW refuses a symlink and O_NONBLOCK keeps a FIFO from
+        # blocking the open; fstat then insists on a regular file.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(os.fspath(path), flags)
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return unreadable
+            raw = handle.read(HALT_MARKER_MAX_BYTES + 1)
+        if len(raw) > HALT_MARKER_MAX_BYTES:
+            return unreadable
+        data = json.loads(raw.decode("utf-8"))
     except (OSError, ValueError):
-        return {"reason": "unreadable halt marker", "created_at": None, "user": None}
-    return data if isinstance(data, dict) else {"reason": "unreadable halt marker", "created_at": None, "user": None}
+        return unreadable
+    return data if isinstance(data, dict) else unreadable
 
 
 def write_operator_halt(marker: str | os.PathLike[str], *, reason: str, user: str) -> dict[str, Any]:
@@ -250,8 +282,7 @@ class LiveOperatorApproval:
         }
 
     def calculated_signature(self, secret: str) -> str:
-        if len(secret) < 32:
-            raise ValueError("Operator approval HMAC key must contain at least 32 characters")
+        _check_approval_key(secret)
         payload = json.dumps(self.unsigned_dict(), sort_keys=True, separators=(",", ":")).encode()
         return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
@@ -290,8 +321,8 @@ class LiveOperatorApproval:
         try:
             expected = approval.calculated_signature(secret)
         except ValueError as exc:
-            raise LiveApprovalError("Live operator approval key is missing or too short") from exc
-        if not hmac.compare_digest(approval.signature, expected):
+            raise LiveApprovalError(f"Live operator approval key is unusable: {exc}") from exc
+        if not _signatures_equal(approval.signature, expected):
             raise LiveApprovalError("Live operator approval signature is invalid")
         if approval.account_id != account_id:
             raise LiveApprovalError("Live operator approval account does not match")
@@ -328,15 +359,34 @@ def standing_authorization_path(operator_approval_path: str) -> Path | None:
     return Path(operator_approval_path).with_name(STANDING_AUTHORIZATION_FILENAME)
 
 
+# Config sections that decide what the bot trades, risks or submits. Only these
+# are fingerprinted: an unrelated edit (app, alerting, observability, backup,
+# backtest, the placeholder data block) must not void a standing LIVE
+# authorization. Adding or removing a section here changes every fingerprint once.
+CONFIG_FINGERPRINT_SECTIONS: tuple[str, ...] = (
+    "runtime",
+    "alpaca",
+    "broker",
+    "universe",
+    "strategy",
+    "risk",
+    "live",
+    "engine",
+    "execution",
+    "signal_cross_check",
+    "intent_watchdog",
+)
+
+
 def config_fingerprint(config: Any) -> str:
-    """Digest of the whole loaded configuration: any settings change invalidates.
+    """Digest of the trading-relevant configuration sections (see CONFIG_FINGERPRINT_SECTIONS).
 
     The default-off ``risk.drawdown_liquidation`` block is left out while it
     equals its disabled default, so the fingerprint of an unchanged
     configuration is the same before and after the brake was added.
     """
-    document = asdict(config)
-    risk = document.get("risk") if isinstance(document, dict) else None
+    document: dict[str, Any] = {name: asdict(getattr(config, name)) for name in CONFIG_FINGERPRINT_SECTIONS}
+    risk = document.get("risk")
     if isinstance(risk, dict) and risk.get("drawdown_liquidation") == asdict(DrawdownLiquidationConfig()):
         risk.pop("drawdown_liquidation")
     payload = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
@@ -388,8 +438,7 @@ class StandingLiveAuthorization:
         }
 
     def calculated_signature(self, secret: str) -> str:
-        if len(secret) < 32:
-            raise ValueError("Operator approval HMAC key must contain at least 32 characters")
+        _check_approval_key(secret)
         payload = json.dumps(self.unsigned_dict(), sort_keys=True, separators=(",", ":")).encode()
         return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
@@ -428,8 +477,8 @@ class StandingLiveAuthorization:
         try:
             expected = authorization.calculated_signature(secret)
         except ValueError as exc:
-            raise LiveApprovalError("Operator approval key is missing or too short") from exc
-        if not hmac.compare_digest(authorization.signature, expected):
+            raise LiveApprovalError(f"Operator approval key is unusable: {exc}") from exc
+        if not _signatures_equal(authorization.signature, expected):
             raise LiveApprovalError("Standing LIVE authorization signature is invalid")
         return authorization
 
@@ -451,11 +500,11 @@ class StandingLiveAuthorization:
             raise LiveApprovalError("Standing LIVE authorization has expired")
         if set(self.configuration_digests) != set(configuration_digests):
             raise LiveApprovalError("Standing LIVE authorization does not match the strategy configuration")
-        if not hmac.compare_digest(self.config_fingerprint, config_fingerprint):
+        if not _signatures_equal(self.config_fingerprint, config_fingerprint):
             raise LiveApprovalError("Standing LIVE authorization does not match the current settings")
         if not math.isclose(self.maximum_dollar_exposure, float(hard_dollar_cap), rel_tol=0.0, abs_tol=1e-9):
             raise LiveApprovalError("Standing LIVE authorization does not match live.hard_dollar_cap")
-        if not hmac.compare_digest(self.trading_host, trading_host):
+        if not _signatures_equal(self.trading_host, trading_host):
             raise LiveApprovalError("Standing LIVE authorization was issued for a different trading host")
         if account_id is not None and self.account_id != account_id:
             raise LiveApprovalError("Standing LIVE authorization account does not match")

@@ -30,7 +30,7 @@ from parayabuck.execution.portfolio import (
     PortfolioOrderSide,
     PortfolioRiskLimits,
 )
-from parayabuck.live_safety import config_fingerprint
+from parayabuck.live_safety import CONFIG_FINGERPRINT_SECTIONS, config_fingerprint
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 from parayabuck.portfolio.runtime_models import configuration_digest
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
@@ -297,7 +297,8 @@ def test_disabled_brake_leaves_the_configuration_digest_byte_identical() -> None
 def test_config_fingerprint_ignores_the_disabled_block_and_changes_when_enabled() -> None:
     config = load_config(str(REPO_SETTINGS))
     assert config.risk.drawdown_liquidation.enabled is False
-    document = asdict(config)
+    # Digest over the trading-relevant sections only (live_safety.CONFIG_FINGERPRINT_SECTIONS).
+    document = {name: asdict(getattr(config, name)) for name in CONFIG_FINGERPRINT_SECTIONS}
     document["risk"].pop("drawdown_liquidation")
     without_block = hashlib.sha256(
         json.dumps(document, sort_keys=True, separators=(",", ":"), default=str).encode()

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
@@ -132,25 +132,35 @@ def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
     return fills
 
 
-def assert_no_ownership_adjustments(connection: sqlite3.Connection, account_id: str) -> None:
-    """Fail closed when the broker book was changed outside fills (splits, rebases).
+def assert_no_ownership_adjustments(
+    connection: sqlite3.Connection,
+    account_id: str,
+    symbols: Collection[str] | None = None,
+) -> None:
+    """Fail closed when a symbol's broker book was changed outside fills (splits, rebases).
 
     The fill-based FIFO book cannot reproduce those adjustments, so a tax figure
-    computed from fills alone would be silently wrong.
+    computed from fills alone would be silently wrong. The adjustment rows carry no
+    effective date, so the scope is the symbol: ``symbols`` limits the check to the
+    symbols whose disposals are reported (``None`` checks every symbol). Other
+    symbols keep their own lot book and are not affected.
     """
     present = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'portfolio_ownership_adjustments'"
     ).fetchone()
     if present is None:
         return
-    count = connection.execute(
-        "SELECT COUNT(*) FROM portfolio_ownership_adjustments WHERE account_id = ? AND market = ?",
+    rows = connection.execute(
+        "SELECT symbol, COUNT(*) FROM portfolio_ownership_adjustments WHERE account_id = ? AND market = ? "
+        "GROUP BY symbol",
         (account_id, Market.EQUITY.value),
-    ).fetchone()[0]
-    if count:
+    ).fetchall()
+    adjusted = {str(symbol): int(count) for symbol, count in rows if symbols is None or symbol in symbols}
+    if adjusted:
         raise LedgerError(
-            f"{count} ownership adjustment(s) recorded for account {account_id}; the fill-based TL ledger "
-            "does not model splits or rebases, so no figure is produced. Reconcile the lots manually first."
+            f"ownership adjustment(s) recorded for {', '.join(sorted(adjusted))} in account {account_id} "
+            f"({sum(adjusted.values())} row(s)); the fill-based TL ledger does not model splits or rebases, "
+            "so no figure is produced for those symbols. Reconcile the lots manually first."
         )
 
 
@@ -237,10 +247,25 @@ def match_disposals(fills: Sequence[Fill], rates: RateBook) -> list[LotDisposal]
     return disposals
 
 
-def build_disposals(connection: sqlite3.Connection, account_id: str, rates: RateBook) -> list[LotDisposal]:
-    """Read the account's fills and match every disposal (all years, FIFO from the start)."""
-    assert_no_ownership_adjustments(connection, account_id)
-    return match_disposals(read_fills(connection, account_id), rates)
+def build_disposals(
+    connection: sqlite3.Connection,
+    account_id: str,
+    rates: RateBook,
+    year: int | None = None,
+) -> list[LotDisposal]:
+    """Read the account's fills and match every disposal (FIFO from the start).
+
+    Without ``year`` every disposal is returned and the adjustment guard covers all
+    symbols. With ``year`` only that year's disposals are returned, and the guard
+    covers only the symbols sold in that year.
+    """
+    disposals = match_disposals(read_fills(connection, account_id), rates)
+    if year is None:
+        assert_no_ownership_adjustments(connection, account_id)
+        return disposals
+    selected = [item for item in disposals if item.disposed_on.year == year]
+    assert_no_ownership_adjustments(connection, account_id, {item.symbol for item in selected})
+    return selected
 
 
 __all__ = [

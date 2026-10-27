@@ -206,9 +206,10 @@ def test_rule4_uses_previous_business_day_and_weekend_gap() -> None:
 
 def test_missing_rate_raises_and_names_the_date() -> None:
     book = RateBook(usd_try={date(2026, 10, 22): 45.0}, yiufe={"2026-09": 3000.0})
-    # Monday 2026-10-26 needs Friday 2026-10-23, which the file does not reach.
-    with pytest.raises(MissingRateError, match="2026-10-23"):
-        book.usd_try_for_trade_date(date(2026, 10, 26))
+    # Thursday 2026-10-22 is inside the lookback for Monday 2026-10-26 (see the audit
+    # fix tests). A trade date 14 days after the file's last rate is not covered.
+    with pytest.raises(MissingRateError, match="2026-10-22"):
+        book.usd_try_for_trade_date(date(2026, 11, 5))
     # A trade date with no earlier rate at all also raises.
     with pytest.raises(MissingRateError):
         RateBook(usd_try={date(2026, 10, 26): 45.0}, yiufe={}).usd_try_for_trade_date(date(2026, 10, 26))
@@ -561,10 +562,13 @@ def test_dividend_withholding_and_credit_cap(tmp_path: Path) -> None:
     assert report.dividend_net_tl == pytest.approx(442.0 - 80.0)
     assert report.interest_tl == pytest.approx(5 * 41.0)
     assert report.income_declaration_required is False  # 647 TL is under 22,000 TL
-    # Credit is the lower of the withheld TL and the Turkish tax on the same income.
-    assert report.dividend_tax_estimate_tl == pytest.approx((442.0 + 205.0) * 0.15)
-    assert report.foreign_tax_credit_tl == pytest.approx(80.0)
-    assert report.dividend_tax_due_tl == pytest.approx((442.0 + 205.0) * 0.15 - 80.0)
+    # Credit is the lower of the withheld TL and the Turkish tax on the dividends only.
+    # Interest sits above the dividends in the bracket stack; its tax is reported
+    # separately and is not creditable (no US tax is withheld on it).
+    assert report.dividend_tax_estimate_tl == pytest.approx(442.0 * 0.15)
+    assert report.interest_tax_estimate_tl == pytest.approx(205.0 * 0.15)
+    assert report.foreign_tax_credit_tl == pytest.approx(442.0 * 0.15)
+    assert report.dividend_tax_due_tl == pytest.approx(0.0)
     # 2 USD withheld on 11 USD gross is about 18%, under the 20% treaty cap.
     assert not any("treaty cap" in note for note in report.notes)
 

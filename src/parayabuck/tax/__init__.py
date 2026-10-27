@@ -11,6 +11,6 @@ this is software arithmetic, not tax advice. Modules:
 * ``cli``: the ``parayabuck tax`` subcommands.
 """
 
-from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, TaxDataError
+from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, MissingTableError, TaxDataError
 
-__all__ = ["LedgerError", "MissingIndexError", "MissingRateError", "TaxDataError"]
+__all__ = ["LedgerError", "MissingIndexError", "MissingRateError", "MissingTableError", "TaxDataError"]

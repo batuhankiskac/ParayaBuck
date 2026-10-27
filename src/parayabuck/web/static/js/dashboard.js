@@ -224,7 +224,9 @@
       const ov = view.overview || {};
       const state = status ? status.state : null;
       const breaker = status && status.runtime && status.runtime.circuit_breaker_reason;
-      if (!state) items.push(storyItem("", "clock", "Durum yükleniyor…"));
+      const opHalt = status && status.operator_halt && status.operator_halt.active ? status.operator_halt : null;
+      if (opHalt) items.push(storyItem("bad", "lock", "Operatör durdurması etkin.", "Motor başlatılamaz; kaldırmak için sunucuda parayabuck resume çalıştırılmalı."));
+      else if (!state) items.push(storyItem("", "clock", "Durum yükleniyor…"));
       else if (breaker || state === "halted") items.push(storyItem("bad", "lock", "Güvenlik kilidi devrede.", "Bot yeni alım yapmıyor" + (breaker ? " (" + breaker + ")" : "") + "."));
       else if (state === "running") items.push(storyItem("ok", "activity", "Bot çalışıyor", "ve piyasayı izliyor."));
       else if (state === "warming_up" || state === "starting") items.push(storyItem("warn", "clock", "Bot hazırlanıyor.", "Geçmiş verileri yüklüyor; birazdan karar vermeye başlayacak."));
@@ -577,7 +579,8 @@
       if (data.eventsFailed) evBox.replaceChildren(el("li", { className: "empty-note", text: "Olaylar alınamadı" }));
       else if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
       else evBox.replaceChildren.apply(evBox, events.slice(0, 12).map(function (ev) {
-        return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (ev.kind || "olay") + (ev.message ? " — " + ev.message : "") })]);
+        const sev = { CRITICAL: "Kritik", WARNING: "Uyarı", INFO: "Bilgi", DEBUG: "Ayrıntı" }[String(ev.severity || "").toUpperCase()];
+        return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (sev ? "[" + sev + "] " : "") + (ev.message || ev.kind || "olay"), title: ev.kind || null })]);
       }));
       const decision = data.decision;
       let text = data.decisionFailed ? "Karar açıklaması alınamadı" : "Karar açıklaması yok";

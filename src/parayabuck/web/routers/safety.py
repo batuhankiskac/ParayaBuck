@@ -49,7 +49,7 @@ async def start_new_risk_epoch(request: Request) -> dict[str, Any]:
         raise _http(400, str(exc)) from exc
     except Exception:
         log.exception("Risk epoch reset failed with an unexpected error")
-        raise _http(500, "Risk epoch reset failed") from None
+        raise _http(500, "Yeni risk dönemi başlatılamadı; ayrıntılar uygulama günlüğünde.") from None
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
     if await asyncio.to_thread(manager.has_active_runtime):
         raise _http(
             400,
-            "Cannot toggle trading mode while engine is running. Stop the bot first.",
+            "Motor çalışırken işlem modu değiştirilemez. Önce botu durdurun.",
         )
 
     try:
@@ -107,7 +107,7 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
             # B3: the LIVE arm is bound to the LIVE key pair only.
             key, secret = await asyncio.to_thread(manager.get_live_credentials)
             if not key or not secret:
-                raise ValueError("Alpaca LIVE credentials (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY) are required")
+                raise ValueError("CANLI Alpaca anahtarları (ALPACA_LIVE_API_KEY / ALPACA_LIVE_SECRET_KEY) gerekli.")
             await asyncio.to_thread(manager._require_valid_live_arm, key, secret, consume=False)
         # Same lock as the settings drawer, and the same validate-then-replace
         # discipline: an unvalidated write (e.g. live without a dollar cap)
@@ -123,7 +123,7 @@ async def toggle_mode(payload: ModePayload, request: Request) -> dict[str, Any]:
         raise _http(400, str(e)) from e
     except Exception:
         log.exception("Trading-mode toggle failed with an unexpected error")
-        raise _http(500, "Trading mode could not be changed") from None
+        raise _http(500, "İşlem modu değiştirilemedi; ayrıntılar uygulama günlüğünde.") from None
 
 
 # ---------------------------------------------------------------------------

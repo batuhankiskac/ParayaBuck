@@ -45,7 +45,7 @@ async def start_engine(request: Request) -> dict[str, str]:
     except Exception:
         # Library errors can carry request details, so they are logged, not echoed.
         log.exception("Engine start failed with an unexpected error")
-        raise _http(500, "Engine could not be started; see the application log") from None
+        raise _http(500, "Motor başlatılamadı; ayrıntılar uygulama günlüğünde.") from None
 
 
 @router.post("/stop")
@@ -53,13 +53,14 @@ async def stop_engine(request: Request) -> dict[str, str]:
     """POST /api/engine/stop — RuntimeError → 500, generic → 500."""
     manager = get_engine_manager(request)
     try:
-        await asyncio.to_thread(manager.stop_engine)
+        # An explicit Stop is durable: it survives a restart (see should_auto_start).
+        await asyncio.to_thread(manager.stop_engine, operator_request=True)
     except RuntimeError as exc:
         log.error("Engine stop failed: %s", exc)
         raise _http(500, _redacted(manager, str(exc))) from exc
     except Exception:
         log.exception("Engine stop failed with an unexpected error")
-        raise _http(500, "Engine could not be stopped") from None
+        raise _http(500, "Motor durdurulamadı; ayrıntılar uygulama günlüğünde.") from None
     return {"status": "stopped", "message": "Bot engine stopped."}
 
 
@@ -73,7 +74,7 @@ async def reset_safety_lock(request: Request) -> dict[str, str]:
         raise _http(400, str(exc)) from exc
     except Exception:
         log.exception("Safety lock reset failed with an unexpected error")
-        raise _http(500, "Safety lock reset failed") from None
+        raise _http(500, "Güvenlik kilidi açılamadı; ayrıntılar uygulama günlüğünde.") from None
     return {
         "status": "reset",
         "message": "Safety lock reset after broker reconciliation and data checks.",

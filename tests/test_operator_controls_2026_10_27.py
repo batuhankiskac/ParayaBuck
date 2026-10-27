@@ -111,7 +111,7 @@ def test_should_auto_start_refuses_with_marker(tmp_path: Path, monkeypatch, no_d
 
     with caplog.at_level("ERROR"):
         assert manager.should_auto_start() is False
-    assert any("operator halt is in force" in message for message in caplog.messages)
+    assert any("operatör durdurması etkin" in message for message in caplog.messages)
 
 
 def test_start_engine_refuses_with_marker_and_leaves_state_stopped(tmp_path: Path, monkeypatch, no_dotenv) -> None:
@@ -121,7 +121,7 @@ def test_start_engine_refuses_with_marker_and_leaves_state_stopped(tmp_path: Pat
     manager.config_path = settings
     write_operator_halt(tmp_path / "runtime" / HALT_MARKER_FILENAME, reason="stop", user="tester")
 
-    with pytest.raises(ValueError, match="operator halt is in force"):
+    with pytest.raises(ValueError, match="operatör durdurması etkin"):
         manager.start_engine()
     assert manager.engine_state == "stopped"
     assert manager.runtime is None

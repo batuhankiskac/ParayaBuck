@@ -95,7 +95,7 @@ def test_failed_start_whose_stop_reports_workers_alive_keeps_the_runtime(
     assert manager.engine_state == "stop_failed"
     assert manager.runtime is runtime
     assert manager.has_active_runtime() is True
-    with pytest.raises(ValueError, match="already stop_failed"):
+    with pytest.raises(ValueError, match="Motor zaten durdurma hatası"):
         manager.start_engine()
     assert runtime.start_calls == 1
 
@@ -153,7 +153,7 @@ def test_starts_are_refused_inside_a_settings_write_window(tmp_path: Path, monke
     manager = _manager(tmp_path, monkeypatch)
     manager.begin_settings_write()
     try:
-        with pytest.raises(ValueError, match="settings save is in progress"):
+        with pytest.raises(ValueError, match="ayar kaydı sürüyor"):
             manager.start_engine()
         assert manager.engine_state == "stopped"
     finally:
@@ -173,7 +173,7 @@ def test_mode_write_is_refused_while_the_engine_state_is_active(
     writes: list[bool] = []
     manager.engine_state = "starting"
 
-    with pytest.raises(ValueError, match="Cannot toggle trading mode"):
+    with pytest.raises(ValueError, match="işlem modu değiştirilemez"):
         manager.write_mode_if_idle(False, lambda _path, paper: writes.append(paper))
     assert writes == []
 
@@ -752,7 +752,7 @@ def test_arming_phrase_with_non_ascii_text_is_refused_as_a_mismatch(
         expires_at=now + timedelta(minutes=2),
     )
 
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match="eşleşmiyor"):
         manager.confirm_live_arming("LIVE 1234é")  # not a TypeError (HTTP 500)
 
 

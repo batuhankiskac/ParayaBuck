@@ -138,6 +138,8 @@
   function openDialog(opts) {
     const dlg = byId("pbDialog");
     if (!dlg || typeof dlg.showModal !== "function") {
+      // Without <dialog> a choice cannot show its third answer; fail closed (nothing is decided).
+      if (opts.choice) return Promise.resolve(null);
       if (opts.input) return Promise.resolve(window.prompt(opts.message || "", "") || null);
       return Promise.resolve(window.confirm(opts.message || ""));
     }
@@ -152,12 +154,18 @@
     const ok = byId("pbDialogOk");
     ok.textContent = opts.confirmLabel || "Tamam";
     ok.className = "btn " + (opts.danger ? "danger-solid" : "primary");
+    const alt = byId("pbDialogAlt");
+    if (alt) {
+      alt.hidden = !opts.altLabel;
+      alt.textContent = opts.altLabel || "";
+    }
     byId("pbDialogCancel").hidden = false;
     return new Promise(function (resolve) {
       const onClose = function () {
         dlg.removeEventListener("close", onClose);
         const accepted = dlg.returnValue === "ok";
-        if (opts.input) resolve(accepted ? input.value.trim() || null : null);
+        if (opts.choice) resolve(dlg.returnValue === "ok" || dlg.returnValue === "alt" ? dlg.returnValue : null);
+        else if (opts.input) resolve(accepted ? input.value.trim() || null : null);
         else resolve(accepted);
       };
       dlg.returnValue = "";
@@ -168,7 +176,9 @@
   }
   const dialog = {
     confirm: function (opts) { return openDialog(Object.assign({}, opts)); },
-    prompt: function (opts) { return openDialog(Object.assign({}, opts, { input: true })); }
+    prompt: function (opts) { return openDialog(Object.assign({}, opts, { input: true })); },
+    // Resolves "ok", "alt", or null. Cancel, Escape and the close control all give null.
+    choose: function (opts) { return openDialog(Object.assign({}, opts, { choice: true })); }
   };
 
   // ---------- theme ----------
@@ -238,7 +248,7 @@
   };
   const ACTIVE_STATES = ["running", "warming_up", "degraded", "halted"];
   const listeners = { status: [], stream: [] };
-  const shell = { paper: true, accountSuffix: "", state: "stopped", status: null };
+  const shell = { paper: true, accountSuffix: "", state: "stopped", status: null, operatorHalt: null };
 
   function renderMode() {
     const chip = byId("modeChip");
@@ -269,6 +279,8 @@
     else if (shell.state === "stopped" || shell.state === "error") { start.disabled = false; stop.disabled = true; }
     else if (shell.state === "starting" || shell.state === "stopping") { start.disabled = true; stop.disabled = shell.state === "stopping"; }
     else { start.disabled = true; stop.disabled = true; }
+    // An operator halt refuses every start until the marker is removed on the host.
+    if (shell.operatorHalt) start.disabled = true;
   }
   function marketLabel(status, market) {
     if (!status.runtime) {
@@ -287,6 +299,7 @@
   }
   function renderStatus(status) {
     shell.status = status;
+    shell.operatorHalt = status.operator_halt && status.operator_halt.active ? status.operator_halt : null;
     renderEngineState(status.state, status.paper);
     const markets = (status.runtime && status.runtime.markets) || {};
     setText("marketStatusText",
@@ -295,12 +308,16 @@
 
     const messages = [];
     let danger = false;
+    if (shell.operatorHalt) {
+      messages.push("Operatör durdurması etkin (sebep: " + (shell.operatorHalt.reason || "belirtilmemiş") + "). Motor başlatılamaz; kaldırmak için sunucuda `parayabuck resume` komutunu çalıştırın.");
+      danger = true;
+    }
     const breaker = status.runtime && status.runtime.circuit_breaker_reason;
     if (breaker) { messages.push("Güvenlik kilidi devrede (" + breaker + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz."); danger = true; }
     if (status.engine_error) { messages.push("Motor hatası: " + status.engine_error); danger = true; }
     const retry = status.engine && status.engine.retry;
     if (retry) messages.push("Motor otomatik yeniden deneniyor (deneme " + retry.attempt + "), yaklaşık " + fmt.duration(retry.retry_in_seconds) + " sonra.");
-    if (status.security_warning) messages.push(status.security_warning);
+    if (status.security_warning) { messages.push(status.security_warning); danger = true; }
     if (status.has_credentials === false) messages.push("Alpaca API anahtarları girilmemiş. Ayarlar’dan ekleyin.");
     const bar = byId("alertBar");
     if (bar) {
@@ -329,7 +346,11 @@
     if (body !== undefined) { opts.headers = { "Content-Type": "application/json" }; opts.body = JSON.stringify(body); }
     const res = await api.controlFetch(url, opts);
     const data = await api.responsePayload(res);
-    if (!res.ok) throw new Error(api.detailText(data, "İstek başarısız (" + res.status + ")"));
+    if (!res.ok) {
+      const err = new Error(api.detailText(data, "İstek başarısız (" + res.status + ")"));
+      err.status = res.status;
+      throw err;
+    }
     return data;
   }
   async function withButton(button, fn) {
@@ -341,20 +362,46 @@
       refreshStatus();
     }
   }
+  // CANLI start: confirm the account suffix and the dollar cap from the saved settings.
+  // A cap that cannot be read stops the start (fail closed).
+  async function confirmLiveStart() {
+    let cap;
+    try {
+      cap = Number((await api.fetchJson("/api/settings")).live_dollar_cap);
+    } catch (err) {
+      toast("CANLI başlatma iptal edildi: üst sınır okunamadı (" + err.message + ").", "error");
+      return false;
+    }
+    const capText = isNum(cap) && cap > 0 ? fmt.money(cap) : "tanımlı değil (motor başlatılmaz)";
+    const account = shell.accountSuffix ? "…" + shell.accountSuffix : "bilinmiyor";
+    return dialog.confirm({
+      title: "CANLI modda motor başlatılsın mı?",
+      message: "Hesap " + account + " üzerinde GERÇEK para ile emirler gönderilecek. Üst sınır: " + capText + ". Hesabın ve sınırın doğru olduğundan emin değilseniz vazgeçin.",
+      confirmLabel: "CANLI başlat",
+      danger: true
+    });
+  }
   function setupControls() {
     const start = byId("startBtn");
     const stop = byId("stopBtn");
     const reset = byId("resetSafetyBtn");
     const epoch = byId("riskEpochBtn");
     const chip = byId("modeChip");
-    if (start) start.addEventListener("click", function () {
+    if (start) start.addEventListener("click", async function () {
+      // CANLI sends real orders: the owner sees the account and the dollar cap first.
+      if (!shell.paper && !(await confirmLiveStart())) return;
       withButton(start, async function () {
         await postControl("/api/engine/start");
         toast("Motor başlatılıyor…", "success");
       });
     });
     if (stop) stop.addEventListener("click", async function () {
-      const ok = await dialog.confirm({ title: "Motor durdurulsun mu?", message: "Bot yeni karar vermeyi ve işlem yapmayı bırakır. Açık pozisyonlar hesapta kalır.", confirmLabel: "Durdur", danger: true });
+      const ok = await dialog.confirm({
+        title: "Motor durdurulsun mu?",
+        message: "Bot yeni karar vermeyi ve işlem yapmayı bırakır; açık pozisyonlar hesapta kalır. Bu durdurma kalıcıdır: uygulama veya sunucu yeniden başlasa da bot kendiliğinden işlem yapmaz. Yeniden çalıştırmak için Başlat’a basmanız gerekir.",
+        confirmLabel: "Durdur",
+        danger: true
+      });
       if (!ok) return;
       withButton(stop, async function () {
         await postControl("/api/engine/stop");
@@ -370,7 +417,12 @@
       });
     });
     if (epoch) epoch.addEventListener("click", async function () {
-      const ok = await dialog.confirm({ title: "Yeni risk dönemi başlatılsın mı?", message: "Zirveden düşüş (drawdown) hesabının tabanı mevcut doğrulanmış bakiyeye çekilir.", confirmLabel: "Başlat" });
+      const ok = await dialog.confirm({
+        title: "Zarar kabul edilsin ve alım yeniden başlasın mı?",
+        message: "Zirveden düşüş (drawdown) bu anki doğrulanmış bakiyeden yeniden ölçülür: mevcut kayıp kabul edilmiş sayılır ve bot tam boyutta alım yapmaya devam eder. Bu işlem kaybı geri getirmez.",
+        confirmLabel: "Zararı kabul et, alıma devam et",
+        danger: true
+      });
       if (!ok) return;
       withButton(epoch, async function () {
         const data = await postControl("/api/safety/risk-epoch");
@@ -479,12 +531,16 @@
       e.preventDefault();
       const btn = byId("saveSettingsBtn");
       // A save restarts the engine only when the operator says so (the server default is off).
-      const restartEngine = await dialog.confirm({
+      // Vazgeç, Escape and the close control abort the save: nothing is sent.
+      const choice = await dialog.choose({
         title: "Motor yeniden başlatılsın mı?",
-        message: "Evet: kayıttan sonra motor yeniden başlatılır ve yeni ayarlarla çalışır. Hayır: motor çalışıyorsa ve motor ayarı değiştiyse kayıt reddedilir (önce botu durdurun); yalnızca panel ayarları motoru durdurmadan kaydedilir."
+        message: "Evet: motor durur, yeni ayarlarla yeniden başlar; yeniden başlayana kadar işlem yapılmaz. Hayır, yalnızca kaydet: ayarlar motoru durdurmadan kaydedilir; motor çalışıyorsa ve motor ayarı değiştiyse kayıt reddedilir (önce botu durdurun). Vazgeç: hiçbir şey kaydedilmez.",
+        confirmLabel: "Evet, yeniden başlat",
+        altLabel: "Hayır, yalnızca kaydet"
       });
+      if (choice === null) return;
       const payload = {
-        restart_engine: restartEngine === true,
+        restart_engine: choice === "ok",
         api_key: byId("apiKey").value.trim(),
         secret_key: byId("secretKey").value.trim(),
         paper_mode: byId("paperModeCheck").checked,
@@ -510,7 +566,14 @@
         if (data.app_restart_required) toast("Adres/port değişikliği bir sonraki açılışta etkinleşir.", "warning");
         refreshStatus();
       } catch (err) {
-        toast("Ayarlar kaydedilemedi: " + err.message, "error");
+        if (err.status === 409) {
+          // The file changed after the drawer loaded. Reload the form and digest so the
+          // next save starts from the current file; the owner reviews it before saving.
+          open();
+          toast("Ayarlar başka bir yerden değiştirildi; form güncel değerlerle yenilendi. Kontrol edip yeniden kaydedin.", "warning");
+        } else {
+          toast("Ayarlar kaydedilemedi: " + err.message, "error");
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = "Kaydet ve uygula";

@@ -46,6 +46,21 @@ from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 log = get_logger("parayabuck.web.engine")
 
 _AUTO_START_RETRY_BACKOFF: tuple[int, ...] = (5, 15, 30, 60)
+# Written by an explicit operator Stop next to the OPERATOR_HALT marker and
+# removed by the next explicit start. While it exists, auto-start stays off,
+# so a deploy, crash or reboot does not resume trading on its own.
+OPERATOR_STOP_MARKER_FILENAME = "OPERATOR_STOPPED"
+_ENGINE_STATE_TR: dict[str, str] = {
+    "running": "çalışıyor",
+    "stopped": "durdu",
+    "starting": "başlatılıyor",
+    "warming_up": "ısınıyor",
+    "degraded": "kısıtlı çalışıyor",
+    "halted": "güvenlik durdurdu",
+    "stopping": "durduruluyor",
+    "stop_failed": "durdurma hatası",
+    "error": "hata",
+}
 _ACTIVE_ENGINE_STATES: frozenset[str] = frozenset(
     {"starting", "running", "warming_up", "degraded", "halted", "stopping", "stop_failed"}
 )
@@ -378,7 +393,7 @@ class EngineManager:
         """
         with self._state_lock:
             if self.runtime is not None or self.engine_state in _ACTIVE_ENGINE_STATES:
-                raise ValueError("Cannot toggle trading mode while engine is running. Stop the bot first.")
+                raise ValueError("Motor çalışırken işlem modu değiştirilemez. Önce botu durdurun.")
             write(self.config_path, paper)
 
     def configure_alert_delivery(self) -> None:
@@ -428,9 +443,29 @@ class EngineManager:
             return None
         record = read_operator_halt(marker) or {}
         return (
-            f"Engine start refused: operator halt is in force ({marker}; reason: "
-            f"{record.get('reason') or 'unspecified'}). Run `parayabuck resume` to clear it."
+            f"Motor başlatılamadı: operatör durdurması etkin (sebep: "
+            f"{record.get('reason') or 'belirtilmemiş'}). Kaldırmak için sunucuda "
+            "`parayabuck resume` komutunu çalıştırın."
         )
+
+    def _operator_stop_marker(self) -> Path:
+        """The 'stopped by operator' marker, next to the OPERATOR_HALT marker."""
+        return self.operator_halt_marker().with_name(OPERATOR_STOP_MARKER_FILENAME)
+
+    def _write_operator_stop_marker(self) -> None:
+        marker = self._operator_stop_marker()
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        record = {"stopped_at": datetime.now(UTC).isoformat(), "source": "web"}
+        atomic_write(marker, json.dumps(record, indent=2, sort_keys=True) + "\n")
+
+    def _clear_operator_stop_marker(self) -> None:
+        """Remove the marker on an explicit start. Raises ValueError if it cannot be removed."""
+        try:
+            self._operator_stop_marker().unlink(missing_ok=True)
+        except OSError as exc:
+            raise ValueError(
+                "Motor başlatılamadı: operatör durdurma kaydı silinemedi; dosya izinlerini kontrol edin."
+            ) from exc
 
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards.
@@ -438,7 +473,8 @@ class EngineManager:
         LIVE auto-starts only with a valid standing LIVE authorization
         (docs/live_readiness_v1.md B2); otherwise the engine stays stopped and
         ``live_rearm_required`` tells the owner a manual re-arm is needed.
-        An operator halt marker keeps the engine stopped across restarts.
+        An operator halt marker keeps the engine stopped across restarts, and
+        so does an operator Stop until the owner starts the engine again.
         """
         halt_refusal = self._operator_halt_refusal()
         if halt_refusal is not None:
@@ -446,6 +482,10 @@ class EngineManager:
             # say so in the alert channel, not only in the log.
             log.error("%s", halt_refusal)
             _alert_start_failure(reason="operator_halt", message=halt_refusal, auto_start=True)
+            return False
+        if os.path.lexists(os.fspath(self._operator_stop_marker())):
+            # A deliberate Stop is not a failure: no alert, just the log line.
+            log.info("Auto-start skipped: the engine was stopped by the operator; press Başlat to start it")
             return False
         if not trading_host_authorized():
             log.warning("%s", TRADING_HOST_REFUSAL)
@@ -594,7 +634,7 @@ class EngineManager:
         preserve the current config instead of clobbering with defaults.
         """
         if self.engine_state in {"starting", "stopping"}:
-            raise ValueError("Bot is currently changing state; wait a moment and try again")
+            raise ValueError("Bot şu anda durum değiştiriyor; birkaç saniye bekleyip tekrar deneyin.")
 
         fields_set = payload.model_fields_set
 
@@ -614,11 +654,13 @@ class EngineManager:
             target_paper = current_paper
         entering_live = current_paper and not target_paper
         if entering_live and payload.restart_engine:
-            raise ValueError("Saving live mode requires restart_engine=false; start live separately after arming")
+            raise ValueError(
+                "CANLI mod kaydedilirken motor yeniden başlatılamaz; önce CANLI onayını tamamlayıp motoru ayrıca başlatın."
+            )
         if entering_live:
             live_key, live_secret = self.get_live_credentials()
             if not live_key or not live_secret:
-                raise ValueError(f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are required")
+                raise ValueError(f"CANLI Alpaca anahtarları ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) gerekli.")
             self._require_valid_live_arm(
                 live_key,
                 live_secret,
@@ -796,31 +838,34 @@ class EngineManager:
         # interleave the way two independent checks could.
         guard = getattr(self, "_backtest_manager", None)
         if guard is None:
-            raise ValueError("Engine/backtest exclusion is not configured; refusing to start the engine")
+            raise ValueError("Motor ve backtest çakışma koruması yapılandırılmamış; motor başlatılmadı.")
         # Lock order for both start paths is BacktestManager.lock ->
         # EngineManager._state_lock.  BacktestManager.start holds its lock
         # while reading this manager's state through the bound provider.
         with guard.lock:
             if guard.is_running:
-                raise ValueError(
-                    "A Web backtest is still running; wait for it to finish before starting the trading engine"
-                )
+                raise ValueError("Web backtesti hâlâ çalışıyor; motoru başlatmadan önce bitmesini bekleyin.")
             with self._state_lock:
                 if self._shutdown_requested.is_set():
-                    raise ValueError("Engine start refused: the application is shutting down")
+                    raise ValueError("Motor başlatılamadı: uygulama kapanıyor.")
                 if self._settings_write_open:
-                    raise ValueError("Engine start refused: a settings save is in progress; retry when it finishes")
+                    raise ValueError("Motor başlatılamadı: ayar kaydı sürüyor; kayıt bitince tekrar deneyin.")
                 if self.runtime is not None or self.engine_state in _START_ENGINE_BLOCKING_STATES:
-                    raise ValueError(f"Engine is already {self.engine_state}")
+                    raise ValueError(f"Motor zaten {_ENGINE_STATE_TR.get(self.engine_state, self.engine_state)}.")
                 # The auto-start retry loop re-enters while its own failed
                 # attempt left the state at 'starting'. A manual start during
                 # a pending retry is refused so two runtimes can never race.
                 if self.engine_state == "starting" and not auto_start:
                     if self._retry_task is not None:
                         raise ValueError(
-                            "Engine auto-start retry is in progress; wait for it to finish or stop the engine"
+                            "Otomatik başlatma yeniden deneniyor; bitmesini bekleyin veya motoru durdurun."
                         )
-                    raise ValueError("Engine is already starting")
+                    raise ValueError("Motor zaten başlatılıyor.")
+                if not auto_start:
+                    # An explicit start is the owner's decision to resume trading,
+                    # so it lifts a previous operator Stop. Clearing happens only
+                    # once every refusal above has passed.
+                    self._clear_operator_stop_marker()
                 self.engine_state = "starting"
                 self.last_engine_error = None
                 # Fresh cancel event per attempt: a stop request may only
@@ -836,7 +881,7 @@ class EngineManager:
         """One start attempt after the state change; see start_engine."""
         key, secret = self.get_credentials()
         if not key or not secret:
-            message = "Alpaca API key/secret missing. Configure settings first."
+            message = "Alpaca API anahtarı/secret eksik. Önce Ayarlar'dan girin."
             with self._state_lock:
                 self.engine_state = "error"
                 self.last_engine_error = message
@@ -1100,7 +1145,18 @@ class EngineManager:
             return f"LIVE start refused: {warning}"
         return None
 
-    def stop_engine(self) -> None:
+    def stop_engine(self, *, operator_request: bool = False) -> None:
+        # Only an explicit operator Stop is durable. Shutdown, restarts and
+        # settings saves stop the engine without it, so they can still auto-start.
+        # Written before any state change: if the record cannot be saved the
+        # engine keeps running and the operator is told.
+        if operator_request:
+            try:
+                self._write_operator_stop_marker()
+            except OSError as exc:
+                raise RuntimeError(
+                    "Motor durdurulamadı: durdurma kaydı yazılamadı; motor çalışmaya devam ediyor."
+                ) from exc
         with self._state_lock:
             # A start attempt still in flight must abort before its
             # resume/catch-up steps submit orders (see StartupCancelled).
@@ -1257,7 +1313,9 @@ class EngineManager:
                 runtime = self.runtime
                 state = self.current_engine_state()
             if runtime is None or state not in {"halted", "degraded"}:
-                raise ValueError("A halted runtime is required to reset the safety lock")
+                raise ValueError(
+                    "Güvenlik kilidi yalnızca motor güvenlik durdurmasındayken veya kısıtlı çalışırken açılabilir."
+                )
             runtime.reset_safety_lock()
 
     def start_new_risk_epoch(self) -> dict[str, object]:
@@ -1267,7 +1325,7 @@ class EngineManager:
             with self._state_lock:
                 runtime = self.runtime
             if runtime is None:
-                raise ValueError("The trading engine is not running; start it before resetting the risk epoch")
+                raise ValueError("Motor çalışmıyor; yeni risk dönemi için önce motoru başlatın.")
             baseline = runtime.start_new_risk_epoch()
         return {"baseline_equity": baseline}
 
@@ -1455,14 +1513,13 @@ class EngineManager:
 
     def request_live_arming(self) -> str:
         if self.has_active_runtime():
-            raise ValueError("Stop the engine before requesting live mode")
+            raise ValueError("CANLI moda geçmek için önce motoru durdurun.")
         if not self._live_env_enabled():
-            raise ValueError("PARAYABUCK_ENABLE_LIVE=YES is required for live mode")
+            raise ValueError("CANLI mod için sunucuda PARAYABUCK_ENABLE_LIVE=YES ayarı gerekir.")
         key, secret = self.get_live_credentials()
         if not key or not secret:
             raise ValueError(
-                f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are required "
-                "before live verification"
+                f"CANLI Alpaca anahtarları ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) doğrulamadan önce gerekli."
             )
         from parayabuck.execution.alpaca import AlpacaBroker
         from parayabuck.live_safety import LiveApprovalError, verify_account_environment
@@ -1513,7 +1570,7 @@ class EngineManager:
             or not secrets.compare_digest(phrase.strip().encode("utf-8"), f"LIVE {pending.account_suffix}".encode())
         ):
             self.invalidate_live_arming()
-            raise ValueError("Live confirmation phrase does not match the verified account")
+            raise ValueError("Onay ifadesi doğrulanan hesapla eşleşmiyor; ifadeyi yeniden isteyip doğru yazın.")
         now = datetime.now(UTC)
         self._live_arm_token = replace(
             pending,
@@ -1953,9 +2010,9 @@ def _scan_tracked_secrets(root: Path) -> str | None:
                 marker in value for marker in ("your_", "example", "placeholder")
             ):
                 return (
-                    f"SECURITY BLOCK: tracked file {relative} contains a non-placeholder "
-                    "secret (ALPACA_SECRET_KEY, ALPACA_LIVE_SECRET_KEY or PARAYABUCK_SMTP_PASSWORD). "
-                    "Rotate it and remove it from Git history."
+                    f"GÜVENLİK ENGELİ: izlenen dosya {relative} gerçek bir gizli anahtar içeriyor "
+                    "(ALPACA_SECRET_KEY, ALPACA_LIVE_SECRET_KEY veya PARAYABUCK_SMTP_PASSWORD). "
+                    "Bu anahtarı Alpaca panelinden iptal edip yenileyin ve dosyadan kaldırın."
                 )
     return None
 

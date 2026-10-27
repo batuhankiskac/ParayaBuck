@@ -130,7 +130,7 @@ def test_missing_credentials_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
     manager = _manager(monkeypatch, _FailingRuntime(failures=0))
     monkeypatch.setattr(manager, "get_credentials", lambda: ("", ""))
 
-    with pytest.raises(ValueError, match="key/secret missing"):
+    with pytest.raises(ValueError, match="anahtarı/secret eksik"):
         manager.start_engine(auto_start=True)
 
     assert manager.engine_state == "error"

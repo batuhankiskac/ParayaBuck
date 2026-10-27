@@ -54,7 +54,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(2, 4, 8, 16, 16),
         bounded_attempts=5,
-        operator_action="Check Alpaca status/network/creds; no code change",
+        operator_action="Alpaca durumunu, ağı ve anahtarları kontrol edin; kod değişikliği gerekmez.",
     ),
     IncidentCategory.BROKER_ACCOUNT_STALE: IncidentSpec(
         category=IncidentCategory.BROKER_ACCOUNT_STALE,
@@ -63,7 +63,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(15,),
         bounded_attempts=None,
-        operator_action="Verify broker connectivity/clock; self-clears on fresh snapshot",
+        operator_action="Alpaca bağlantısını ve sistem saatini kontrol edin; yeni anlık görüntüyle kendiliğinden temizlenir.",
     ),
     IncidentCategory.POSITION_DRIFT: IncidentSpec(
         category=IncidentCategory.POSITION_DRIFT,
@@ -72,7 +72,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="Inspect PaperIncidentReport.external_position_symbols, manual reconcile, reset_safety_lock",
+        operator_action="Harici pozisyon sembollerini inceleyin, elle mutabakat yapın ve “Kilidi doğrula” ile kilidi açın.",
     ),
     IncidentCategory.ORDER_DRIFT: IncidentSpec(
         category=IncidentCategory.ORDER_DRIFT,
@@ -81,7 +81,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(60,),
         bounded_attempts=None,
-        operator_action="Run reconcile_paper_incident.py, reset_safety_lock if halted",
+        operator_action="Mutabakat aracını çalıştırın; bot durdurulmuşsa “Kilidi doğrula” ile kilidi açın.",
     ),
     IncidentCategory.PENDING_ORDER_UNKNOWN: IncidentSpec(
         category=IncidentCategory.PENDING_ORDER_UNKNOWN,
@@ -90,7 +90,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="Wait for broker finality, _verify_market_halts, reset_safety_lock",
+        operator_action="Alpaca'nın emir sonucunu kesinleştirmesini bekleyin, piyasa durdurmalarını doğrulayın ve “Kilidi doğrula” ile kilidi açın.",
     ),
     IncidentCategory.SIGNAL_HISTORY_UNVERIFIED: IncidentSpec(
         category=IncidentCategory.SIGNAL_HISTORY_UNVERIFIED,
@@ -99,7 +99,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(3600,),
         bounded_attempts=None,
-        operator_action="Wait for provider adequate_coverage, check digest/universe",
+        operator_action="Veri sağlayıcısının yeterli kapsama ulaşmasını bekleyin; yapılandırma özetini ve evreni kontrol edin.",
     ),
     IncidentCategory.DATABASE_ERROR: IncidentSpec(
         category=IncidentCategory.DATABASE_ERROR,
@@ -108,7 +108,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(5,),
         bounded_attempts=1,
-        operator_action="Check disk/permissions, backup.verify_backup, restore WAL snapshot",
+        operator_action="Disk alanını ve izinleri kontrol edin, yedeği doğrulayın ve WAL anlık görüntüsünü geri yükleyin.",
     ),
     IncidentCategory.STATE_RESTORE_FAILED: IncidentSpec(
         category=IncidentCategory.STATE_RESTORE_FAILED,
@@ -117,7 +117,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="Restore backup_database, reset_safety_lock after reconcile",
+        operator_action="Veritabanı yedeğini geri yükleyin; mutabakattan sonra “Kilidi doğrula” ile kilidi açın.",
     ),
     IncidentCategory.DUPLICATE_DECISION: IncidentSpec(
         category=IncidentCategory.DUPLICATE_DECISION,
@@ -126,7 +126,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="Verify portfolio_decisions count == periods",
+        operator_action="Karar kayıtlarının sayısını dönem sayısıyla karşılaştırın.",
     ),
     IncidentCategory.DUPLICATE_ORDER_RISK: IncidentSpec(
         category=IncidentCategory.DUPLICATE_ORDER_RISK,
@@ -135,7 +135,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="Verify IdempotencyKeyFactory, audit duplicate_client_order_ids",
+        operator_action="Mükerrer emir kimliklerini denetleyin.",
     ),
     IncidentCategory.CLOCK_OR_SESSION_MISMATCH: IncidentSpec(
         category=IncidentCategory.CLOCK_OR_SESSION_MISMATCH,
@@ -144,7 +144,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=True,
         retry_interval_seconds=(2,),
         bounded_attempts=None,
-        operator_action="Sync NTP, verify NEW_YORK tz",
+        operator_action="Sistem saatini zaman sunucusuyla eşitleyin ve saat dilimini (New York) doğrulayın.",
     ),
     IncidentCategory.RESTART_RECOVERY_FAILED: IncidentSpec(
         category=IncidentCategory.RESTART_RECOVERY_FAILED,
@@ -153,7 +153,7 @@ INCIDENT_TAXONOMY: dict[IncidentCategory, IncidentSpec] = {
         auto_retry=False,
         retry_interval_seconds=None,
         bounded_attempts=None,
-        operator_action="reset_safety_lock for recoverable reasons, start_new_risk_epoch for drawdown",
+        operator_action="Onarılabilir nedenlerde “Kilidi doğrula”; zirveden düşüşte “Yeni risk dönemi” kullanın.",
     ),
 }
 

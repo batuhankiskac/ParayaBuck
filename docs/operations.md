@@ -163,9 +163,12 @@ same verdict by hand (`engine_state`, `engine_error`, `start_retry_attempt`).
 
 ### Stop and restart
 
-A stop from the dashboard is not sticky: nothing persists it, so it lasts only until
-the process restarts. `sudo systemctl restart parayabuck` (every deploy) starts the
-engine again when auto-start is allowed. To keep the engine down across restarts,
+A stop from the dashboard is durable. It writes `data/runtime/OPERATOR_STOPPED`
+next to the operator halt marker, and auto-start refuses while that file exists.
+`sudo systemctl restart parayabuck` (every deploy) therefore leaves the engine
+stopped. The owner starts it again with the dashboard Başlat button, which removes
+the file. Shutdown, restarts and settings saves that stop the engine do not write
+the file, so they keep auto-start. For a hard stop that also refuses manual starts,
 set the operator halt first (`parayabuck halt`, see `docs/operator_runbook.md`,
 "Operator halt").
 

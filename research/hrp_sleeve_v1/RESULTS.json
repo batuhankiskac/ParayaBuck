@@ -1,0 +1,1184 @@
+{
+ "control_K_anchor": "band_h2_combo_v1/RESULTS.json after_tax_windows.100k (see SUMMARY.txt)",
+ "pre_post_2020": {
+  "post_2020": {
+   "D1": {
+    "after_tax_cagr": 0.22046817641542904,
+    "legs": {
+     "A": {
+      "blocked_band": 492.0,
+      "deferred": 19.0,
+      "fees_usd": 4638.993552937256,
+      "postponements": 511.0,
+      "sells": 69.0,
+      "tax_funding_sales": 7.0,
+      "trades": 264.0,
+      "turnover_annual": 3.934845853738664,
+      "turnover_total": 26.54472329531025,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 4743.72908367812,
+      "postponements": 3.0,
+      "sells": 172.0,
+      "tax_funding_sales": 2.0,
+      "trades": 315.0,
+      "turnover_annual": 4.22390408633109,
+      "turnover_total": 28.49472873023903,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.34100523404333594,
+    "sells_per_year": 37.058644480519476,
+    "tax_usd": 152820.56279096278,
+    "trades_per_year": 85.82782061688312
+   },
+   "D2": {
+    "after_tax_cagr": 0.22046814771363255,
+    "legs": {
+     "A": {
+      "blocked_band": 492.0,
+      "deferred": 19.0,
+      "fees_usd": 4638.993453415089,
+      "postponements": 511.0,
+      "sells": 69.0,
+      "tax_funding_sales": 7.0,
+      "trades": 264.0,
+      "turnover_annual": 3.934845954356394,
+      "turnover_total": 26.54472397408393,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 4743.74073145284,
+      "postponements": 3.0,
+      "sells": 172.0,
+      "tax_funding_sales": 2.0,
+      "trades": 315.0,
+      "turnover_annual": 4.223914395584963,
+      "turnover_total": 28.49479827712895,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3410052155858826,
+    "sells_per_year": 37.058644480519476,
+    "tax_usd": 152820.59713629022,
+    "trades_per_year": 85.82782061688312
+   },
+   "D3": {
+    "after_tax_cagr": 0.22052836869342207,
+    "legs": {
+     "A": {
+      "blocked_band": 492.0,
+      "deferred": 19.0,
+      "fees_usd": 4638.666656319339,
+      "postponements": 511.0,
+      "sells": 69.0,
+      "tax_funding_sales": 7.0,
+      "trades": 264.0,
+      "turnover_annual": 3.934154181898041,
+      "turnover_total": 26.54005723257159,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 4714.107964531418,
+      "postponements": 3.0,
+      "sells": 171.0,
+      "tax_funding_sales": 2.0,
+      "trades": 312.0,
+      "turnover_annual": 4.190469674570126,
+      "turnover_total": 28.26917803734645,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3410353819569326,
+    "sells_per_year": 36.9104099025974,
+    "tax_usd": 152770.6331379592,
+    "trades_per_year": 85.38311688311688
+   },
+   "K": {
+    "after_tax_cagr": 0.2289440822518738,
+    "legs": {
+     "A": {
+      "blocked_band": 490.0,
+      "deferred": 19.0,
+      "fees_usd": 4728.50969766605,
+      "postponements": 509.0,
+      "sells": 70.0,
+      "tax_funding_sales": 2.0,
+      "trades": 264.0,
+      "turnover_annual": 3.9298032596151047,
+      "turnover_total": 26.510705630914767,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3452032243629206,
+    "sells_per_year": 10.67288961038961,
+    "tax_usd": 140812.56395187392,
+    "trades_per_year": 39.13392857142857
+   }
+  },
+  "pre_2020": {
+   "D1": {
+    "after_tax_cagr": 0.06767891810856486,
+    "legs": {
+     "A": {
+      "blocked_band": 1305.0,
+      "deferred": 62.0,
+      "fees_usd": 13487.61206352762,
+      "postponements": 1367.0,
+      "sells": 207.0,
+      "tax_funding_sales": 12.0,
+      "trades": 620.0,
+      "turnover_annual": 6.031248518277641,
+      "turnover_total": 119.50210958733823,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 7.0,
+      "deferred": 31.0,
+      "fees_usd": 13364.517033530707,
+      "postponements": 38.0,
+      "sells": 322.0,
+      "tax_funding_sales": 2.0,
+      "trades": 610.0,
+      "turnover_annual": 6.131205330668603,
+      "turnover_total": 121.48263649020856,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579485891437165,
+    "sells_per_year": 27.405105706784582,
+    "tax_usd": 200602.14747785038,
+    "trades_per_year": 62.07786375569988
+   },
+   "D2": {
+    "after_tax_cagr": 0.06767914735893688,
+    "legs": {
+     "A": {
+      "blocked_band": 1305.0,
+      "deferred": 62.0,
+      "fees_usd": 13487.650375984886,
+      "postponements": 1367.0,
+      "sells": 207.0,
+      "tax_funding_sales": 12.0,
+      "trades": 620.0,
+      "turnover_annual": 6.031248540596439,
+      "turnover_total": 119.502110029559,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 7.0,
+      "deferred": 31.0,
+      "fees_usd": 13364.52845282487,
+      "postponements": 38.0,
+      "sells": 322.0,
+      "tax_funding_sales": 2.0,
+      "trades": 610.0,
+      "turnover_annual": 6.131184291408841,
+      "turnover_total": 121.4822196219734,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579485891437165,
+    "sells_per_year": 27.405105706784582,
+    "tax_usd": 200602.16607026977,
+    "trades_per_year": 62.07786375569988
+   },
+   "D3": {
+    "after_tax_cagr": 0.06767813572831716,
+    "legs": {
+     "A": {
+      "blocked_band": 1305.0,
+      "deferred": 62.0,
+      "fees_usd": 13489.243223611647,
+      "postponements": 1367.0,
+      "sells": 207.0,
+      "tax_funding_sales": 12.0,
+      "trades": 620.0,
+      "turnover_annual": 6.031253922897715,
+      "turnover_total": 119.50221667354076,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 8.0,
+      "deferred": 31.0,
+      "fees_usd": 13325.486936718173,
+      "postponements": 39.0,
+      "sells": 321.0,
+      "tax_funding_sales": 0.0,
+      "trades": 609.0,
+      "turnover_annual": 6.1120366473670185,
+      "turnover_total": 121.10283153181412,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579749683803779,
+    "sells_per_year": 27.25369628299019,
+    "tax_usd": 200650.37246400362,
+    "trades_per_year": 62.02739394776842
+   },
+   "K": {
+    "after_tax_cagr": 0.06813435417340163,
+    "legs": {
+     "A": {
+      "blocked_band": 1309.0,
+      "deferred": 62.0,
+      "fees_usd": 13781.029347798305,
+      "postponements": 1371.0,
+      "sells": 206.0,
+      "tax_funding_sales": 8.0,
+      "trades": 618.0,
+      "turnover_annual": 6.029311699007714,
+      "turnover_total": 119.46373378704675,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.46669791033866914,
+    "sells_per_year": 10.80053889733315,
+    "tax_usd": 215316.88732763153,
+    "trades_per_year": 31.19034130164433
+   }
+  }
+ },
+ "pre_tax_main": {
+  "D1": {
+   "blocked_band": 1249.0,
+   "cagr_usd_liquidated": 0.15952136554727403,
+   "cagr_usd_unliquidated": 0.15955565975704844,
+   "capital_usd": 100000.0,
+   "deferred": 105.0,
+   "ending_nav_usd": 5100090.182514553,
+   "fees_usd": 125084.25069297581,
+   "index_relief_try": 0.0,
+   "max_dd_nav_usd": 0.428767316277219,
+   "postponements": 1354.0,
+   "qld_sells": 760.0,
+   "sells": 760.0,
+   "strategy_trades": 1799.0,
+   "tax_funding_sales": 0.0,
+   "tax_total_try": 0.0,
+   "tax_total_usd_at_payment_fx": 0.0,
+   "terminal_usd_liquidated": 5096085.489836592,
+   "terminal_usd_unliquidated": 5100090.182514553,
+   "turnover_annual": 11.099119422311235,
+   "turnover_total": 294.79139634727255,
+   "years": 26.559890485968516
+  },
+  "D2": {
+   "blocked_band": 1249.0,
+   "cagr_usd_liquidated": 0.15952133061970186,
+   "cagr_usd_unliquidated": 0.15955562482844332,
+   "capital_usd": 100000.0,
+   "deferred": 105.0,
+   "ending_nav_usd": 5100086.102200305,
+   "fees_usd": 125084.24095786738,
+   "index_relief_try": 0.0,
+   "max_dd_nav_usd": 0.428767316277219,
+   "postponements": 1354.0,
+   "qld_sells": 760.0,
+   "sells": 760.0,
+   "strategy_trades": 1799.0,
+   "tax_funding_sales": 0.0,
+   "tax_total_try": 0.0,
+   "tax_total_usd_at_payment_fx": 0.0,
+   "terminal_usd_liquidated": 5096081.412726289,
+   "terminal_usd_unliquidated": 5100086.102200305,
+   "turnover_annual": 11.099106600837686,
+   "turnover_total": 294.79105581033923,
+   "years": 26.559890485968516
+  },
+  "D3": {
+   "blocked_band": 1250.0,
+   "cagr_usd_liquidated": 0.15949342444837944,
+   "cagr_usd_unliquidated": 0.15952771783176312,
+   "capital_usd": 100000.0,
+   "deferred": 105.0,
+   "ending_nav_usd": 5096827.046900101,
+   "fees_usd": 124719.33135762748,
+   "index_relief_try": 0.0,
+   "max_dd_nav_usd": 0.4290102779984165,
+   "postponements": 1355.0,
+   "qld_sells": 759.0,
+   "sells": 759.0,
+   "strategy_trades": 1797.0,
+   "tax_funding_sales": 0.0,
+   "tax_total_try": 0.0,
+   "tax_total_usd_at_payment_fx": 0.0,
+   "terminal_usd_liquidated": 5092824.916501401,
+   "terminal_usd_unliquidated": 5096827.046900101,
+   "turnover_annual": 11.076969124089464,
+   "turnover_total": 294.20308685227076,
+   "years": 26.559890485968516
+  },
+  "K": {
+   "blocked_band": 1239.0,
+   "cagr_usd_liquidated": 0.1576146867305288,
+   "cagr_usd_unliquidated": 0.15764892454803214,
+   "capital_usd": 100000.0,
+   "deferred": 71.0,
+   "ending_nav_usd": 4881966.275270172,
+   "fees_usd": 59509.526498474705,
+   "index_relief_try": 0.0,
+   "max_dd_nav_usd": 0.46669791033866914,
+   "postponements": 1310.0,
+   "qld_sells": 270.0,
+   "sells": 270.0,
+   "strategy_trades": 877.0,
+   "tax_funding_sales": 0.0,
+   "tax_total_try": 0.0,
+   "tax_total_usd_at_payment_fx": 0.0,
+   "terminal_usd_liquidated": 4878132.857840878,
+   "terminal_usd_unliquidated": 4881966.275270172,
+   "turnover_annual": 5.456136019214536,
+   "turnover_total": 144.91437514688627,
+   "years": 26.559890485968516
+  }
+ },
+ "provenance": {
+  "alfred_vintage": null,
+  "data_sha256": {
+   "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "data/historical/after_tax_tr_v1_yiufe.csv": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "data/historical/batch_screen_v1_gld.csv": "dab5c79cfafdf86a23017082d83ad64b02f9859ea2c4fe26b70a7cba9f73dfce",
+   "data/historical/batch_screen_v1_ief.csv": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f",
+   "data/historical/riskoff_rotation_v2_gcf.csv": "8cf5ebb7056fadf9180804d8e5f029e0095fa845dfc8d9053721d9c276092629",
+   "data/historical/riskoff_rotation_v2_gs10.csv": "40323f225e613a19a4eec7eef20523dec10764de21c70cd1416a7379fb7f13b6",
+   "data/historical/stress_robustness_v1_daily.csv": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "data/historical/stress_robustness_v1_dtb3.csv": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "research/band_h2_combo_v1/RESULTS.json": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997"
+  },
+  "git_sha": "7807a3bcd1055fadf55794f8dd5dd13305b64df7",
+  "versions": {
+   "numba": "0.68.0",
+   "numpy": "2.5.2",
+   "pandas": "3.0.5",
+   "python": "3.13.12"
+  }
+ },
+ "study": "hrp_sleeve_v1",
+ "weight_stats": {
+  "D1": {
+   "bil_mean": 0.9999803256476782,
+   "bil_min": 0.9998249923955718,
+   "gld_max": 2.706261599769643e-05,
+   "gld_mean": 2.015451004519871e-06,
+   "ief_max": 0.0001750076044282345,
+   "ief_mean": 1.765890131724723e-05,
+   "sessions_with_sleeve": 6663
+  },
+  "D2": {
+   "bil_mean": 0.9999793786016933,
+   "bil_min": 0.9997718586603044,
+   "gld_max": 2.9780153544378685e-05,
+   "gld_mean": 2.0404650476245925e-06,
+   "ief_max": 0.00021287448860751734,
+   "ief_mean": 1.858093325912048e-05,
+   "sessions_with_sleeve": 6663
+  },
+  "D3": {
+   "bil_mean": 0.9958743975641211,
+   "bil_min": 0.9849191161714479,
+   "gld_max": 0.006125374281816224,
+   "gld_mean": 0.0009612588097607912,
+   "ief_max": 0.013057449031597893,
+   "ief_mean": 0.0031643436261182337,
+   "sessions_with_sleeve": 6663
+  }
+ },
+ "weights_last": {
+  "D1": [
+   2.1142884569008753e-06,
+   5.641942265543539e-08,
+   0.9999978292921204
+  ],
+  "D2": [
+   1.2017104379599407e-06,
+   3.206743568381925e-08,
+   0.9999987662221264
+  ],
+  "D3": [
+   0.0015088070791793979,
+   0.0002464710484623556,
+   0.9982447218723582
+  ]
+ },
+ "windows": {
+  "2000_03_to_2026_09": {
+   "D1": {
+    "after_tax_cagr": 0.1042621670423658,
+    "daily_sr": 0.024443649435785343,
+    "dsr": {
+     "dsr": 0.16919633898726288,
+     "sr0": 0.03628245870477122
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1827.0,
+      "deferred": 81.0,
+      "fees_usd": 30745.265703882887,
+      "postponements": 1908.0,
+      "sells": 273.0,
+      "tax_funding_sales": 19.0,
+      "trades": 879.0,
+      "turnover_annual": 5.459869253162001,
+      "turnover_total": 145.01352943168945,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 7.0,
+      "deferred": 34.0,
+      "fees_usd": 31683.315715810815,
+      "postponements": 41.0,
+      "sells": 493.0,
+      "tax_funding_sales": 4.0,
+      "trades": 923.0,
+      "turnover_annual": 5.6466658252213975,
+      "turnover_total": 149.97482592874135,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579485891437165,
+    "sells_per_year": 29.706447788887743,
+    "tax_usd": 852143.2913507364,
+    "trades_per_year": 67.84666529223792
+   },
+   "D2": {
+    "after_tax_cagr": 0.10426233139572716,
+    "daily_sr": 0.024443685386447613,
+    "dsr": {
+     "dsr": 0.16919707643849452,
+     "sr0": 0.03628245870477122
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1827.0,
+      "deferred": 81.0,
+      "fees_usd": 30745.376068320536,
+      "postponements": 1908.0,
+      "sells": 273.0,
+      "tax_funding_sales": 19.0,
+      "trades": 879.0,
+      "turnover_annual": 5.459869297478097,
+      "turnover_total": 145.01353060872012,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 7.0,
+      "deferred": 34.0,
+      "fees_usd": 31683.44859859281,
+      "postponements": 41.0,
+      "sells": 493.0,
+      "tax_funding_sales": 4.0,
+      "trades": 923.0,
+      "turnover_annual": 5.646652692708482,
+      "turnover_total": 149.97447713063653,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579485891437165,
+    "sells_per_year": 29.706447788887743,
+    "tax_usd": 852146.2936544775,
+    "trades_per_year": 67.84666529223792
+   },
+   "D3": {
+    "after_tax_cagr": 0.10427916275747329,
+    "daily_sr": 0.02444697933564433,
+    "dsr": {
+     "dsr": 0.16926435307182852,
+     "sr0": 0.03628245870477122
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1832.0,
+      "deferred": 81.0,
+      "fees_usd": 30746.63686328563,
+      "postponements": 1913.0,
+      "sells": 273.0,
+      "tax_funding_sales": 19.0,
+      "trades": 879.0,
+      "turnover_annual": 5.459693079925526,
+      "turnover_total": 145.00885028982213,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 8.0,
+      "deferred": 34.0,
+      "fees_usd": 31549.612537173536,
+      "postponements": 42.0,
+      "sells": 492.0,
+      "tax_funding_sales": 2.0,
+      "trades": 921.0,
+      "turnover_annual": 5.625418044083093,
+      "turnover_total": 149.41048718863817,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4579749683803779,
+    "sells_per_year": 29.59349551592619,
+    "tax_usd": 851999.633437232,
+    "trades_per_year": 67.77136377693022
+   },
+   "K": {
+    "after_tax_cagr": 0.10753305712588879,
+    "legs": {
+     "A": {
+      "blocked_band": 1836.0,
+      "deferred": 81.0,
+      "fees_usd": 31813.04935535683,
+      "postponements": 1917.0,
+      "sells": 273.0,
+      "tax_funding_sales": 10.0,
+      "trades": 875.0,
+      "turnover_annual": 5.455744811138311,
+      "turnover_total": 144.90398470322452,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.46669791033866914,
+    "sells_per_year": 10.655164416039582,
+    "tax_usd": 830902.6614114628,
+    "trades_per_year": 32.94441294711885
+   }
+  },
+  "2010_01_to_end": {
+   "D1": {
+    "after_tax_cagr": 0.1473656846684661,
+    "daily_sr": 0.03225576615095367,
+    "dsr": {
+     "dsr": 0.19529428045982966,
+     "sr0": 0.045701499952073975
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1429.0,
+      "deferred": 60.0,
+      "fees_usd": 19329.383263401167,
+      "postponements": 1489.0,
+      "sells": 168.0,
+      "tax_funding_sales": 14.0,
+      "trades": 535.0,
+      "turnover_annual": 5.6763377228974,
+      "turnover_total": 95.04854623748255,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 12.0,
+      "fees_usd": 19818.877033355147,
+      "postponements": 12.0,
+      "sells": 316.0,
+      "tax_funding_sales": 2.0,
+      "trades": 589.0,
+      "turnover_annual": 5.812326495270321,
+      "turnover_total": 97.32563681060448,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.452425696039948,
+    "sells_per_year": 29.860202746893393,
+    "tax_usd": 575469.9441948294,
+    "trades_per_year": 67.12573577501634
+   },
+   "D2": {
+    "after_tax_cagr": 0.14736568471330957,
+    "daily_sr": 0.03225576671880767,
+    "dsr": {
+     "dsr": 0.19529429058203485,
+     "sr0": 0.045701499952073975
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1429.0,
+      "deferred": 60.0,
+      "fees_usd": 19329.385135144057,
+      "postponements": 1489.0,
+      "sells": 168.0,
+      "tax_funding_sales": 14.0,
+      "trades": 535.0,
+      "turnover_annual": 5.676337765930954,
+      "turnover_total": 95.04854695806631,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 12.0,
+      "fees_usd": 19818.917819151495,
+      "postponements": 12.0,
+      "sells": 316.0,
+      "tax_funding_sales": 2.0,
+      "trades": 589.0,
+      "turnover_annual": 5.812332680235085,
+      "turnover_total": 97.32574037595559,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.45242569751911876,
+    "sells_per_year": 29.860202746893393,
+    "tax_usd": 575470.0842013438,
+    "trades_per_year": 67.12573577501634
+   },
+   "D3": {
+    "after_tax_cagr": 0.14737662073459235,
+    "daily_sr": 0.032257159024434434,
+    "dsr": {
+     "dsr": 0.19531858756378545,
+     "sr0": 0.045701499952073975
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 1432.0,
+      "deferred": 60.0,
+      "fees_usd": 19326.219992306156,
+      "postponements": 1492.0,
+      "sells": 168.0,
+      "tax_funding_sales": 14.0,
+      "trades": 535.0,
+      "turnover_annual": 5.676052291123523,
+      "turnover_total": 95.04376676936748,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 12.0,
+      "fees_usd": 19734.91588335957,
+      "postponements": 12.0,
+      "sells": 316.0,
+      "tax_funding_sales": 2.0,
+      "trades": 588.0,
+      "turnover_annual": 5.795771925275176,
+      "turnover_total": 97.04843557832437,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4524173426659681,
+    "sells_per_year": 29.860202746893393,
+    "tax_usd": 575283.4909864891,
+    "trades_per_year": 67.06601536952256
+   },
+   "K": {
+    "after_tax_cagr": 0.1523535983083324,
+    "legs": {
+     "A": {
+      "blocked_band": 1413.0,
+      "deferred": 60.0,
+      "fees_usd": 20037.639345781467,
+      "postponements": 1473.0,
+      "sells": 169.0,
+      "tax_funding_sales": 9.0,
+      "trades": 533.0,
+      "turnover_annual": 5.671905890383616,
+      "turnover_total": 94.97433655191294,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.4462718259812316,
+    "sells_per_year": 10.630232177894047,
+    "tax_usd": 562872.8893469702,
+    "trades_per_year": 31.830976128188354
+   }
+  },
+  "2017_01_to_end": {
+   "D1": {
+    "after_tax_cagr": 0.23569109969719948,
+    "daily_sr": 0.04895459171420123,
+    "dsr": {
+     "dsr": 0.2973203330887706,
+     "sr0": 0.05993809452841944
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 783.0,
+      "deferred": 29.0,
+      "fees_usd": 10971.881262381814,
+      "postponements": 812.0,
+      "sells": 88.0,
+      "tax_funding_sales": 9.0,
+      "trades": 327.0,
+      "turnover_annual": 3.4883867804059916,
+      "turnover_total": 34.00042967349851,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 11311.720790985792,
+      "postponements": 3.0,
+      "sells": 201.0,
+      "tax_funding_sales": 2.0,
+      "trades": 378.0,
+      "turnover_annual": 3.712668729152375,
+      "turnover_total": 36.18644948879522,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3474654050128656,
+    "sells_per_year": 30.77949438202247,
+    "tax_usd": 401281.83296354685,
+    "trades_per_year": 72.3318117977528
+   },
+   "D2": {
+    "after_tax_cagr": 0.23569109716635217,
+    "daily_sr": 0.0489545920255621,
+    "dsr": {
+     "dsr": 0.29732033874079267,
+     "sr0": 0.05993809452841944
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 783.0,
+      "deferred": 29.0,
+      "fees_usd": 10971.882520943407,
+      "postponements": 812.0,
+      "sells": 88.0,
+      "tax_funding_sales": 9.0,
+      "trades": 327.0,
+      "turnover_annual": 3.4883868540340193,
+      "turnover_total": 34.0004303911324,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 11311.751931175731,
+      "postponements": 3.0,
+      "sells": 201.0,
+      "tax_funding_sales": 2.0,
+      "trades": 378.0,
+      "turnover_annual": 3.712679109713337,
+      "turnover_total": 36.18655066551535,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3474653885491992,
+    "sells_per_year": 30.77949438202247,
+    "tax_usd": 401281.93858855916,
+    "trades_per_year": 72.3318117977528
+   },
+   "D3": {
+    "after_tax_cagr": 0.23570989175745272,
+    "daily_sr": 0.04895682673443627,
+    "dsr": {
+     "dsr": 0.29735689665845977,
+     "sr0": 0.05993809452841944
+    },
+    "legs": {
+     "A": {
+      "blocked_band": 787.0,
+      "deferred": 29.0,
+      "fees_usd": 10969.196808751276,
+      "postponements": 816.0,
+      "sells": 88.0,
+      "tax_funding_sales": 9.0,
+      "trades": 327.0,
+      "turnover_annual": 3.487896944374446,
+      "turnover_total": 33.99565536474477,
+      "units_end": 0.0
+     },
+     "B": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "C": {
+      "blocked_band": 0.0,
+      "deferred": 0.0,
+      "fees_usd": 0.0,
+      "postponements": 0.0,
+      "sells": 0.0,
+      "tax_funding_sales": 0.0,
+      "trades": 0.0,
+      "turnover_annual": 0.0,
+      "turnover_total": 0.0,
+      "units_end": 0.0
+     },
+     "D": {
+      "blocked_band": 0.0,
+      "deferred": 3.0,
+      "fees_usd": 11249.468013595315,
+      "postponements": 3.0,
+      "sells": 201.0,
+      "tax_funding_sales": 2.0,
+      "trades": 377.0,
+      "turnover_annual": 3.6887961201039796,
+      "turnover_total": 35.95376916514762,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3475092442816087,
+    "sells_per_year": 30.77949438202247,
+    "tax_usd": 401124.798442511,
+    "trades_per_year": 72.22921348314607
+   },
+   "K": {
+    "after_tax_cagr": 0.2397197429750071,
+    "legs": {
+     "A": {
+      "blocked_band": 787.0,
+      "deferred": 29.0,
+      "fees_usd": 10941.506854812458,
+      "postponements": 816.0,
+      "sells": 89.0,
+      "tax_funding_sales": 4.0,
+      "trades": 325.0,
+      "turnover_annual": 3.4814061836254564,
+      "turnover_total": 33.93239155018925,
+      "units_end": 0.0
+     }
+    },
+    "max_dd": 0.3497743378542989,
+    "sells_per_year": 9.541643258426966,
+    "tax_usd": 371486.9639002972,
+    "trades_per_year": 33.344452247191015
+   }
+  }
+ }
+}

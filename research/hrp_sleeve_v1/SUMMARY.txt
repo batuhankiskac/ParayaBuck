@@ -1,0 +1,5 @@
+hrp_sleeve_v1 --run wall clock: 1.29 s (includes data build and numba cache load)
+K after-tax 2000/2010/2017: 10.75 / 15.24 / 23.97
+D1 after-tax 2000/2010/2017: 10.43 / 14.74 / 23.57
+D2 after-tax 2000/2010/2017: 10.43 / 14.74 / 23.57
+D3 after-tax 2000/2010/2017: 10.43 / 14.74 / 23.57

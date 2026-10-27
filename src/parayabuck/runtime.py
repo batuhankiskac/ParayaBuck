@@ -105,6 +105,7 @@ from parayabuck.monitoring.paper_incident import automate_incident_recovery
 from parayabuck.portfolio import product_strategy_from, validate_strategy_timeframe
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_PHASE_BLOCKED,
+    REBALANCE_PHASE_BUY_READY,
     PortfolioRuntime,
     PortfolioStateRepository,
     configuration_digest,
@@ -299,9 +300,10 @@ class TradingState(Enum):
 
     ``ACTIVE``: entries and exits are allowed.
     ``REDUCING``: no new entries (reconciliation latch, per-market entry latch
-    or halt); risk-reducing exits keep flowing where the path checks only
-    entries.
-    ``HALTED``: no orders (circuit breaker or warm-up window).
+    or market entry halt); risk-reducing exits keep flowing where the path
+    checks only entries.
+    ``HALTED``: no orders, exits included (circuit breaker or warm-up window);
+    a hard halt holds exits until the operator's reset (P2-10-3).
 
     Derived by ``EngineRuntime.trading_state``; the flags themselves stay the
     source of truth and keep their own recovery flows.
@@ -329,6 +331,9 @@ _STREAM_STILL_FAILING_ALERT_SECONDS = 3600.0
 # long during the regular session may hide a missed fill: the runtime then
 # latches new entries and reconciles (see _maybe_check_trade_feed_freshness).
 _TRADE_FEED_STALE_SECONDS = 300.0
+# Minimum gap between account-loop re-advances of a rebalance whose BUY side a
+# stale snapshot or a full position slot held (P2-2-1).
+_HELD_BUY_READVANCE_SECONDS = 60.0
 # Consecutive failed account fetches (pb-account) before the breaker trips.
 _ACCOUNT_FETCH_FAILURE_LIMIT = 5
 _ACCOUNT_FETCH_HALT_REASON = "account_fetch_failures"
@@ -1095,6 +1100,36 @@ class EngineRuntime:
             self._intent_watchdog_pass()
         except Exception:
             log.warning("Intent watchdog pass failed", exc_info=True)
+
+    def _maybe_readvance_held_buy_side(self, account: AccountSnapshot) -> None:
+        """Re-advance a rebalance whose BUY side a stale snapshot or full slot held (P2-2-1).
+
+        A BUY side held as ``replan_snapshot_stale`` or ``rebalance_waiting_for_slot``
+        waits for a trade update or a closed bar. Same-session bars return
+        ``duplicate_decision`` before any advance, so without this pass the side
+        waits for the next session, which discards it. The account loop is the one
+        path that runs on every poll, so it re-plans the side on the snapshot it
+        just published. Rate limited. The advance keeps its submit gates and the
+        cached signal-basis check (no provider call on this thread). Never raises.
+        """
+        try:
+            if not self._running or self._warming_up or not getattr(self, "_startup_committed", False):
+                return
+            now_mono = time.monotonic()
+            last = getattr(self, "_held_buy_readvance_last_mono", None)
+            if last is not None and now_mono - last < _HELD_BUY_READVANCE_SECONDS:
+                return
+            for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+                repository = getattr(portfolio_runtime, "repository", None)
+                if repository is None:
+                    continue
+                state = repository.current_rebalance_execution(portfolio_runtime.account_id, portfolio_runtime.market)
+                if state is None or state.phase != REBALANCE_PHASE_BUY_READY:
+                    continue
+                self._held_buy_readvance_last_mono = now_mono
+                self._advance_portfolio_rebalance(portfolio_runtime.market, account=account, cached_basis_only=True)
+        except Exception:
+            log.warning("Held BUY side re-advance failed", exc_info=True)
 
     def _maybe_retry_rejected_exit_sells(self, account: AccountSnapshot) -> None:
         """R3: retry a broker-rejected SELL once at the next safe opportunity.
@@ -2551,6 +2586,7 @@ class EngineRuntime:
                         )
                         self._persist_risk_state(account)
                         self._maybe_retry_rejected_exit_sells(account)
+                        self._maybe_readvance_held_buy_side(account)
                 except OwnershipDriftError:
                     # Ownership drift is not a transient broker/API error: the
                     # broker holds fewer shares than the repository claims as
@@ -3773,13 +3809,15 @@ class EngineRuntime:
         if corrected:
             # A corrected minute revises the still-open candle it belongs to.
             # A correction of an already-emitted candle is not re-queued: the
-            # revised bar is not used for a decision. That drop is logged so it
-            # stays visible.
+            # revised bar is not used for a decision. That is logged so it
+            # stays visible. A correction folded into the still-open candle is
+            # not logged here: it is used when that candle closes.
             with self._ingestion_lock:
                 for timeframe, aggregator in self.aggregators.items():
                     if aggregator.update_correction(bar) is not None:
                         log.warning(
-                            "Corrected minute dropped for an already-emitted bar: symbol=%s timeframe=%s minute=%s",
+                            "Corrected minute not re-queued: the already-emitted bar keeps its original values: "
+                            "symbol=%s timeframe=%s minute=%s",
                             bar.symbol,
                             timeframe,
                             bar.timestamp.isoformat(),
@@ -4845,7 +4883,9 @@ class EngineRuntime:
             }
             path = paper_receipt.write_decision_receipt_v2(receipt, paper_receipt.default_receipt_dir())
             runtime_metrics_store.record_event("paper_receipt_written")
-            log.info("PAPER decision receipt v2 written: %s", path)
+            # "recorded": a retry with the same identity keeps the first file,
+            # and the default directory is cwd-relative, so log the resolved path.
+            log.info("PAPER decision receipt v2 recorded at %s", Path(path).resolve())
         except Exception:
             log.warning("PAPER decision receipt v2 failed for %s", result.decision_id, exc_info=True)
             try:

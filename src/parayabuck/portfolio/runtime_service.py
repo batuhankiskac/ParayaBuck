@@ -163,6 +163,17 @@ REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED = "stuck_legs_unresolved"
 # (P2-7-4). A DAY order is queued to the next open and must be terminal by that
 # session's close; four days also covers a weekend and a holiday.
 STUCK_LEG_MAX_AGE = timedelta(days=4)
+# Advance outcomes that hold an open rebalance's BUY side. On a held day the
+# no-trade reason is that hold, not the generic rebalance_in_progress (D2-3-1).
+_REBALANCE_HOLD_NO_TRADE_REASONS = frozenset(
+    {
+        "replan_snapshot_stale",
+        "rebalance_waiting_for_slot",
+        "stale_decision_buy_held",
+        "submit_blocked",
+        "replan_order_in_flight",
+    }
+)
 
 # Observability hook — isolated, never raises, lazy import inside functions to avoid cycles
 try:
@@ -535,8 +546,20 @@ def _emit_no_trade_safe(
             "rebalance_blocked": "satış fazı takılı",
             "account_snapshot_stale": "hesap görüntüsü eski",
             "circuit_breaker": "devre kesici aktif",
+            "replan_snapshot_stale": "hesap görüntüsü satış kayıtlarının gerisinde, alım ertelendi",
+            "rebalance_waiting_for_slot": "pozisyon yuvası henüz serbest değil, alım bekliyor",
+            "stale_decision_buy_held": "eski karara ait alım gönderilmedi",
+            "closed_unresolved": "alım iptal edildi, çözülmeyen satış var",
+            "submit_blocked": "gönderim güvenlik kapısınca engellendi",
+            "replan_order_in_flight": "yeniden planlanan emir henüz çözülmedi",
+            "signal_cross_check_pending": "ikinci sinyal kaynağı doğrulaması bekleniyor",
         }
-        tr = reason_tr.get(reason, reason)
+        if reason.startswith("rebalance_held:"):
+            # The deferral token names the held advance outcome after the colon.
+            held = reason.partition(":")[2]
+            tr = f"açık rebalance nedeniyle tutuldu ({reason_tr.get(held, held)})"
+        else:
+            tr = reason_tr.get(reason, reason)
         market_tr = "Hisse" if (market or "").lower() == "equity" else (market or "Piyasa")
         if missing_symbols:
             detail = "/".join(missing_symbols[:3])
@@ -1537,6 +1560,19 @@ class PortfolioRuntime:
                     account_id=self.account_id,
                 )
                 return PortfolioRuntimeResult(current_rebalance.decision_id, None, None, (), (), "rebalance_blocked")
+            # The hold this advance reported is the day's reason (D2-3-1). A
+            # SELL-phase hold keeps the generic token and the SELL_PHASE_PENDING summary.
+            held_reason = (
+                advance_result.status
+                if advance_result is not None and advance_result.status in _REBALANCE_HOLD_NO_TRADE_REASONS
+                else None
+            )
+            if held_reason is not None:
+                from parayabuck.monitoring.forensics import map_no_trade_reason
+
+                summary_reason = map_no_trade_reason(held_reason)
+            else:
+                summary_reason = "SELL_PHASE_PENDING"
             _emit_decision_summary_safe(
                 decision_id=current_rebalance.decision_id,
                 market=self._market_name(),
@@ -1546,12 +1582,12 @@ class PortfolioRuntime:
                 universe_version=self.universe_version,
                 planned=(),
                 submitted=(),
-                no_trade_reason="SELL_PHASE_PENDING",
+                no_trade_reason=summary_reason,
             )
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
-                reason="rebalance_in_progress",
+                reason=held_reason or "rebalance_in_progress",
                 decision_timestamp=timestamp,
                 data_timestamp=timestamp,
                 session_id=self.session_id,
@@ -1682,7 +1718,8 @@ class PortfolioRuntime:
         if entry_latch is not None:
             # runtime may only reduce risk. Cap every target at the current
             # weight so the planner emits SELL orders only; entries stay
-            # blocked while protective/risk-reducing exits keep flowing.
+            # blocked while protective/risk-reducing exits keep flowing. This
+            # is the entry latch only: a hard halt holds exits too (P2-10-3).
             current_weights = {
                 canonical_symbol(position.symbol, position.market): (position.market_value / account.equity)
                 for position in account.positions
@@ -2666,6 +2703,9 @@ class PortfolioRuntime:
             session_id=self.session_id,
             reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
         )
+        # A withheld BUY side that a new session discards is an operator-visible
+        # outcome, not only a log line (P2-2-1).
+        self._alert_buy_side_held(decision_id, REBALANCE_STATUS_CLOSED_UNRESOLVED)
         self._raise_operator_alert_once(
             (decision_id, "superseded_buy_side_discarded"),
             message="A rebalance from an earlier session was closed; its deferred BUYs were discarded",
@@ -3249,6 +3289,7 @@ class PortfolioRuntime:
                         # so the phase moves on: the held BUYs are not sent for
                         # this decision and the sent ones are tracked to terminal.
                         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+                    self._alert_buy_side_held(decision_id, "submit_blocked")
                     return PortfolioRuntimeResult(decision_id, risk.target, risk, (), submitted, "submit_blocked")
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))

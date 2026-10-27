@@ -1,0 +1,9 @@
+slow_vol_blend_v1 SUMMARY (numbers from RESULTS.json)
+wall_clock_seconds_run: 5.8
+passing arms: none
+S3 target (pre-2010 calibrated): 0.420173
+K: pre CAGR base 15.76% max DD 46.67% after tax 2000/2010/2017 10.75/15.24/23.97% sells/yr 10.2 exposure(vote-on) 1.754
+R2: pre CAGR base 15.48% max DD 46.76% after tax 2000/2010/2017 10.16/14.71/22.89% sells/yr 29.6 exposure(vote-on) 1.754
+S1: pre CAGR base 15.04% max DD 43.76% after tax 2000/2010/2017 10.52/15.39/24.22% sells/yr 7.9 exposure(vote-on) 1.701
+S2: pre CAGR base 14.88% max DD 44.00% after tax 2000/2010/2017 10.49/15.65/25.01% sells/yr 6.7 exposure(vote-on) 1.647
+S3: pre CAGR base 15.87% max DD 50.40% after tax 2000/2010/2017 11.34/16.31/26.16% sells/yr 6.1 exposure(vote-on) 1.815

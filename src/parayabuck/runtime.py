@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as clock_time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
     Market,
+    PositionSnapshot,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.data.adjustment import adequate_coverage, covers_session
@@ -256,6 +258,31 @@ _FOREIGN_INVENTORY_MESSAGE = (
 # Runtime states that block entries outright; a transient stream-worker
 # blip must never overwrite one of them with "degraded".
 _ENTRY_BLOCKING_STATES = frozenset({"halted", "error", "stop_failed", "stopping", "stopped"})
+
+
+# Entry latch passed to the portfolio decision when a stale account snapshot
+# is allowed to produce a sell-only decision (runtime.stale_account_sell_only).
+STALE_ACCOUNT_SELL_ONLY_LATCH = "account_snapshot_stale_sell_only"
+
+
+class TradingState(Enum):
+    """Order permission summarised from the runtime's existing gate flags.
+
+    ``ACTIVE``: entries and exits are allowed.
+    ``REDUCING``: no new entries (reconciliation latch, per-market entry latch
+    or halt); risk-reducing exits keep flowing where the path checks only
+    entries.
+    ``HALTED``: no orders (circuit breaker or warm-up window).
+
+    Derived by ``EngineRuntime.trading_state``; the flags themselves stay the
+    source of truth and keep their own recovery flows.
+    """
+
+    ACTIVE = "active"
+    REDUCING = "reducing"
+    HALTED = "halted"
+
+
 # A shared stream worker (pb-trade-updates) that ran this long before failing
 # was healthy: its failure starts a fresh restart budget and backoff, so
 # sparse blips over weeks cannot add up to the restart-limit halt. A crash
@@ -849,6 +876,7 @@ class EngineRuntime:
                 "strategy_batch_status": getattr(self, "_last_portfolio_status", {}).get(market),
                 "stream_healthy": stream_healthy,
                 "entry_halt_reason": getattr(self, "_market_entry_halts", {}).get(market),
+                "trading_state": self.trading_state(market).value,
                 "catch_up": _portfolio_catch_up_health(portfolio_runtime_by_market.get(market)),
             }
         return market_health
@@ -1973,6 +2001,62 @@ class EngineRuntime:
             self._last_account_at = published_at
             return True
 
+    def _stale_account_sell_only_applies(self, readiness_reasons: tuple[str, ...] | list[str]) -> bool:
+        """True when the stale-account sell-only path may replace the deferral.
+
+        Only when the operator enabled ``runtime.stale_account_sell_only`` and
+        account freshness is the SOLE readiness blocker. Any other reason
+        (queue age, runtime state, breaker, ...) keeps the full hold.
+        """
+        runtime_config = getattr(getattr(self, "app_config", None), "runtime", None)
+        if getattr(runtime_config, "stale_account_sell_only", False) is not True:
+            return False
+        if tuple(readiness_reasons) != ("account_snapshot_stale",):
+            return False
+        return self.trading_state() is not TradingState.HALTED
+
+    def _stale_account_sell_only_snapshot(self, market: Market) -> AccountSnapshot | None:
+        """Last known account snapshot with this market's long positions capped
+        at the bot's own owned quantity from the portfolio repository.
+
+        Shorts and positions the bot does not own (external or manual inventory)
+        are dropped, so the sell-only decision can never size a SELL above the
+        bot's own quantity. Returns None (caller defers) when there is no
+        snapshot or the owned quantities cannot be read.
+        """
+        snapshot = self._account_snapshot_cache_state()[0]
+        if snapshot is None:
+            return None
+        try:
+            owned = self._portfolio_repository.owned_quantities(
+                getattr(self.broker, "account_id", None) or "unknown", market=market
+            )
+        except Exception:
+            log.warning("Stale-account sell-only skipped: owned quantities unavailable", exc_info=True)
+            return None
+        positions: list[PositionSnapshot] = []
+        for position in snapshot.positions:
+            if position.market != market:
+                positions.append(position)
+                continue
+            if position.qty <= 0:
+                continue
+            owned_qty = max(0.0, float(owned.get(canonical_symbol(position.symbol, market), 0.0)))
+            sellable = min(float(position.qty), owned_qty)
+            if sellable <= 1e-12:
+                continue
+            positions.append(
+                replace(
+                    position,
+                    qty=sellable,
+                    qty_available=(
+                        min(position.qty_available, sellable) if position.qty_available is not None else None
+                    ),
+                    managed_qty=min(position.managed_qty, sellable),
+                )
+            )
+        return replace(snapshot, positions=tuple(positions))
+
     def _fresh_account_snapshot(self, *, _allow_retry: bool = True) -> AccountSnapshot:
         """The freshest account snapshot, fetched at most once per freshness
         boundary.
@@ -2555,14 +2639,8 @@ class EngineRuntime:
         # paths; the same latch gates the deferred BUY here so the fill-driven,
         # startup and reset resumes cannot size it off an unverified basis.
         # Checked last: its verification may hit the provider (deduplicated).
-        submit_buys = (
-            getattr(self, "_circuit_breaker_reason", None) is None
-            and not getattr(self, "_reconcile_failed", False)
-            and not self._reconcile_pending()
-            and not getattr(self, "_warming_up", False)
-            and getattr(self, "_entry_risk_latch", {}).get(market) is None
-            and getattr(self, "_market_entry_halts", {}).get(market) is None
-            and (market != Market.EQUITY or self._equity_signal_basis_latch() is None)
+        submit_buys = self.trading_state(market) is TradingState.ACTIVE and (
+            market != Market.EQUITY or self._equity_signal_basis_latch() is None
         )
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
@@ -3481,6 +3559,15 @@ class EngineRuntime:
                 readiness_reasons = gate(portfolio_runtime.market, **gate_kwargs)
             except TypeError:
                 readiness_reasons = gate(portfolio_runtime.market)
+            stale_sell_only_account: AccountSnapshot | None = None
+            if readiness_reasons and self._stale_account_sell_only_applies(readiness_reasons):
+                stale_sell_only_account = self._stale_account_sell_only_snapshot(portfolio_runtime.market)
+                if stale_sell_only_account is not None:
+                    log.warning(
+                        "Stale account snapshot: sell-only decision for market=%s (buys held, sells capped at owned)",
+                        portfolio_runtime.market.value,
+                    )
+                    readiness_reasons = ()
             if readiness_reasons:
                 if portfolio_runtime.market == Market.EQUITY:
                     log.info(
@@ -3569,8 +3656,18 @@ class EngineRuntime:
                     deferred_any = True
                     continue
                 cross_check = step if isinstance(step, CrossCheckOutcome) else None
+            if stale_sell_only_account is not None:
+                # Sell-only over the last known snapshot: no broker fetch, no
+                # lease, and the entry latch caps every target at its current
+                # weight so the planner emits SELL orders only.
+                account_lease = None
+                entry_latch = (
+                    STALE_ACCOUNT_SELL_ONLY_LATCH
+                    if entry_latch is None
+                    else f"{entry_latch}|{STALE_ACCOUNT_SELL_ONLY_LATCH}"
+                )
             try:
-                if account is None and getattr(self, "broker", None) is not None:
+                if stale_sell_only_account is None and account is None and getattr(self, "broker", None) is not None:
                     # Broker I/O happens before the portfolio lock. The lease
                     # is checked again at the decision boundary below so a
                     # fill cannot invalidate the cached snapshot in between.
@@ -3614,7 +3711,9 @@ class EngineRuntime:
                         continue
                     try:
                         kwargs: dict[str, Any] = {"entry_latch": entry_latch}
-                        if account is not None:
+                        if stale_sell_only_account is not None:
+                            kwargs["account"] = stale_sell_only_account
+                        elif account is not None:
                             kwargs["account"] = account
                         if cross_check is not None:
                             kwargs["signal_cross_check"] = cross_check
@@ -3954,10 +4053,43 @@ class EngineRuntime:
                 decision_id=result.decision_id,
                 orders=len(result.orders),
                 submitted=len(result.submitted_order_ids),
+                tax_ytd=self._daily_summary_tax_line(),
             )
             alerts.emit("daily_summary", message=message, **fields)
         except Exception:
             log.warning("Equity daily summary failed", exc_info=True)
+
+    def _daily_summary_tax_line(self) -> str:
+        """Best-effort YTD tax segment for the daily summary. Never raises.
+
+        Reads the ledger through a short read-only connection and the
+        configured USD/TRY and Yi-UFE rate files. Any failure yields the
+        ``tax: unavailable`` text, so the summary is still sent without the
+        figures instead of being dropped.
+        """
+        from parayabuck.monitoring.daily_summary import format_tax_ytd
+
+        connection = None
+        try:
+            from datetime import datetime as _datetime
+
+            from parayabuck.tax.export import ytd_status
+            from parayabuck.tax.ledger import TURKEY_TIME
+
+            runtime_config = getattr(getattr(self, "app_config", None), "runtime", None)
+            database_path = getattr(runtime_config, "decision_db_path", None)
+            if not database_path or not Path(str(database_path)).exists():
+                return format_tax_ytd({"status": "unavailable"})
+            connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True, timeout=5.0)
+            account_id = str(getattr(getattr(self, "broker", None), "account_id", "") or "unknown")
+            year = _datetime.now(TURKEY_TIME).year
+            return format_tax_ytd(ytd_status(connection, account_id, year))
+        except Exception:
+            log.warning("Daily summary tax line unavailable", exc_info=True)
+            return format_tax_ytd({"status": "unavailable"})
+        finally:
+            if connection is not None:
+                connection.close()
 
     def _run_startup_catch_up(self, *, account: AccountSnapshot | None = None, blocked_only: bool = False) -> None:
         """Force an immediate full-target decision on the latest warmup bars.
@@ -4962,6 +5094,36 @@ class EngineRuntime:
     def _reconcile_pending(self) -> bool:
         """True while the reconcile-pending latch gates new entries."""
         return getattr(self, "_reconcile_pending_reason", None) is not None
+
+    def trading_state(self, market: Market | None = None) -> TradingState:
+        """Order permission derived from the existing flags (see ``TradingState``).
+
+        Mapping, first matching row wins:
+
+        | flag(s)                                              | state    |
+        |------------------------------------------------------|----------|
+        | ``_circuit_breaker_reason`` is set, or ``_warming_up`` | HALTED   |
+        | ``_reconcile_failed``, or the reconcile-pending latch | REDUCING |
+        | ``_entry_risk_latch`` set (market, or any when ``market`` is None) | REDUCING |
+        | ``_market_entry_halts`` set (same scope)              | REDUCING |
+        | none of the above                                    | ACTIVE   |
+
+        Deliberately not derived: ``_running``, ``_state`` (lifecycle and the
+        stream-worker "degraded" blip) and ``_startup_committed``. Those keep
+        their own gates at their call sites, so the derived state describes
+        the permission flags only.
+        """
+        if getattr(self, "_circuit_breaker_reason", None) is not None or getattr(self, "_warming_up", False):
+            return TradingState.HALTED
+        if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
+            return TradingState.REDUCING
+        latches = getattr(self, "_entry_risk_latch", {})
+        halts = getattr(self, "_market_entry_halts", {})
+        if market is None:
+            entry_blocked = any(value is not None for value in (*latches.values(), *halts.values()))
+        else:
+            entry_blocked = latches.get(market) is not None or halts.get(market) is not None
+        return TradingState.REDUCING if entry_blocked else TradingState.ACTIVE
 
     def _set_reconcile_pending(self, reason: str) -> None:
         """Latch new entries until a reconcile started from here on is clean.

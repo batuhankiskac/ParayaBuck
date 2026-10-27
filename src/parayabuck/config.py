@@ -35,6 +35,10 @@ class RuntimeMode(StrEnum):
 class RuntimeConfig:
     mode: RuntimeMode = RuntimeMode.PAPER
     decision_db_path: str = DEFAULT_DECISION_DB_PATH
+    # Default off. When on, a stale account snapshot that is the ONLY readiness
+    # blocker allows a sell-only decision (buys held, sells capped at the bot's
+    # owned quantity) instead of holding the whole rebalance, sells included.
+    stale_account_sell_only: bool = False
 
     def __post_init__(self) -> None:
         # LIVE and PAPER state must never mix: the PAPER default ledger path

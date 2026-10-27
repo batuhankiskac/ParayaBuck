@@ -168,6 +168,28 @@ Weights are fractions of account equity; "held" is the position at decision
 time, before that decision's orders fill. Disable with
 `alerting.daily_summary: false`.
 
+The summary ends with a YTD tax segment (`tax YTD <year>: net gain ..., est.
+tax ...`). When the USD/TRY or Yİ-ÜFE inputs are missing it reads `tax: rates
+missing`; if the figures cannot be computed at all it reads `tax: unavailable`.
+The summary is still sent in either case.
+
+### Trading state and the stale-account sell-only option
+
+Each market's `markets.<market>.trading_state` in the runtime health payload is
+`active` (entries and exits allowed), `reducing` (no new entries: a
+reconciliation latch or a per-market entry latch or halt) or `halted` (no
+orders: a circuit breaker or warm-up). It is derived from the existing flags
+and is observability only; the flags keep their own recovery paths.
+
+`runtime.stale_account_sell_only` (default `false`) changes one case only. When
+the account snapshot is older than `maximum_account_age_for_entry_seconds` and
+that is the sole readiness blocker, the decision runs sell-only over the last
+known snapshot: BUYs stay held, and each long position is capped at the bot's
+own owned quantity from the portfolio repository. While it is off, a stale
+snapshot holds the whole rebalance, sells included. Buys held this way are
+expected to wait for the next session; that follows the existing entry-latch
+path and is not separately tested.
+
 ### Intent watchdog
 
 Catches a runtime that is alive but not trading (2026-09-25..29: four sessions

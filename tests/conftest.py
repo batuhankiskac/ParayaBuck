@@ -10,7 +10,6 @@ import shutil
 import socket
 import tempfile
 import threading
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -39,12 +38,18 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PROTECTED_STATE_DIRS = (
     _REPO_ROOT / "data" / "runtime",
     _REPO_ROOT / "data" / "cache",
+    _REPO_ROOT / "data" / "backups",
+    _REPO_ROOT / "data" / "research_runs",
     _REPO_ROOT / "logs",
 )
 
+# The shipped config is read by many tests, so it is protected against writes
+# only: a test that reads config/settings.yaml is fine, one that rewrites it is not.
+_PROTECTED_WRITE_DIRS = (_REPO_ROOT / "config",)
+
 # Cheap prefilter: only paths mentioning these fragments are resolved and
 # classified, so the guard costs a substring test per open().
-_STATE_MARKERS = ("data/", "logs/")
+_STATE_MARKERS = ("data/", "logs/", "config/")
 
 # --- Session-wide credential and network isolation -------------------------
 #
@@ -57,6 +62,9 @@ _STATE_MARKERS = ("data/", "logs/")
 # non-loopback socket connection raises.
 
 _CREDENTIAL_ENV_PREFIXES = ("ALPACA_", "PARAYABUCK_")
+# systemd points CREDENTIALS_DIRECTORY at the operator's secret files, which
+# config.read_credential reads before the environment: strip it too.
+_CREDENTIAL_ENV_NAMES = ("CREDENTIALS_DIRECTORY",)
 _LOOPBACK_HOSTS = frozenset({"", "localhost", "::1", "0:0:0:0:0:0:0:1"})
 _MISSING = object()
 
@@ -182,7 +190,7 @@ def _install_dotenv_guard() -> None:
 def pytest_configure(config: pytest.Config) -> None:
     """Strip credentials and neutralize the repo .env before any test imports."""
     global _session_env_dir
-    for key in [key for key in os.environ if key.startswith(_CREDENTIAL_ENV_PREFIXES)]:
+    for key in [key for key in os.environ if key.startswith(_CREDENTIAL_ENV_PREFIXES) or key in _CREDENTIAL_ENV_NAMES]:
         _saved_credential_env[key] = os.environ.pop(key)
     _session_env_dir = tempfile.mkdtemp(prefix="parayabuck-test-env-")
     # ENV_PATH is what the engine manager and CLI resolve their dotenv from;
@@ -225,19 +233,58 @@ def _display(path: str) -> str:
         return path
 
 
+def _protected_config_path(path: object) -> Path | None:
+    """Return ``path`` resolved when it names a file under the shipped config dir."""
+    if path is None or isinstance(path, int):
+        return None
+    try:
+        raw = os.fsdecode(os.fspath(path))
+    except TypeError:
+        return None
+    if "config/" not in raw:
+        return None
+    try:
+        resolved = Path(raw).resolve()
+    except OSError:
+        return None
+    for root in _PROTECTED_WRITE_DIRS:
+        if resolved == root or root in resolved.parents:
+            return resolved
+    return None
+
+
 def _state_tree_signature() -> dict[str, tuple[int, int]]:
-    """mtime/size of every entry under the production state dirs."""
+    """mtime/size of every entry under the production state dirs.
+
+    Walks with ``os.walk`` and ignores errors: a background thread that is
+    still rotating files can remove a directory mid-walk, and that must not
+    fail the test that happens to be running.
+    """
     signature: dict[str, tuple[int, int]] = {}
     for root in _PROTECTED_STATE_DIRS:
-        if not root.exists():
-            continue
-        for path in root.rglob("*"):
-            try:
-                st = path.stat()
-            except OSError:
-                continue
-            signature[str(path)] = (st.st_mtime_ns, st.st_size)
+        for dirpath, dirnames, filenames in os.walk(root):
+            for name in dirnames + filenames:
+                path = os.path.join(dirpath, name)
+                try:
+                    st = os.stat(path)
+                except OSError:
+                    continue
+                signature[path] = (st.st_mtime_ns, st.st_size)
     return signature
+
+
+class ProductionStateAccessError(RuntimeError):
+    """A test tried to open production state (or write the shipped config)."""
+
+
+def _is_writing_mode(mode: object) -> bool:
+    return any(flag in str(mode) for flag in "wax+")
+
+
+def _is_writing_flags(flags: object) -> bool:
+    if not isinstance(flags, int):
+        return True
+    return bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
 
 
 @pytest.fixture
@@ -252,6 +299,7 @@ def isolated_config_path(tmp_path: Path) -> Path:
     """
     raw = yaml.safe_load((_REPO_ROOT / "config" / "settings.yaml").read_text(encoding="utf-8"))
     raw.setdefault("runtime", {})["decision_db_path"] = str(tmp_path / "decisions.sqlite3")
+    raw["backup"] = {**(raw.get("backup") or {}), "path": str(tmp_path / "backups")}
     raw["observability"] = {
         **(raw.get("observability") or {}),
         "snapshot_path": str(tmp_path / "health_snapshot.json"),
@@ -265,32 +313,29 @@ def isolated_config_path(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def _restore_web_state():
     before = get_web_state()
+    # Only a missing optional web stack may skip the restore. Any other error
+    # while restoring must surface, or the next test runs against a stale state.
     try:
         from parayabuck.web import server as srv
-
-        orig_manager = srv.manager
-        orig_backtest = srv.backtest_manager
-    except Exception:
-        orig_manager = None  # type: ignore[assignment]
-        orig_backtest = None  # type: ignore[assignment]
+    except ImportError:
+        srv = None
+    orig_manager = getattr(srv, "manager", None)
+    orig_backtest = getattr(srv, "backtest_manager", None)
 
     yield
 
     current = get_web_state()
     if current is not before:
         set_web_state(before)
-    try:
-        from parayabuck.web import server as srv2
-
-        if before is not None and srv2.web_state is not before:
-            srv2.web_state = before  # type: ignore[attr-defined]
-            set_web_state(before)
-        if orig_manager is not None and srv2.manager is not orig_manager:
-            srv2.manager = orig_manager  # type: ignore[attr-defined]
-        if orig_backtest is not None and srv2.backtest_manager is not orig_backtest:
-            srv2.backtest_manager = orig_backtest  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    if srv is None:
+        return
+    if before is not None and srv.web_state is not before:
+        srv.web_state = before  # type: ignore[attr-defined]
+        set_web_state(before)
+    if orig_manager is not None and srv.manager is not orig_manager:
+        srv.manager = orig_manager  # type: ignore[attr-defined]
+    if orig_backtest is not None and srv.backtest_manager is not orig_backtest:
+        srv.backtest_manager = orig_backtest  # type: ignore[attr-defined]
 
 
 _BACKTEST_MANAGER_FIELDS = (
@@ -357,6 +402,7 @@ def _restore_process_singletons():
 @pytest.fixture(autouse=True)
 def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     tree_before = _state_tree_signature()
+    threads_before = set(threading.enumerate())
     iso_cache = tmp_path / "warmup_isolated.sqlite3"
     iso_journal = tmp_path / "observability_isolated.sqlite3"
     iso_snapshot = tmp_path / "health_snapshot_isolated.json"
@@ -365,30 +411,35 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     iso_receipt_dir.mkdir(parents=True, exist_ok=True)
     iso_cache.parent.mkdir(parents=True, exist_ok=True)
 
-    # Access guard: record every open of production state. Recorded (not raised)
-    # so the offending test fails with the full list instead of an opaque
-    # error from deep inside the runtime.
+    # Access guard: refuse every open of production state before it happens,
+    # so no byte is read or written. The access is also recorded, so the
+    # teardown still reports it even if the code under test swallowed the error.
     state_accesses: list[str] = []
 
-    def _record(path: object) -> None:
+    def _check(path: object, *, writing: bool) -> None:
         hit = protected_state_path(path)
+        if hit is None and writing:
+            hit = _protected_config_path(path)
         if hit is not None:
             state_accesses.append(_display(str(hit)))
+            raise ProductionStateAccessError(
+                f"test tried to open production state {_display(str(hit))}: tests must use tmp_path"
+            )
 
     orig_io_open = io.open
 
-    def _guarded_io_open(file, *args, **kwargs):  # type: ignore[no-untyped-def]
-        _record(file)
-        return orig_io_open(file, *args, **kwargs)
+    def _guarded_io_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+        _check(file, writing=_is_writing_mode(mode))
+        return orig_io_open(file, mode, *args, **kwargs)
 
     monkeypatch.setattr(io, "open", _guarded_io_open)
     monkeypatch.setattr(builtins, "open", _guarded_io_open)
 
     orig_os_open = os.open
 
-    def _guarded_os_open(path, *args, **kwargs):  # type: ignore[no-untyped-def]
-        _record(path)
-        return orig_os_open(path, *args, **kwargs)
+    def _guarded_os_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+        _check(path, writing=_is_writing_flags(flags))
+        return orig_os_open(path, flags, *args, **kwargs)
 
     monkeypatch.setattr(os, "open", _guarded_os_open)
 
@@ -558,7 +609,7 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _orig_connect = _sqlite3.connect
 
     def _patched_connect(database, *args, **kwargs):  # type: ignore[no-untyped-def]
-        _record(database)
+        _check(database, writing=True)
         db_str = str(database)
         # Redirect production paths (including URI file:...) to isolated files
         if "data/runtime/parayabuck.sqlite3" in db_str and str(tmp_path) not in db_str:
@@ -581,17 +632,20 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     yield
 
-    time.sleep(0.05)
+    # Every engine worker is a daemon thread, so a leak can only be seen by name,
+    # not by the daemon flag. Only threads this test started are checked, and a
+    # short join lets a worker that was asked to stop finish first.
     ignored = {"pb-journal-writer"}
-    alive = [t for t in threading.enumerate() if t.is_alive() and t.name.startswith("pb-") and t.name not in ignored]
-    # Also ignore daemon threads that are expected to linger briefly
-    alive_non_daemon = [t for t in alive if not t.daemon]
-    if alive_non_daemon:
-        pytest.fail(
-            f"Engine threads still alive after test: {[t.name for t in alive_non_daemon]} — tests must stop EngineRuntime"
-        )
-    # For remaining daemon pb- threads, give them a moment then warn but not fail
-    # (they are isolated per test via tmp journal and will be garbage collected)
+    started = [
+        t
+        for t in threading.enumerate()
+        if t not in threads_before and t.name.startswith("pb-") and t.name not in ignored
+    ]
+    for thread in started:
+        thread.join(timeout=1.0)
+    alive = [t.name for t in started if t.is_alive()]
+    if alive:
+        pytest.fail(f"Engine threads still alive after test: {alive} — tests must stop EngineRuntime")
 
     try:
         if iso_journal_instance is not None:

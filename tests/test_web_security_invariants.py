@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import subprocess
-import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
+from parayabuck.web import security as security_module
 from parayabuck.web.application import create_app
 from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import EngineManager
@@ -297,8 +298,12 @@ def test_control_token_not_in_observability_or_error_payloads(
 # --- WebSocket tickets ---
 
 
-def test_ws_ticket_single_use_scope_and_ttl():
-    store = WebSocketTicketStore(ttl_seconds=0.01)
+def test_ws_ticket_single_use_scope_and_ttl(monkeypatch: pytest.MonkeyPatch):
+    # A fake monotonic clock: the TTL is decided by the clock, never by how long
+    # this thread happens to run, so a loaded runner cannot expire a ticket early.
+    clock = [1000.0]
+    monkeypatch.setattr(security_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    store = WebSocketTicketStore(ttl_seconds=30.0)
     t_stream = store.issue("stream")
     t_logs = store.issue("logs")
     assert t_stream != t_logs
@@ -313,9 +318,9 @@ def test_ws_ticket_single_use_scope_and_ttl():
     # fresh ticket
     t2 = store.issue("logs")
     assert store.consume(t2, "logs") is True
-    # TTL expiry
+    # TTL expiry: a ticket is refused once the clock passes its deadline
     t3 = store.issue("stream")
-    time.sleep(0.02)
+    clock[0] += 31.0
     assert store.consume(t3, "stream") is False
 
 

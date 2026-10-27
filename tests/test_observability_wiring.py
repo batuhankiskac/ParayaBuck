@@ -50,8 +50,15 @@ def _wait_for_kind(journal: EventJournal, kind: str, expected: int, timeout: flo
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_absence(journal: EventJournal, kind: str, expected: int, timeout: float = 0.2) -> bool:
-    """Hold ``timeout`` seconds asserting no row beyond ``expected`` appears."""
+def _wait_for_absence(journal: EventJournal, kind: str, expected: int, timeout: float = 1.0) -> bool:
+    """Hold ``timeout`` seconds asserting no row beyond ``expected`` appears.
+
+    The writer is a background thread, so a duplicate row lands after a delay:
+    let the queue drain first, then keep the window open past one flush.
+    """
+    drain_deadline = time.monotonic() + 5.0
+    while not journal._queue.empty() and time.monotonic() < drain_deadline:
+        time.sleep(0.01)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if len(journal.query(kind=kind, limit=50)) != expected:

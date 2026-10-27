@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import shutil
 import socket
 import tempfile
 import time
@@ -188,14 +189,21 @@ def test_gate_uses_the_runtime_running_flag_not_only_the_timestamp(tmp_path: Pat
 # --- Task 1: lifespan READY ----------------------------------------------
 
 
-def _notify_socket(monkeypatch: pytest.MonkeyPatch) -> tuple[socket.socket, str]:
+@pytest.fixture
+def notify_socket(monkeypatch: pytest.MonkeyPatch) -> Iterator[socket.socket]:
+    # AF_UNIX paths are length-limited, so the socket lives in a short /tmp
+    # directory; the fixture removes it again instead of leaking one per test.
     directory = tempfile.mkdtemp(dir="/tmp")
     path = os.path.join(directory, "n.sock")
     server = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-    server.bind(path)
-    server.settimeout(2.0)
-    monkeypatch.setenv("NOTIFY_SOCKET", path)
-    return server, path
+    try:
+        server.bind(path)
+        server.settimeout(2.0)
+        monkeypatch.setenv("NOTIFY_SOCKET", path)
+        yield server
+    finally:
+        server.close()
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def _serve_lifespan(manager: Any) -> None:
@@ -207,38 +215,32 @@ def _serve_lifespan(manager: Any) -> None:
     asyncio.run(run())
 
 
-def test_lifespan_sends_ready_when_no_engine_starts(monkeypatch: pytest.MonkeyPatch) -> None:
-    server, _path = _notify_socket(monkeypatch)
+def test_lifespan_sends_ready_when_no_engine_starts(notify_socket: socket.socket) -> None:
+    server = notify_socket
     manager = SimpleNamespace(
         configure_alert_delivery=lambda: None,
         should_auto_start=lambda: False,
         watchdog_healthy=lambda: True,
         stop_engine=lambda: None,
     )
-    try:
-        _serve_lifespan(manager)
-        assert server.recv(64) == b"READY=1"
-    finally:
-        server.close()
+    _serve_lifespan(manager)
+    assert server.recv(64) == b"READY=1"
 
 
-def test_lifespan_sends_ready_even_when_the_engine_gate_is_unhealthy(monkeypatch: pytest.MonkeyPatch) -> None:
-    server, _path = _notify_socket(monkeypatch)
+def test_lifespan_sends_ready_even_when_the_engine_gate_is_unhealthy(notify_socket: socket.socket) -> None:
+    server = notify_socket
     manager = SimpleNamespace(
         configure_alert_delivery=lambda: None,
         should_auto_start=lambda: False,
         watchdog_healthy=lambda: False,
         stop_engine=lambda: None,
     )
-    try:
-        _serve_lifespan(manager)
-        assert server.recv(64) == b"READY=1"
-        # The unhealthy gate suppresses every WATCHDOG datagram.
-        server.settimeout(0.2)
-        with pytest.raises(socket.timeout):
-            server.recv(64)
-    finally:
-        server.close()
+    _serve_lifespan(manager)
+    assert server.recv(64) == b"READY=1"
+    # The unhealthy gate suppresses every WATCHDOG datagram.
+    server.settimeout(0.2)
+    with pytest.raises(socket.timeout):
+        server.recv(64)
 
 
 # --- Task 2: expected_account_id and operator halt -----------------------

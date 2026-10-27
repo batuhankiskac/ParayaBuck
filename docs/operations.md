@@ -40,8 +40,10 @@ intraday rather than at the next open (see `docs/live_readiness_v1.md`, Timing).
 
 The PAPER Alpaca account is shared between the VM and every other machine
 that has the credentials. Trading therefore needs an explicit per-machine
-designation: `PARAYABUCK_TRADING_HOST=1`, set only by the systemd unit on the
-VM (`deploy/systemd/parayabuck.service`).
+designation: `PARAYABUCK_TRADING_HOST=1`, set only by the trading-host drop-in on
+the VM (`deploy/systemd/vm-dropin/trading-host.conf`, installed under
+`/etc/systemd/system/parayabuck.service.d/`). The template unit does not set it.
+`.env` must never carry it: `doctor` refuses it there.
 
 Without it `parayabuck web`, a bare `parayabuck` and `docker compose up` still
 serve the console, settings and backtests, but the engine refuses to start —
@@ -54,7 +56,7 @@ trading refused.
 Verify on the VM with:
 
 ```bash
-systemctl show parayabuck -p Environment | grep PARAYABUCK_TRADING_HOST
+systemctl show parayabuck -p Environment | grep -o 'PARAYABUCK_TRADING_HOST=[^ ]*'
 curl -s http://127.0.0.1:8000/api/status | python3 -m json.tool | grep engine_state
 ```
 
@@ -233,15 +235,27 @@ closes included).
 
 ### systemd watchdog and the reconcile-pending latch
 
-The unit is `Type=notify` with `WatchdogSec=300`. The web process (`parayabuck
+The template unit is `Type=notify` with `WatchdogSec=300`. The web process (`parayabuck
 web`) sends `READY=1` from its lifespan once the app is serving, whether or not
 the engine starts. A pinger thread sends `WATCHDOG=1` every 30 s while the
 engine gate allows it: no engine running (stopped, halted, never started), or
 a running engine whose account loop completed any pass within the last
 120 s. A pass that raises still counts, so an outage does not restart-loop the
-unit; what stops the pings is an account loop that stops passing altogether. A hung account loop therefore stops the pings and systemd restarts the
-unit after `WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the
-sends are no-ops.
+unit; what stops the pings is an account loop that stops passing altogether. A
+hung account loop therefore stops the pings and systemd restarts the unit after
+`WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
+
+**VM state (as of 2026-10-27).** The VM's unit is `Type=simple` with no
+`WatchdogSec`, so a wedged account loop is not restarted by systemd. Its deadman
+heartbeat install is not recorded in `docs/OPERATIONS_LOG.md`. The fix is the
+drop-in `deploy/systemd/vm-dropin/watchdog.conf` (`Type=notify`, `NotifyAccess=main`,
+`WatchdogSec=300`), which is not installed by default: the orchestrator decides
+when the VM installs it. Check which state is in force with
+`systemctl show parayabuck -p Type,WatchdogUSec`; `Type=simple` and
+`WatchdogUSec=0` (or `infinity`) mean the VM runs without the watchdog. Installing the drop-in
+needs a restart, so do it in an approved window and check `systemctl status
+parayabuck` afterwards: with `Type=notify` the unit stays `activating` until
+`READY=1` arrives.
 
 A premarket probe runs once per NYSE session, 30 to 5 minutes before the open
 (broker clock, calendar and open-order parity against the local non-terminal

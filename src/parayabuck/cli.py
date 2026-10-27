@@ -665,13 +665,84 @@ def _configured_config_path(args: argparse.Namespace) -> str | None:
 
 
 def _marker_applies(marker: str) -> bool:
-    """True when a requirement environment marker holds here (unknown: True, so it is checked)."""
-    try:
-        from packaging.markers import Marker
+    """True when a requirement environment marker holds here (unknown: True, so it is checked).
 
-        return bool(Marker(marker).evaluate())
-    except Exception:
-        return True
+    Standard library only: ``packaging`` is not in the runtime lock, so on a
+    clean venv the check must not depend on it. Handles the ``and``-joined
+    ``==`` / ``!=`` clauses the locks emit; any other marker applies.
+    """
+    import platform
+    import re
+
+    values = {
+        "sys_platform": sys.platform,
+        "os_name": os.name,
+        "platform_system": platform.system(),
+        "platform_python_implementation": platform.python_implementation(),
+    }
+    for clause in marker.split(" and "):
+        match = re.fullmatch(r"\s*([a-z_]+)\s*(==|!=)\s*['\"]([^'\"]*)['\"]\s*", clause)
+        if match is None or match.group(1) not in values:
+            return True
+        name, operator, wanted = match.groups()
+        if (values[name] == wanted) != (operator == "=="):
+            return False
+    return True
+
+
+def _unlocked_installed_distributions(lock_path: Path) -> list[str]:
+    """Installed distributions that the lock does not pin (pip, setuptools, wheel and this project excepted).
+
+    Names are compared in canonical form (lowercase, runs of ``-_.`` as ``-``).
+    Read-only: importlib.metadata never imports the packages.
+    """
+    import importlib.metadata
+    import re
+
+    def canonical(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    locked = {
+        canonical(raw.split("==", 1)[0].strip())
+        for raw in lock_path.read_text(encoding="utf-8").splitlines()
+        if "==" in raw and not raw.lstrip().startswith(("#", "-"))
+    }
+    ignored = {"pip", "setuptools", "wheel", "parayabuck"}
+    unlocked: set[str] = set()
+    for dist in importlib.metadata.distributions():
+        name = dist.metadata["Name"]
+        if not name:
+            continue
+        key = canonical(name)
+        if key not in locked and key not in ignored:
+            unlocked.add(key)
+    return sorted(unlocked)
+
+
+# Keys that only the systemd unit (or its drop-in) may set; never in .env.
+_UNIT_ONLY_ENV_KEYS = ("PARAYABUCK_TRADING_HOST", "HOST", "PARAYABUCK_CONTAINER")
+
+
+def _unit_only_keys_in_env_file(path: Path) -> list[str]:
+    """Names (never values) of the unit-only keys assigned in the env file at ``path``.
+
+    systemd reads ``EnvironmentFile=`` after the unit's ``Environment=``, so a
+    line here could unset the trading-host designation or turn on the container
+    bind. Those keys belong in the unit or its drop-in only.
+    """
+    if not path.is_file():
+        return []
+    found: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key = line.split("=", 1)[0].strip()
+        if key in _UNIT_ONLY_ENV_KEYS and key not in found:
+            found.append(key)
+    return found
 
 
 def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
@@ -931,6 +1002,31 @@ def _run_doctor(args: argparse.Namespace) -> int:
                     checks.append(("locked pins", "PASS", f"{pins_checked} installed versions match the lock"))
             except Exception as exc:
                 checks.append(("locked pins", "WARN", f"check skipped: {exc}"))
+            # Installed but unlocked packages (an extra, or a dependency added by hand) are
+            # outside the reviewed closure. WARN only, like the pin check above.
+            try:
+                unlocked = _unlocked_installed_distributions(lock_path)
+                if unlocked:
+                    shown = ", ".join(unlocked[:8])
+                    checks.append(("unlocked installed packages", "WARN", f"{len(unlocked)} not in the lock: {shown}"))
+                else:
+                    checks.append(("unlocked installed packages", "PASS", "none"))
+            except Exception as exc:
+                checks.append(("unlocked installed packages", "WARN", f"check skipped: {exc}"))
+        # S2-10-2: EnvironmentFile= overrides the unit's Environment=, so a line in .env
+        # must not carry the trading-host designation, the host bind or the container flag.
+        try:
+            from parayabuck.config import dotenv_path
+
+            env_file = dotenv_path()
+            refused_keys = _unit_only_keys_in_env_file(env_file)
+            add(
+                "unit-only keys not in env file",
+                not refused_keys,
+                f"{', '.join(refused_keys)} set in {env_file}: move to the unit drop-in" if refused_keys else "clean",
+            )
+        except Exception as exc:
+            add("unit-only keys not in env file", False, f"scan could not run: {exc}")
         if not args.offline and paper_checks and api_key and secret:
             broker = None
             try:

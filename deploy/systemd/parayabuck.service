@@ -20,10 +20,10 @@ User=parayabuck
 Group=parayabuck
 WorkingDirectory=/opt/parayabuck
 EnvironmentFile=/opt/parayabuck/.env
-# Single-runner guard: this VM is the designated trading host for the shared
-# Alpaca PAPER account. Remove this line and the engine refuses to start
-# (console and backtests keep working). Every other machine must NOT set it.
-Environment=PARAYABUCK_TRADING_HOST=1
+# Single-runner guard: the trading-host designation (PARAYABUCK_TRADING_HOST=1)
+# is NOT in this template. Without it the engine refuses to start and the console
+# and backtests keep working. Only the designated host adds it, as a drop-in
+# (deploy/systemd/vm-dropin/trading-host.conf; docs/deployment.md, "Trading host").
 # Mode-aware preflight: validates the configured runtime.mode. PAPER gets
 # exactly the --paper invariant set (no live flag, no cap, paper keys); LIVE
 # gets the LIVE gate set (live keys, cap, approval key, e-mail alerts). LIVE
@@ -47,12 +47,22 @@ ProtectHome=true
 # reports/ may be missing on a fresh host (the First install step creates it); the
 # '-' prefix keeps the namespace setup from failing before ExecStartPre runs.
 ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data -/opt/parayabuck/reports
+# data/backups stays writable here on purpose. The engine's ExecStartPre doctor
+# probes the backup path with a write (cli.py "backup path writable", a blocker),
+# so `ReadOnlyPaths=-/opt/parayabuck/data/backups` would stop every start. Add it
+# only after that probe uses a read-only check (blocked item S2-10-5, deployment.md).
 CapabilityBoundingSet=
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+KeyringMode=private
+RemoveIPC=true
+LimitCORE=0
 # AF_NETLINK: glibc getaddrinfo probes interfaces over netlink.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 RestrictNamespaces=true
@@ -61,7 +71,10 @@ RestrictSUIDSGID=true
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-# MemoryDenyWriteExecute stays off: CPython/numpy may need W+X mappings.
+# MemoryDenyWriteExecute stays off until the VM trial run has passed (VM trial
+# item, docs/deployment.md "Sandbox"). Not enabled here on purpose.
+# Egress is not contained by this unit (accepted risk, docs/deployment.md
+# "Accepted risks"): the LIVE keys and the approval key sit in this process.
 
 [Install]
 WantedBy=multi-user.target

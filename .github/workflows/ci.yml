@@ -9,16 +9,18 @@ permissions:
 
 jobs:
   locks:
-    # uv.lock is the single dependency source. requirements.lock (runtime) and
-    # requirements-dev.lock (runtime + dev tools) are exports of it, so every
-    # shared pin is identical in CI, the Dockerfile and the VM.
+    # uv.lock is the single source for the project's runtime and dev dependencies.
+    # requirements.lock (runtime) and requirements-dev.lock (runtime + dev tools) are
+    # exports of it, so every shared pin is identical in CI, the Dockerfile and the VM.
+    # The tooling used here (uv, pip-audit, build, pip) is NOT in uv.lock; it is pinned
+    # by version below and is not hash-checked yet (open item S2-3-4).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install uv==0.11.4 pip-audit
+      - run: python -m pip install uv==0.11.4 pip-audit==2.10.1
       - name: uv.lock matches pyproject.toml
         run: uv lock --check
       - name: Requirement files are current exports of uv.lock
@@ -40,14 +42,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # No step pushes or fetches with the token; the unhashed build code below
+          # must not be able to read it from .git/config.
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: python -m pip install --upgrade pip
+      - run: python -m pip install pip==26.2.1
       - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python -m pip install --no-deps .
-      - run: python -m pip install build pip-audit
+      - run: python -m pip install build==1.6.0 pip-audit==2.10.1
         if: always()
       - run: ruff check .
         if: always()

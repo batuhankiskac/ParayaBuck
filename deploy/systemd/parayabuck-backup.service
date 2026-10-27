@@ -33,6 +33,12 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectKernelLogs=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+KeyringMode=private
+RemoveIPC=true
+LimitCORE=0
 # AF_NETLINK: glibc getaddrinfo probes interfaces over netlink.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 RestrictNamespaces=true

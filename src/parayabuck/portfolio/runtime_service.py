@@ -148,6 +148,13 @@ def _sip_embargo_of(runtime: object) -> timedelta:
 # Rebalance ``status`` recorded when a settled BLOCKED rebalance is closed
 # without submitting its deferred BUYs (phase becomes ``complete``).
 REBALANCE_STATUS_CLOSED_UNRESOLVED = "closed_unresolved"
+# Rebalance ``status`` recorded when a leg is still non-terminal past
+# STUCK_LEG_MAX_AGE: the rebalance is closed and its leg no longer blocks.
+REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED = "stuck_legs_unresolved"
+# A rebalance leg still non-terminal this long after it was sent is stuck
+# (P2-7-4). A DAY order is queued to the next open and must be terminal by that
+# session's close; four days also covers a weekend and a holiday.
+STUCK_LEG_MAX_AGE = timedelta(days=4)
 
 # Observability hook — isolated, never raises, lazy import inside functions to avoid cycles
 try:
@@ -668,6 +675,11 @@ class PortfolioRuntime:
         self.previous_timestamp = repository.latest_decision_timestamp(
             account_id, self.configuration_digest, self.market
         )
+        if self.previous_timestamp is None:
+            # A configuration change keeps the cadence of the last decision of
+            # any digest; otherwise the seed would reseed it to the newest bar
+            # and a session missed at restart would depend on catch-up alone.
+            self.previous_timestamp = self._latest_decision_any_digest()
         self.session_id = repository.begin_session(account_id, self.configuration_digest, mode)
         # Startup catch-up observability: last attempt status and when it was
         # attempted (UTC). Set on every startup_catch_up call, including
@@ -729,6 +741,11 @@ class PortfolioRuntime:
                 self.history[symbol][-1] = replace(bar, timestamp=label)
         missing = tuple(sorted(symbol for symbol in self._required_symbols() if symbol not in in_session))
         return label, missing
+
+    def _latest_decision_any_digest(self) -> datetime | None:
+        """Timestamp of the newest decision for this market under any configuration digest."""
+        latest = self.repository.latest_decision_target(self.account_id, self.market)
+        return latest[0] if latest is not None else None
 
     def _session_decided(self, timestamp: datetime) -> bool:
         """Whether a decision exists for ``timestamp``'s decision period,
@@ -979,6 +996,8 @@ class PortfolioRuntime:
         *,
         entry_latch: str | None = None,
         account: AccountSnapshot | None = None,
+        signal_cross_check: CrossCheckOutcome | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Decide immediately on the latest completed warmup bars.
 
@@ -1087,9 +1106,9 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
-        prior_decision = self.repository.latest_decision_timestamp(
-            self.account_id, self.configuration_digest, self.market
-        )
+        # Any digest: after a configuration change the last decision of the
+        # earlier digest is still the cadence's prior decision (P2-6-3).
+        prior_decision = self._latest_decision_any_digest()
         # A scheduled boundary that has NO persisted decision is a session the
         # process was not alive for (a deploy/restart across the close). It
         # must be decided now — a decision is due whether or not a position is
@@ -1138,6 +1157,7 @@ class PortfolioRuntime:
         advance_result = self.advance_rebalance(
             account=account,
             submit_deferred_buys=entry_latch is None and stale_decision is None,
+            submit_gate=submit_gate,
         )
         if stale_decision is not None:
             self._close_superseded_rebalance(stale_decision)
@@ -1184,6 +1204,8 @@ class PortfolioRuntime:
             # recovery is distinguished by startup_catch_up_status instead.
             decision_origin="startup_catch_up",
             account=account,
+            signal_cross_check=signal_cross_check,
+            submit_gate=submit_gate,
         )
         self.startup_catch_up_status = f"recovered_session:{result.status}" if recovering_session else result.status
         return result
@@ -1303,6 +1325,7 @@ class PortfolioRuntime:
         decision_origin: str = "scheduled",
         account: AccountSnapshot | None = None,
         signal_cross_check: CrossCheckOutcome | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Decide on a closed batch and plan/submit its orders.
 
@@ -1320,6 +1343,7 @@ class PortfolioRuntime:
                 decision_origin=decision_origin,
                 account=account,
                 signal_cross_check=signal_cross_check,
+                submit_gate=submit_gate,
             )
         except BaseException:
             if not self._decision_recorded:
@@ -1335,6 +1359,7 @@ class PortfolioRuntime:
         decision_origin: str,
         account: AccountSnapshot | None,
         signal_cross_check: CrossCheckOutcome | None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Body of :meth:`process_closed_bars`.
 
@@ -1432,6 +1457,7 @@ class PortfolioRuntime:
         advance_result = self.advance_rebalance(
             account=account,
             submit_deferred_buys=entry_latch is None and stale_decision is None,
+            submit_gate=submit_gate,
         )
         if stale_decision is not None:
             self._close_superseded_rebalance(stale_decision)
@@ -2100,7 +2126,7 @@ class PortfolioRuntime:
                     session_id=self.session_id,
                 )
                 return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_complete")
-            return None
+            return self._close_stuck_rebalance(current, buys)
         # sell_pending: wait until every required sell is terminal.
         sells = self.repository.orders_for_decision(current.decision_id, side="sell")
         if not sells:
@@ -2133,7 +2159,7 @@ class PortfolioRuntime:
             )
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if not is_sell_phase_complete(statuses):
-            return None
+            return self._close_stuck_rebalance(current, sells)
         residual = self._residual_sell_result(current.decision_id, tuple(sells), submit_gate=submit_gate)
         if residual is not None:
             return residual
@@ -2373,15 +2399,18 @@ class PortfolioRuntime:
     def _stale_rebalance_decision(self, timestamp: datetime) -> str | None:
         """Decision id of the open rebalance when it was decided for an earlier session.
 
-        ``None`` when no rebalance is open or the open one belongs to
-        ``timestamp``'s own session.
+        An open rebalance decided under another configuration digest is stale
+        too: its BUY side was sized for a universe and limits no longer in
+        force (R2-8-2). ``None`` when no rebalance is open or the open one
+        belongs to ``timestamp``'s own session and digest.
         """
         current = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
             return None
         decision = self.repository.decision_row(current.decision_id)
         decided_at = datetime.fromisoformat(str(decision["decision_timestamp"])) if decision is not None else None
-        if decided_at is not None and self._session_key(decided_at) == self._session_key(timestamp):
+        same_digest = self.repository.decision_configuration_digest(current.decision_id) == self.configuration_digest
+        if decided_at is not None and same_digest and self._session_key(decided_at) == self._session_key(timestamp):
             return None
         return current.decision_id
 
@@ -2419,7 +2448,84 @@ class PortfolioRuntime:
         # A crash-left ``submitting`` SELL is resolved here, as the planning path does.
         self._resolve_stale_submitting_rows()
         sells = self.repository.orders_for_decision(current.decision_id, side="sell")
+        working = [item for item in sells if not is_terminal_order_status(str(item["status"]))]
+        if not working:
+            return False
+        stuck = self._stuck_leg_ids(working)
+        if stuck:
+            self._alert_stuck_legs(current.decision_id, stuck)
+        # A stuck leg no longer holds new decisions; the alert keeps it visible.
+        return len(stuck) < len(working)
+
+    def _sell_leg_in_flight(self, decision_id: str) -> bool:
+        """Whether any SELL of ``decision_id`` is still non-terminal."""
+        sells = self.repository.orders_for_decision(decision_id, side="sell")
         return any(not is_terminal_order_status(str(item["status"])) for item in sells)
+
+    def _stuck_leg_ids(self, rows: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
+        """Client order ids of non-terminal legs recorded more than ``STUCK_LEG_MAX_AGE`` ago.
+
+        Ambiguous and ``submitting`` rows keep their own recovery (reconciliation
+        and the submit resolver), so they are never aged out here.
+        """
+        now = _utcnow()
+        stuck: list[str] = []
+        for row in rows:
+            status = str(row["status"])
+            if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES or status == "submitting":
+                continue
+            client_order_id = str(row["client_order_id"])
+            sent_at = self.repository.order_created_at(client_order_id)
+            if sent_at is not None and sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=UTC)
+            if sent_at is not None and now - sent_at > STUCK_LEG_MAX_AGE:
+                stuck.append(client_order_id)
+        return tuple(stuck)
+
+    def _alert_stuck_legs(self, decision_id: str, client_order_ids: Sequence[str]) -> None:
+        self._raise_operator_alert_once(
+            (decision_id, "stuck_legs_unresolved"),
+            message="A rebalance leg is still open days after it was sent; it no longer holds new decisions",
+            category="stuck_legs_unresolved",
+            decision_id=decision_id,
+            client_order_ids=",".join(client_order_ids),
+        )
+
+    def _close_stuck_rebalance(
+        self, current: RebalanceExecutionState, orders: Sequence[Mapping[str, object]]
+    ) -> PortfolioRuntimeResult | None:
+        """Close a rebalance whose leg is still non-terminal past its age limit (P2-7-4).
+
+        Without this, a leg the broker keeps in ``held``, ``stopped``,
+        ``suspended``, ``replaced`` or ``pending_review`` would freeze every
+        later decision for the market. The BUY side is discarded, the leg is
+        left as the broker reports it, and the operator is alerted. Returns
+        ``None`` when no leg has reached its age limit.
+        """
+        stuck = self._stuck_leg_ids(orders)
+        if not stuck:
+            return None
+        log.critical(
+            "Rebalance closed with legs still open past their age limit; deferred BUYs discarded: "
+            "market=%s decision=%s legs=%s",
+            self._market_name(),
+            current.decision_id,
+            ",".join(stuck),
+        )
+        self.repository.update_rebalance_execution(
+            current.decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED
+        )
+        _emit_rebalance_phase_safe(
+            current.decision_id,
+            current.phase,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+            reason=REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED,
+        )
+        self._alert_stuck_legs(current.decision_id, stuck)
+        return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_complete")
 
     def _close_superseded_rebalance(self, decision_id: str) -> None:
         """Discard the BUY side of a rebalance a newer session has superseded.
@@ -2437,6 +2543,17 @@ class PortfolioRuntime:
             or current.decision_id != decision_id
             or current.phase not in (REBALANCE_PHASE_SELL_PENDING, REBALANCE_PHASE_BUY_READY)
         ):
+            return
+        if current.phase == REBALANCE_PHASE_SELL_PENDING and self._sell_leg_in_flight(decision_id):
+            # A residual or a sell still working keeps its own rounds: closing
+            # now would leave it with no advance to settle it (P2-7-2). The
+            # BUY side stays held until the sells settle, and a leg left
+            # non-terminal past STUCK_LEG_MAX_AGE is closed by the stuck-leg rule.
+            log.info(
+                "Superseded rebalance kept open while its SELL is in flight: market=%s decision=%s",
+                self._market_name(),
+                decision_id,
+            )
             return
         self.repository.update_rebalance_execution(
             decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
@@ -2800,7 +2917,12 @@ class PortfolioRuntime:
         # its BUY side keeps the handling it always had.
         newest_session = self._latest_finished_signal_session()
         decided_at = datetime.fromisoformat(str(decision["decision_timestamp"]))
-        if newest_session is not None and self._session_key(newest_session) != self._session_key(decided_at):
+        # A side decided under another configuration digest is superseded
+        # whatever the session (R2-8-2).
+        other_digest = self.repository.decision_configuration_digest(decision_id) != self.configuration_digest
+        if other_digest or (
+            newest_session is not None and self._session_key(newest_session) != self._session_key(decided_at)
+        ):
             self._close_superseded_rebalance(decision_id)
             return None
         account = account or self.broker.account()

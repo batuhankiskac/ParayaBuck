@@ -527,6 +527,11 @@ def _runtime(
         risk_limits=_risk_limits(),
         execution_policy=policy,
     )
+    # The fixture's seeded fill also records a decision under another digest.
+    # The cadence now carries that decision's timestamp across a digest change
+    # (R2-8-5), which would make Dec 16 a non-boundary. These tests are about the
+    # December verdict, so they start from a runtime with no cadence history.
+    runtime.previous_timestamp = None
     return runtime, repository, broker
 
 
@@ -600,6 +605,9 @@ def test_paper_risk_reduction_still_executes_inside_the_window(tmp_path: Path, m
         risk_limits=_risk_limits(maximum_equity_asset=0.84),
         execution_policy=_deferral_policy(band=SHIPPED),
     )
+    # The fixture's seeded fill records a decision under another digest; clear the
+    # cadence it carries (R2-8-5) so the risk SELL is judged on its own decision.
+    runtime.previous_timestamp = None
     result = runtime.process_closed_bars(_december_bars(INSIDE))
     assert [(order.side, order.quantity) for order in result.orders] == [(PortfolioOrderSide.SELL, 60.0)]
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]

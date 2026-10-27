@@ -18,6 +18,7 @@ from parayabuck.portfolio.runtime_models import (
     REBALANCE_PHASE_BUY_PENDING,
     REBALANCE_PHASE_BUY_READY,
     REBALANCE_PHASE_COMPLETE,
+    REBALANCE_PHASE_SELL_PENDING,
 )
 from parayabuck.portfolio.runtime_service import (
     REBALANCE_STATUS_CLOSED_UNRESOLVED,
@@ -198,7 +199,8 @@ def test_p9_1_superseded_sell_in_flight_holds_the_new_decision(tmp_path) -> None
     assert held.status == "rebalance_in_progress"
     assert runtime.previous_timestamp == before
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
-    assert _phase(repository, first.decision_id) == (REBALANCE_PHASE_COMPLETE, REBALANCE_STATUS_CLOSED_UNRESOLVED)
+    # P2-7-2: the rebalance stays open while its superseded SELL is working.
+    assert _phase(repository, first.decision_id)[0] == REBALANCE_PHASE_SELL_PENDING
 
     # The SELL settles; the advance path does not resume the stale BUY side.
     _settle(repository, sell, "sell-fill")

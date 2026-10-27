@@ -482,7 +482,7 @@
       // A save restarts the engine only when the operator says so (the server default is off).
       const restartEngine = await dialog.confirm({
         title: "Motor yeniden başlatılsın mı?",
-        message: "Evet: kayıttan sonra motor yeniden başlatılır ve yeni ayarlarla çalışır. Hayır: ayarlar kaydedilir, çalışan motor mevcut ayarlarla devam eder."
+        message: "Evet: kayıttan sonra motor yeniden başlatılır ve yeni ayarlarla çalışır. Hayır: motor çalışıyorsa ve motor ayarı değiştiyse kayıt reddedilir (önce botu durdurun); yalnızca panel ayarları motoru durdurmadan kaydedilir."
       });
       const payload = {
         restart_engine: restartEngine === true,

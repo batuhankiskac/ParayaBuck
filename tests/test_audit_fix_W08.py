@@ -155,7 +155,7 @@ class _ExitPortfolio:
         self._submitted = submitted
         self.calls: list[object] = []
 
-    def retry_rejected_exit_sells(self, account: object) -> tuple[str, ...]:
+    def retry_rejected_exit_sells(self, account: object, *, submit_gate: object = None) -> tuple[str, ...]:
         self.calls.append(account)
         return self._submitted
 

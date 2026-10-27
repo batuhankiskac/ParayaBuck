@@ -2015,7 +2015,7 @@ class PortfolioRuntime:
         *,
         account: AccountSnapshot | None = None,
         submit_deferred_buys: bool = True,
-        submit_gate: Callable[[], str | None] | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Advance a persisted two-phase rebalance by one step.
 
@@ -2050,9 +2050,10 @@ class PortfolioRuntime:
         submits the risk-increasing BUY side. The phase stays ``buy_ready``
         and the next un-halted advance submits it exactly once.
 
-        ``submit_gate`` (optional) is consulted right before each broker submit.
-        A non-None reason skips that submit: the order is not booked as sent and
-        stays pending for a later advance. ``None`` (the default) changes nothing.
+        ``submit_gate`` (optional) is called with each order right before its
+        broker submit. A non-None reason skips that submit: the order is not
+        booked as sent and stays pending for a later advance. ``None`` (the
+        default) changes nothing.
         """
         current = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
@@ -2138,7 +2139,7 @@ class PortfolioRuntime:
         self,
         decision_id: str,
         sell_rows: tuple[dict[str, object], ...],
-        submit_gate: Callable[[], str | None] | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Submit the residual SELLs left by partially filled, then canceled or expired, SELLs.
 
@@ -2680,7 +2681,7 @@ class PortfolioRuntime:
         decision_id: str,
         *,
         account: AccountSnapshot | None = None,
-        submit_gate: Callable[[], str | None] | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Re-plan and submit the BUY side of a completed SELL phase.
 
@@ -2898,7 +2899,7 @@ class PortfolioRuntime:
         submitted: tuple[str, ...] = ()
         for order in buy_orders:
             if submit_gate is not None:
-                reason = submit_gate()
+                reason = submit_gate(order)
                 if reason is not None:
                     # Held before any row is written: the BUY stays deferred and the next advance re-plans it.
                     log.warning(
@@ -2921,7 +2922,7 @@ class PortfolioRuntime:
         sells: tuple[PortfolioOrderRequest, ...],
         rules: Mapping[str, AssetTradingRules],
         *,
-        submit_gate: Callable[[], str | None] | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Submit the SELL side a re-plan still needs and hold the BUY side.
 
@@ -3460,7 +3461,7 @@ class PortfolioRuntime:
         orders: tuple[PortfolioOrderRequest, ...],
         rules_by_symbol: Mapping[str, AssetTradingRules] | None = None,
         *,
-        submit_gate: Callable[[], str | None] | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
@@ -3517,7 +3518,7 @@ class PortfolioRuntime:
                     )
                     continue
             if submit_gate is not None:
-                reason = submit_gate()
+                reason = submit_gate(order)
                 if reason is not None:
                     # Held before the row is written: nothing is booked as sent and the order stays pending.
                     log.warning(
@@ -3580,7 +3581,7 @@ class PortfolioRuntime:
         return tuple(submitted)
 
     def retry_rejected_exit_sells(
-        self, account: AccountSnapshot, *, submit_gate: Callable[[], str | None] | None = None
+        self, account: AccountSnapshot, *, submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None
     ) -> tuple[str, ...]:
         """Retry each broker-rejected SELL of the newest decision ONCE (R3).
 

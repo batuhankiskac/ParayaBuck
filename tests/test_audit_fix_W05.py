@@ -454,7 +454,7 @@ def test_submit_gate_holds_a_residual_without_booking_it(tmp_path) -> None:
     broker.open_symbols.discard("AAPL")
     sent_before = len(broker.submitted)
 
-    held = runtime.advance_rebalance(submit_gate=lambda: "halted by operator")
+    held = runtime.advance_rebalance(submit_gate=lambda order: "halted by operator")
 
     assert held is not None and held.submitted_order_ids == ()
     assert len(broker.submitted) == sent_before
@@ -475,7 +475,7 @@ def test_submit_gate_holds_a_deferred_buy_and_keeps_the_phase_ready(tmp_path) ->
     broker.open_symbols.discard("AAPL")
     sent_before = len(broker.submitted)
 
-    held = runtime.advance_rebalance(submit_gate=lambda: "halted by operator")
+    held = runtime.advance_rebalance(submit_gate=lambda order: "halted by operator")
 
     assert held is not None and held.status == "submit_blocked"
     assert len(broker.submitted) == sent_before

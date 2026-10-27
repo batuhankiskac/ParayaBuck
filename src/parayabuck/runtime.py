@@ -1072,7 +1072,12 @@ class EngineRuntime:
                     # while this thread waited must still stop the SELL.
                     if self._exit_sell_retry_blocked(portfolio_runtime.market):
                         continue
-                    submitted = retry(account)
+                    submitted = retry(
+                        account,
+                        submit_gate=lambda order, market=portfolio_runtime.market: (
+                            "exit_sell_retry_blocked" if self._exit_sell_retry_blocked(market) else None
+                        ),
+                    )
                 if submitted:
                     self._invalidate_account_snapshot_after_execution()
             except Exception as exc:
@@ -1088,6 +1093,25 @@ class EngineRuntime:
                     self._schedule_reconcile()
                 except Exception:
                     log.warning("Reconcile after a failed SELL retry could not be scheduled", exc_info=True)
+
+    def _advance_submit_block_reason(self, market: Market, order: Any) -> str | None:
+        """Why a rebalance advance must not submit ``order`` now, else None.
+
+        Flags only, like ``_exit_sell_retry_blocked``. Stopping and the circuit
+        breaker hold every order; a BUY also needs the market to be ACTIVE (no
+        halt, entry latch or pending reconcile raised since the advance began).
+        SELLs keep flowing under latches, as on the decision path.
+        """
+        if not getattr(self, "_running", False):
+            return "engine_not_running"
+        if getattr(self, "_circuit_breaker_reason", None) is not None:
+            return "circuit_breaker"
+        if (
+            getattr(order, "side", None) == PortfolioOrderSide.BUY
+            and self.trading_state(market) is not TradingState.ACTIVE
+        ):
+            return "buy_not_permitted"
+        return None
 
     def _exit_sell_retry_blocked(self, market: Market | None) -> bool:
         """True when a rejected-SELL retry must not be submitted now.
@@ -2982,7 +3006,13 @@ class EngineRuntime:
                     # the time the BUY is submitted: re-read the permission
                     # flags here, under the lock, right before the advance.
                     submit_now = submit_buys and self.trading_state(market) is TradingState.ACTIVE
-                    advance_kwargs: dict[str, object] = {"submit_deferred_buys": submit_now}
+                    advance_kwargs: dict[str, object] = {
+                        "submit_deferred_buys": submit_now,
+                        # Re-read again at each broker submit: a halt raised by a
+                        # thread that does not take this lock must still stop the
+                        # next order of the batch (CC-6).
+                        "submit_gate": lambda order, market=market: self._advance_submit_block_reason(market, order),
+                    }
                     if account is not None:
                         advance_kwargs["account"] = account
                     result = portfolio_runtime.advance_rebalance(**advance_kwargs)
@@ -5826,9 +5856,7 @@ class EngineRuntime:
         # peak against the old baseline while this is in progress.
         # Without a peak service the broker's own reset takes its peak lock, so
         # it must not be called under that (non-reentrant) lock here.
-        peak_lock = (
-            getattr(self.broker, "_peak_lock", None) if peak_service is not None else None
-        ) or threading.Lock()
+        peak_lock = (getattr(self.broker, "_peak_lock", None) if peak_service is not None else None) or threading.Lock()
         with peak_lock:
             prior = None
             if peak_service is None:

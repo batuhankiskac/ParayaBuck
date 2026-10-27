@@ -35,6 +35,7 @@ from parayabuck.execution.portfolio import (
     downsize_gain_fraction_tl,
     floor_increment,
     gain_band_bypass_metadata,
+    record_december_calendar_fallbacks,
     record_december_deferral_holds,
     record_gain_band_fallbacks,
     record_gain_band_holds,
@@ -1927,6 +1928,7 @@ class PortfolioRuntime:
         gain_band_holds: list[GainBandHold] = []
         december_deferral_holds: list[DecemberDeferralHold] = []
         gain_band_fallbacks: list[GainBandFallback] = []
+        december_calendar_fallbacks: list[int] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -1942,6 +1944,7 @@ class PortfolioRuntime:
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
             gain_band_fallbacks=gain_band_fallbacks,
+            december_calendar_fallbacks=december_calendar_fallbacks,
             gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         if gain_band_holds:
@@ -1950,6 +1953,9 @@ class PortfolioRuntime:
             risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
         if gain_band_fallbacks:
             risk = replace(risk, target=record_gain_band_fallbacks(risk.target, gain_band_fallbacks))
+        if december_calendar_fallbacks:
+            risk = replace(risk, target=record_december_calendar_fallbacks(risk.target, december_calendar_fallbacks))
+            self._alert_december_calendar_fallback(decision_id, december_calendar_fallbacks)
         if not any(order.side == PortfolioOrderSide.SELL for order in planned):
             planned = reserve_opening_order_slots(
                 planned,
@@ -2842,6 +2848,15 @@ class PortfolioRuntime:
             keys = self._raised_operator_alerts = set()
         return keys
 
+    def _alert_december_calendar_fallback(self, decision_id: str, years: list[int]) -> None:
+        """One alert per decision when the December window fell back to a weekday count (T2-10-4)."""
+        self._raise_operator_alert_once(
+            (decision_id, "december_calendar_fallback"),
+            message="December deferral used the weekday fallback: the NYSE calendar was unreadable",
+            decision_id=decision_id,
+            years=sorted(set(years)),
+        )
+
     def _raise_operator_alert_once(self, key: tuple[str, str], *, message: str, **fields: object) -> None:
         keys = self._operator_alert_keys()
         if key in keys:
@@ -3130,6 +3145,7 @@ class PortfolioRuntime:
         gain_band_holds: list[GainBandHold] = []
         december_deferral_holds: list[DecemberDeferralHold] = []
         gain_band_fallbacks: list[GainBandFallback] = []
+        december_calendar_fallbacks: list[int] = []
         planned = self.planner.plan(
             risk.target,
             account,
@@ -3145,6 +3161,7 @@ class PortfolioRuntime:
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
             gain_band_fallbacks=gain_band_fallbacks,
+            december_calendar_fallbacks=december_calendar_fallbacks,
             gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         # A re-plan that planned a SELL still owes that exit even when the SELL is
@@ -3194,6 +3211,9 @@ class PortfolioRuntime:
             risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
         if gain_band_fallbacks:
             risk = replace(risk, target=record_gain_band_fallbacks(risk.target, gain_band_fallbacks))
+        if december_calendar_fallbacks:
+            risk = replace(risk, target=record_december_calendar_fallbacks(risk.target, december_calendar_fallbacks))
+            self._alert_december_calendar_fallback(decision_id, december_calendar_fallbacks)
         # Sells before buys (C-2): a re-plan that still needs a SELL submits it and
         # keeps every BUY deferred until that SELL settles.
         replan_sells = tuple(order for order in planned if order.side == PortfolioOrderSide.SELL)

@@ -694,6 +694,14 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(_sqlite3, "connect", _patched_connect)
 
+    # A web backtest started without an explicit reports root resolves it from
+    # the config (``reports``, cwd-relative), and the start prunes old web runs
+    # there: point the default at this test's tmp dir so no test touches the
+    # checkout's reports/.
+    import parayabuck.web.managers.backtest as _backtest_manager_module
+
+    monkeypatch.setattr(_backtest_manager_module, "_configured_reports_root", lambda: tmp_path / "reports")
+
     monkeypatch.setenv("PYTEST_ISOLATION", "1")
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_SECRET_KEY", raising=False)

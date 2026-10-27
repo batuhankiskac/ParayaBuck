@@ -825,6 +825,11 @@ def _persisted_operator_halt_rows(config: Config) -> int | None:
         connection.close()
 
 
+def _strict_events_query(journal: Any, **filters: Any) -> list[Any]:
+    """Journal query that raises on a failed read instead of returning [] (D2-6-2)."""
+    return list(journal.query(**filters, strict=True))
+
+
 def _journal_operator_action(
     config: Config,
     kind: str,
@@ -1798,17 +1803,23 @@ def _ops_events(args: argparse.Namespace) -> int:
             print("No event journal found — fresh install (no events)")
         return 0
     j = EventJournal.open_readonly(journal_path)
-    events = j.query(
-        since=since,
-        until=until,
-        kind=getattr(args, "kind", None),
-        severity=getattr(args, "severity", None),
-        market=getattr(args, "market", None),
-        decision_id=getattr(args, "decision", None),
-        client_order_id=getattr(args, "order", None),
-        incident_id=getattr(args, "incident", None),
-        limit=int(getattr(args, "limit", 50) or 50),
-    )
+    try:
+        events = _strict_events_query(
+            j,
+            since=since,
+            until=until,
+            kind=getattr(args, "kind", None),
+            severity=getattr(args, "severity", None),
+            market=getattr(args, "market", None),
+            decision_id=getattr(args, "decision", None),
+            client_order_id=getattr(args, "order", None),
+            incident_id=getattr(args, "incident", None),
+            limit=int(getattr(args, "limit", 50) or 50),
+        )
+    except Exception as exc:
+        # A failed read is not "no events" (D2-6-2).
+        print(f"Event journal could not be read: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
     if getattr(args, "json", False):
         print(json.dumps([e.to_dict() for e in events], indent=2, default=str))
     else:

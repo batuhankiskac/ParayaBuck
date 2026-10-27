@@ -136,7 +136,16 @@ Disclosure: the harness was run on 2026-10-27 before this commit. It built the U
 
 ## Amendments
 
-None. Any bug fix found after results is recorded here with the reason; gates and arms stay as written.
+- **A1 (2026-10-27, before any result was written or read).** The first `--run` attempt raised a shape error in
+  `boot_all`: `fe_boot` draws L + EXT = 2,776 positions per path, so a bootstrap close path has 2,777 sessions, while
+  the BootWindow calendar (`env.mth_of`) has 2,776 entries. The fix pads the month index of the calendar with its
+  last value for the path sessions beyond it (no month-end is flagged there; the simulation window ends at
+  `win.i1`, so those sessions never enter a result). The attempt had computed the in-memory pre-tax and after-tax
+  blocks of every arm, including U1-U3, before the crash; nothing was written to RESULTS.json or SUMMARY.txt and no
+  value was printed or inspected. Arms, parameters, gates and seeds are unchanged.
+  The amendment is committed together with the screen, before the run that produces the results.
+
+Any further bug fix found after results is recorded here with the reason; gates and arms stay as written.
 
 ## Known limits (stated before running)
 

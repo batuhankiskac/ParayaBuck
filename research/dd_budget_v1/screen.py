@@ -206,7 +206,9 @@ def boot_all(win, seed=SEED, block=BLOCK, n_pre=N_PRE, n_tax=N_TAX, chunk=fe_boo
         W = min(chunk, n_paths - p0)
         pos = fe_boot.draw_positions(rng, block, W, fe_config.TAX_BOOT_L, win.npool, fe_config.TAX_BOOT_EXT)
         sta = chunk_states(win.q, win.y, pos)
-        mth = np.asarray(win.env.mth_of)[: sta["pc"].shape[1]]
+        mth_cal = np.asarray(win.env.mth_of)
+        T_path = sta["pc"].shape[1]        # fe_boot draws L + EXT positions, so paths are longer than the calendar
+        mth = np.concatenate([mth_cal, np.full(max(0, T_path - mth_cal.shape[0]), mth_cal[-1])])[:T_path]
         ratios = ddbudget.arm_ratios(sta["pc"], mth)
         wk = {}
         for fin, sc in (("base", sta["sc"]), ("cal", sta["sc_c"])):  # on/factor are financing-free

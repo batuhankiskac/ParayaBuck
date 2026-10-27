@@ -1365,8 +1365,9 @@ class PortfolioStateRepository:
             f"Broker'da {symbol} pozisyonu yok, ancak bot {format_quantity(owned)} adet sahipliği kayıtlı tutuyor "
             "ve bu kaybı açıklayan yerel bir satış emri yok. Sahiplik otomatik silinmedi; sistem bu sembolü "
             "uzlaşmada tutarsızlık sayıp durdurur. Gerçek bir satış gerçekleştiyse brokerdaki emir geçmişini "
-            "kontrol edin; ardından sahipliği brokerin gerçek durumuna (0 adet) getirmek için şu komutu "
-            f"çalıştırın: `parayabuck ops rebase-ownership {symbol} --broker-qty 0 --confirm {format_quantity(owned)}`."
+            "kontrol edin; ardından sahipliği brokerin gerçek durumuna (0 adet) getirmek için önce "
+            f"`parayabuck ops rebase-ownership {symbol} --broker-qty 0` ile planı görün, sonra aynı komutu "
+            f"`--confirm {format_quantity(owned)} --plan-digest <plandaki özet>` ile çalıştırın."
         )
         try:
             from parayabuck.monitoring import alerts

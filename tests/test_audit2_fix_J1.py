@@ -142,7 +142,8 @@ def test_uncorroborated_residue_is_refused_and_alerted_once(tmp_path: Path, emit
     assert _adjustments(repo) == []
     assert len(emitted) == 1
     assert emitted[0]["category"] == "ownership_stale_uncorroborated"
-    assert "--broker-qty 0 --confirm 100" in str(emitted[0]["message"])
+    assert "--broker-qty 0` ile planı görün" in str(emitted[0]["message"])
+    assert "--confirm 100 --plan-digest" in str(emitted[0]["message"])
 
 
 def test_local_exit_after_the_last_buy_clears_with_an_honest_note(tmp_path: Path) -> None:

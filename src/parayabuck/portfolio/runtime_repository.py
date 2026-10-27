@@ -1764,7 +1764,14 @@ class PortfolioStateRepository:
                 return "invalid_incremental_notional"
         return "valid_incremental"
 
-    def update_high_water(self, account_id: str, equity: float) -> float:
+    def update_high_water(self, account_id: str, equity: float, *, epoch: int | None = None) -> float:
+        """Raise the persisted high-water to ``equity`` (max-merge within an epoch).
+
+        ``epoch`` is the risk epoch the equity was observed in. An observation
+        from an older epoch is a pre-reset snapshot and must not re-raise the
+        rebased baseline (C2-4-2); a newer epoch replaces the baseline. Without
+        an epoch the legacy max-merge applies.
+        """
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
@@ -1773,9 +1780,15 @@ class PortfolioStateRepository:
             if row is not None:
                 existing_equity = float(row[0])
                 existing_epoch = int(row[1] or 0)
-                high_water = max(existing_equity, equity)
+                if epoch is not None and int(epoch) < existing_epoch:
+                    return existing_equity
+                if epoch is not None and int(epoch) > existing_epoch:
+                    existing_epoch = int(epoch)
+                    high_water = equity
+                else:
+                    high_water = max(existing_equity, equity)
             else:
-                existing_epoch = 0
+                existing_epoch = int(epoch) if epoch is not None else 0
                 high_water = equity
             self.store.connection.execute(
                 """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
@@ -1786,26 +1799,42 @@ class PortfolioStateRepository:
             )
         return high_water
 
-    def high_water(self, account_id: str) -> float:
+    def high_water(self, account_id: str, *, epoch: int | None = None) -> float:
+        """Persisted high-water equity, or 0.0 when none is recorded.
+
+        ``epoch`` is the risk epoch the caller measures in. A row from an older
+        epoch is a superseded baseline and contributes nothing (C2-4-2, R2-5-4).
+        """
         with self.store.lock:
             row = self.store.connection.execute(
-                "SELECT equity FROM portfolio_high_water WHERE account_id = ?",
+                "SELECT equity, epoch FROM portfolio_high_water WHERE account_id = ?",
                 (account_id,),
             ).fetchone()
-        return float(row[0]) if row is not None else 0.0
+        if row is None:
+            return 0.0
+        if epoch is not None and int(row[1] or 0) < int(epoch):
+            return 0.0
+        return float(row[0])
 
-    def reset_high_water(self, account_id: str, equity: float) -> None:
+    def reset_high_water(self, account_id: str, equity: float, *, epoch: int | None = None) -> None:
         """Rebase the persisted portfolio high-water to ``equity`` (a new
         risk epoch started by the operator after a verified drawdown
         incident). Unlike ``update_high_water`` this REPLACES the baseline
         instead of taking the max, so decisions resume measuring drawdown
-        from the reset-time equity."""
+        from the reset-time equity.
+
+        ``epoch`` is the peak sidecar's new epoch, so both stores carry one
+        epoch number for one baseline (R2-6-3). Without it the row's own
+        counter advances."""
         with self.store.lock, self.store.connection:
             row = self.store.connection.execute(
                 "SELECT epoch FROM portfolio_high_water WHERE account_id = ?",
                 (account_id,),
             ).fetchone()
-            new_epoch = int(row[0] or 0) + 1 if row is not None else 1
+            if epoch is not None:
+                new_epoch = int(epoch)
+            else:
+                new_epoch = int(row[0] or 0) + 1 if row is not None else 1
             self.store.connection.execute(
                 """INSERT INTO portfolio_high_water(account_id, equity, updated_at, epoch)
                    VALUES (?, ?, ?, ?)

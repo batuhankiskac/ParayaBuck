@@ -99,6 +99,9 @@ class AccountSnapshot:
     # Alpaca ``non_marginable_buying_power`` (None when the broker did not
     # report it): the LIVE gap-safe BUY cap never spends above it.
     non_marginable_buying_power: float | None = None
+    # Risk epoch the peak was measured in (broker peak sidecar). A consumer
+    # that stores the peak must stamp this epoch, not the live one (C2-4-5).
+    peak_epoch: int | None = None
 
     @property
     def drawdown_pct(self) -> float:

@@ -262,11 +262,12 @@ class RiskPeakService:
         sidecar_peak: float | None = None
         sidecar_epoch = 0
         sidecar_account_id: str | None = None
-        sidecar_exists = self._peak_state_path.exists()
+        # One read decides both "missing" and "present": no exists() check
+        # that a concurrent writer could race (C2-4-6).
+        data = _parse_sidecar_file(self._peak_state_path)
+        sidecar_exists = data is not None
         is_legacy = False
-        if sidecar_exists:
-            data = _parse_sidecar_file(self._peak_state_path)
-            assert data is not None
+        if data is not None:
             peak = float(data["peak_equity"])
             epoch_val = int(data.get("epoch", 0) or 0)
             has_account_id = "account_id" in data
@@ -280,10 +281,14 @@ class RiskPeakService:
                     if not acct:
                         is_legacy, sidecar_peak, sidecar_epoch = True, peak, epoch_val
                     elif acct != account_id:
-                        log.warning(
-                            "Peak sidecar account mismatch: sidecar=%s current=%s — ignoring sidecar", acct, account_id
+                        # Fail closed (docs/execution_architecture.md): a foreign peak is never
+                        # ignored and overwritten, because the drawdown baseline would re-base
+                        # to the new account's equity.
+                        log.error("Peak sidecar account mismatch: sidecar=%s current=%s", acct, account_id)
+                        raise RiskStatePersistenceError(
+                            f"Peak sidecar at {self._peak_state_path} is bound to account {acct}, "
+                            f"not {account_id}; refusing to start. Verify the account before moving the sidecar aside."
                         )
-                        sidecar_peak, sidecar_epoch, sidecar_account_id, is_legacy = None, 0, acct, False
                     else:
                         sidecar_peak, sidecar_epoch, sidecar_account_id, is_legacy = peak, epoch_val, acct, False
                 else:
@@ -298,12 +303,16 @@ class RiskPeakService:
                 else:
                     current_fp = hashlib.sha256(account_id.encode()).hexdigest()
                     if fp != current_fp:
-                        log.warning(
-                            "Peak sidecar fingerprint mismatch: sidecar=%s current_account=%s — ignoring sidecar",
+                        # Fail closed, as for an account_id mismatch (R2-6-1).
+                        log.error(
+                            "Peak sidecar fingerprint mismatch: sidecar=%s current_account=%s",
                             fp[:8],
                             account_id[:8],
                         )
-                        sidecar_peak, sidecar_epoch, sidecar_account_id, is_legacy = None, 0, fp, False
+                        raise RiskStatePersistenceError(
+                            f"Peak sidecar at {self._peak_state_path} is bound to another account "
+                            "(fingerprint mismatch); refusing to start. Verify the account before moving the sidecar aside."
+                        )
                     else:
                         sidecar_peak, sidecar_epoch, sidecar_account_id, is_legacy = peak, epoch_val, account_id, False
             else:
@@ -329,10 +338,16 @@ class RiskPeakService:
         else:
             assert sidecar_peak is not None and persisted_peak is not None
             if is_legacy:
-                if float(sidecar_peak) >= float(persisted_peak):
-                    peak_final, epoch_final = float(sidecar_peak), int(sidecar_epoch or 0)
+                # The newer epoch is the newer baseline; a peak from an older epoch
+                # is stale even when it is higher (R2-6-4). Equal epochs keep the max peak.
+                s_epoch, p_epoch = int(sidecar_epoch or 0), int(persisted_epoch or 0)
+                if s_epoch == p_epoch:
+                    peak_final = max(float(sidecar_peak), float(persisted_peak))
+                    epoch_final = s_epoch
+                elif p_epoch > s_epoch:
+                    peak_final, epoch_final = float(persisted_peak), p_epoch
                 else:
-                    peak_final, epoch_final = float(persisted_peak), int(persisted_epoch or 0)
+                    peak_final, epoch_final = float(sidecar_peak), s_epoch
                 log.warning(
                     "Legacy sidecar peak=%s persisted=%s for account=%s — resolved to %s (epoch %s)",
                     sidecar_peak,

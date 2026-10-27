@@ -31,8 +31,16 @@ engine emitted and how many repeats it throttled.
 Safety resets are operator actions in the dashboard (or
 `POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`). A reset
 succeeds only after the queue drains, data gaps clear and reconciliation
-passes, and it clears the reason it verified (plus the halt rows this start
-already re-armed, see "Circuit breaker active").
+passes, and it clears the reason it verified. It also clears the halt rows
+this start already re-armed, but only those no longer in force in the running
+process: a re-armed reason still in force keeps its halt until it is reset
+itself (see "Circuit breaker active"). A reset whose halt is raised again
+during its own verification is refused and changes nothing.
+
+A risk-epoch reset returns the new `epoch` and whether it `changed`. If the
+peak sidecar (`paper_equity_peak.json`, or `live_equity_peak.json` for LIVE)
+is bound to another account, the engine refuses to start (fail closed). Verify
+the account before moving that file aside.
 
 From the VM shell a mutating call needs the control token header
 (`x-parayabuck-control-token`); without it the request is refused with 403. The same

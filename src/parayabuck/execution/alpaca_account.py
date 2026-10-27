@@ -368,13 +368,28 @@ class AccountService:
         broker = self._broker
         # Access via property so fake injection is observed
         client = broker._client
-        account: Any = client.get_account()
-        # Bind account id. The id alone keys ownership and the peak sidecar:
-        # the account number is never a substitute (fail closed).
-        account_id = str(getattr(account, "id", "") or "").strip()
-        if not account_id:
-            raise ValueError("Broker account has no id; snapshot refused (no account_number fallback for the peak key)")
-        broker._account_id = account_id
+        # Account-scoped peak reconciliation is serialized with the peak
+        # read-modify-write (the lock is created in ``AlpacaBroker.__init__``;
+        # the fallback below only serves test doubles that bypass it).
+        peak_lock = getattr(broker, "_peak_lock", None)
+        if peak_lock is None:
+            peak_lock = threading.Lock()
+            broker._peak_lock = peak_lock
+        # The equity read and the risk-epoch read are one critical section: a
+        # reset commits under this lock, so the epoch captured here names the
+        # baseline the equity belongs to (C2-4-1).
+        with peak_lock:
+            account: Any = client.get_account()
+            # Bind account id. The id alone keys ownership and the peak sidecar:
+            # the account number is never a substitute (fail closed).
+            account_id = str(getattr(account, "id", "") or "").strip()
+            if not account_id:
+                raise ValueError(
+                    "Broker account has no id; snapshot refused (no account_number fallback for the peak key)"
+                )
+            broker._account_id = account_id
+            broker._ensure_peak_reconciled(account_id)
+            peak_epoch_read = getattr(broker, "_peak_epoch", None)
         # The human account number ("PA..." on paper) classifies the account
         # environment for the PAPER/LIVE start check.
         broker._account_number = str(getattr(account, "account_number", "") or "")
@@ -538,6 +553,12 @@ class AccountService:
                         total_owned = resolved
                     elif broker_qty < total_owned:
                         drift_candidates.append((canonical, total_owned, raw_qty, market))
+            elif total_owned > 1e-12 and broker_qty > 1e-12:
+                # The counts agree without a rebase: an unconfirmed-surplus alert
+                # from an earlier mismatch episode is over (F2-1-6).
+                clear_surplus = getattr(broker, "portfolio_surplus_cleared", None)
+                if clear_surplus is not None:
+                    clear_surplus(canonical, market)
             managed_qty = min(broker_qty, total_owned)
             external_qty = broker_qty - managed_qty
             ownership = (
@@ -609,16 +630,14 @@ class AccountService:
                 )
         if per_symbol_lock:
             broker.drift_locked_symbols = frozenset(locked_shortfalls)
-        # Account-scoped peak reconciliation (serialized: the peak is shared
-        # mutable state across the account, trade-update and decision threads).
-        # The lock is created in ``AlpacaBroker.__init__``; the fallback below
-        # only serves test doubles that bypass it.
-        peak_lock = getattr(broker, "_peak_lock", None)
-        if peak_lock is None:
-            peak_lock = threading.Lock()
-            broker._peak_lock = peak_lock
+        # Account-scoped peak merge (serialized: the peak is shared mutable
+        # state across the account, trade-update and decision threads).
         with peak_lock:
-            broker._ensure_peak_reconciled(broker._account_id or "unknown")
+            if peak_epoch_read is not None and getattr(broker, "_peak_epoch", None) != peak_epoch_read:
+                # A risk-epoch reset committed while this snapshot's broker reads
+                # were in flight: the equity belongs to the superseded baseline and
+                # must not re-raise the new one. The next poll reads afresh (C2-4-1).
+                raise RuntimeError("Risk epoch changed during the account read; snapshot discarded, next poll re-reads")
             old_peak = broker._peak_equity
             # The high-water mark tracks equity net of today's external cash,
             # so a same-day deposit or withdrawal never reads as a gain or loss.
@@ -655,6 +674,7 @@ class AccountService:
             unrealized_pnl=unrealized,
             fees=(ledger.total_fees_for_account(broker._account_id or "unknown") if ledger is not None else 0.0),
             non_marginable_buying_power=non_marginable_buying_power,
+            peak_epoch=peak_epoch_read,
         )
         # One assignment publishes snapshot and timestamp together, so a
         # concurrent snapshot_if_fresh never pairs a new snapshot with an old

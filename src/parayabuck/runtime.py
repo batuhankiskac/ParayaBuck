@@ -526,6 +526,8 @@ class EngineRuntime:
             bot_tradable_symbols=self._bot_tradable_symbols,
             runtime_state_dir=runtime_state_dir,
         )
+        # Attached after construction, as the cost-basis provider below.
+        self.broker.portfolio_surplus_cleared = self._clear_portfolio_surplus_alert
         # Cost-basis drift check (alpaca_reconciliation._cost_basis_drift) reads
         # this provider. AlpacaBroker takes no constructor argument for it, so
         # it is attached right after construction.
@@ -1808,6 +1810,17 @@ class EngineRuntime:
         )
         return resolved
 
+    def _clear_portfolio_surplus_alert(self, symbol: str, market: Market) -> None:
+        """Forget the unconfirmed-surplus alert of a symbol whose broker count
+        agrees with the ledger again (F2-1-6). The account loop calls this only
+        when the counts agree, so a self-reconciling symbol re-alerts on its
+        next surplus episode instead of staying silent for the process lifetime."""
+        repository = getattr(self, "_portfolio_repository", None)
+        if repository is None:
+            return
+        with repository.store.lock:
+            repository._resolve_surplus_alerts(self.broker.account_id or "unknown", symbol, market)
+
     def _bot_tradable_symbols(self) -> set[str]:
         """Equity symbols the bot itself may hold: the strategies' hold
         symbols plus managed pins.
@@ -2397,7 +2410,9 @@ class EngineRuntime:
                         worker.last_event_at = now
                         worker.last_error = None
                         self._portfolio_repository.update_high_water(
-                            self.broker.account_id or "unknown", account.equity
+                            self.broker.account_id or "unknown",
+                            account.equity,
+                            epoch=getattr(account, "peak_epoch", None),
                         )
                         self._persist_risk_state(account)
                         self._maybe_retry_rejected_exit_sells(account)
@@ -2553,6 +2568,7 @@ class EngineRuntime:
         first = getattr(self, "_circuit_breaker_reason", None) != "ownership_drift"
         with getattr(self, "_state_lock", threading.RLock()):
             self._circuit_breaker_reason = "ownership_drift"
+            self._note_halt_reason("ownership_drift")
             self._state = "halted"
         try:
             self._persist_safety_state("ownership_drift")
@@ -2722,6 +2738,13 @@ class EngineRuntime:
         if reason not in halts:
             halts.append(reason)
         self._halt_reasons = halts
+        # Every raise bumps the reason's sequence number: a reset compares it
+        # before and after its broker calls, so a re-raise is never lifted (R2-1-2).
+        seq = int(getattr(self, "_halt_seq", 0)) + 1
+        self._halt_seq = seq
+        raised = dict(getattr(self, "_halt_raised_seq", {}))
+        raised[reason] = seq
+        self._halt_raised_seq = raised
 
     def _active_halt_reasons(self) -> tuple[str, ...]:
         """Every halt reason in force, the breaker reason first (R9-3)."""
@@ -4288,6 +4311,7 @@ class EngineRuntime:
                 # with-block, and this path never holds the ingestion lock.
                 with getattr(self, "_state_lock", threading.RLock()):
                     self._circuit_breaker_reason = "ownership_drift"
+                    self._note_halt_reason("ownership_drift")
                     self._state = "halted"
                 _broker = getattr(self, "broker", None)
                 automate_incident_recovery(
@@ -5570,6 +5594,12 @@ class EngineRuntime:
         with getattr(self, "_risk_state_lock", threading.Lock()):
             account_id = self.broker.account_id or "unknown"
             today = datetime.now(UTC).astimezone(NEW_YORK).date()
+            # The epoch of the peak this account carries, not the live epoch: a
+            # snapshot taken before a reset stored under the new epoch would be
+            # restored as the new baseline after a restart (C2-4-5).
+            peak_epoch = getattr(account, "peak_epoch", None)
+            if peak_epoch is None:
+                peak_epoch = getattr(self.broker, "_peak_epoch", 0)
             self._evaluate_entry_risk_latch(account)
             reason = self._circuit_breaker_reason
             # The circuit_breaker_reason in the session row is kept for
@@ -5590,7 +5620,7 @@ class EngineRuntime:
                     fees=self._fee_total_for_snapshot(account, account_id),
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
-                    peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
+                    peak_epoch=int(peak_epoch or 0),
                 )
             )
 
@@ -5761,6 +5791,7 @@ class EngineRuntime:
                 with getattr(self, "_state_lock", threading.RLock()):
                     first = self._circuit_breaker_reason != "ownership_drift"
                     self._circuit_breaker_reason = "ownership_drift"
+                    self._note_halt_reason("ownership_drift")
                     self._state = "halted"
                 self._reconcile_failed = True
                 try:
@@ -6005,7 +6036,8 @@ class EngineRuntime:
         starts from the same epoch. A reset whose epoch is already active
         returns the active baseline without re-baselining.
 
-        Returns the new baseline equity.
+        Returns the new baseline equity. The epoch and outcome of the last
+        call are kept in ``_last_risk_epoch_reset`` for the API response.
         """
         if not self._running:
             raise ValueError("The engine is not running; start it before resetting the risk epoch")
@@ -6035,8 +6067,18 @@ class EngineRuntime:
                     f"Cannot reset the risk epoch while reconciliation reports drift: {report.drift_categories}"
                 )
             self._last_reconciliation_at = datetime.now(UTC)
-            self._clear_reconciliation_incidents()
+            with getattr(self, "_risk_state_lock", threading.Lock()):
+                self._clear_reconciliation_incidents()
         account = self.broker.account()  # fresh authoritative snapshot
+        # A halt raised while the reconcile and the account read ran (a trade-update
+        # failure, a worker crash) must stop the rebase: the operator verified the
+        # drawdown, not that (R2-1-5).
+        with getattr(self, "_state_lock", threading.RLock()):
+            if self._circuit_breaker_reason is not None:
+                raise ValueError(
+                    "Cannot reset the risk epoch while a circuit breaker is active "
+                    f"({self._circuit_breaker_reason}); resolve that incident first"
+                )
         # The epoch this snapshot was taken against: when a concurrent reset
         # already moved past it, this reset is a no-op (see reset_peak_equity).
         expected_epoch = peak_service.peak_epoch if peak_service is not None else None
@@ -6052,8 +6094,9 @@ class EngineRuntime:
         # Commit order: the peak sidecar first, then the incident clear, then the
         # DB high-water. A failure after the sidecar commit restores the peak
         # (memory and sidecar), so the halt stays latched and a retry starts from
-        # the same epoch. The peak lock keeps the account loop from re-raising the
-        # peak against the old baseline while this is in progress.
+        # the same epoch. account() reads its equity and epoch under the peak lock
+        # and discards a snapshot whose epoch moved, so a pre-reset equity cannot
+        # re-raise the new baseline (C2-4-1).
         # Without a peak service the broker's own reset takes its peak lock, so
         # it must not be called under that (non-reentrant) lock here.
         peak_lock = (getattr(self.broker, "_peak_lock", None) if peak_service is not None else None) or threading.Lock()
@@ -6069,12 +6112,22 @@ class EngineRuntime:
                     peak_service.peak_reconciled,
                 )
                 if not peak_service.reset_peak_equity(new_baseline, expected_epoch=expected_epoch):
-                    log.info("Risk epoch already active; the operator reset is a no-op")
+                    log.info(
+                        "Risk epoch already active (epoch %s); the operator reset is a no-op",
+                        peak_service.peak_epoch,
+                    )
+                    self._last_risk_epoch_reset: dict[str, object] = {
+                        "epoch": int(peak_service.peak_epoch),
+                        "baseline_equity": float(peak_service.peak_equity),
+                        "changed": False,
+                    }
                     return float(peak_service.peak_equity)
+            new_epoch = int(peak_service.peak_epoch) if peak_service is not None else None
             try:
                 self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
                 if repository is not None:
-                    repository.reset_high_water(account_id, new_baseline)
+                    # The sidecar's epoch names the baseline in both stores (R2-6-3).
+                    repository.reset_high_water(account_id, new_baseline, epoch=new_epoch)
             except Exception:
                 # Roll back: the peak returns to its pre-reset epoch and the
                 # drawdown halt the operator still sees stays on record.
@@ -6082,6 +6135,11 @@ class EngineRuntime:
                     peak_service.restore_peak_state(prior)
                 if self._entry_risk_latch.get(Market.EQUITY) == "portfolio_drawdown_halt":
                     self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
+                log.error(
+                    "Risk epoch reset rolled back to epoch %s after a failed commit",
+                    prior[1] if prior is not None else None,
+                    exc_info=True,
+                )
                 raise
         # The epoch is committed. A failed post-reset persist is retried by the
         # next account pass; raising here would invite a retry that re-baselines.
@@ -6094,7 +6152,8 @@ class EngineRuntime:
         except Exception:
             log.error("New risk epoch committed but the post-reset risk state was not persisted", exc_info=True)
         log.warning(
-            "New risk epoch started: drawdown baseline rebased to %.2f (account=%s); pre-reset peak %.2f, drawdown %.2f%%",
+            "New risk epoch %s started: drawdown baseline rebased to %.2f (account=%s); pre-reset peak %.2f, drawdown %.2f%%",
+            new_epoch,
             new_baseline,
             account_id,
             pre_peak,
@@ -6108,7 +6167,9 @@ class EngineRuntime:
             account_id=account_id,
             previous_peak_equity=pre_peak,
             previous_drawdown_pct=pre_drawdown,
+            epoch=new_epoch,
         )
+        self._last_risk_epoch_reset = {"epoch": new_epoch, "baseline_equity": new_baseline, "changed": True}
         return new_baseline
 
     def reset_safety_lock(self) -> None:
@@ -6142,7 +6203,11 @@ class EngineRuntime:
             # Q-8: resettable only once the operator marker is gone (checked below).
             _OPERATOR_HALT_REASON,
         }
-        reason = self._circuit_breaker_reason
+        with getattr(self, "_state_lock", threading.RLock()):
+            reason = self._circuit_breaker_reason
+            # Raise counters as they are now: a halt of the same reason raised
+            # while the broker calls below run must stay in force (R2-1-2).
+            raised_before = dict(getattr(self, "_halt_raised_seq", {}))
         if reason not in recoverable:
             raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
         if reason == _OPERATOR_HALT_REASON and self._operator_halt_marker_active():
@@ -6170,80 +6235,113 @@ class EngineRuntime:
                 "All symbol data must be ready before resetting the safety lock (not ready: "
                 f"{','.join(sorted(self._not_ready_symbols))})"
             )
-        with self._reconcile_lock:
-            try:
-                report = ReconciliationReport.from_result(self.broker.reconcile())
-            except Exception as exc:
-                self._reconcile_failed = True
-                self._persist_reconciliation_incident("reconciliation_failed")
-                raise ValueError(f"Safety lock remains active until reconciliation succeeds: {exc}") from exc
-            if report.has_drift:
-                self._reconcile_failed = True
-                self._persist_reconciliation_incident("reconciliation_failed")
-                raise ValueError(
-                    f"Safety lock remains active while reconciliation reports drift: {report.drift_categories}"
+        released = False
+        try:
+            with self._reconcile_lock:
+                try:
+                    report = ReconciliationReport.from_result(self.broker.reconcile())
+                except Exception as exc:
+                    self._reconcile_failed = True
+                    self._persist_reconciliation_incident("reconciliation_failed")
+                    raise ValueError(f"Safety lock remains active until reconciliation succeeds: {exc}") from exc
+                if report.has_drift:
+                    self._reconcile_failed = True
+                    self._persist_reconciliation_incident("reconciliation_failed")
+                    raise ValueError(
+                        f"Safety lock remains active while reconciliation reports drift: {report.drift_categories}"
+                    )
+                self._last_reconciliation_at = datetime.now(UTC)
+                self._last_clean_reconciliation_at = self._last_reconciliation_at
+                account_id = self.broker.account_id or "unknown"
+                entries = self.ledger.managed_entries_for_account(account_id)
+                if any(item.status == "manual_intervention_required" for item in entries):
+                    raise ValueError("A managed position still requires manual intervention")
+                account = self.broker.account()
+                self._publish_account_snapshot(account)
+                # The breaker and its incident rows clear together under the risk
+                # state lock: the account loop's _persist_risk_state re-saves
+                # whatever halts it read under that lock, so clearing outside it
+                # could resurrect a row the operator just cleared. Clearing waits
+                # for the manual-intervention check and the account fetch above
+                # (R9-6): a refused reset must leave the incidents in place.
+                with getattr(self, "_risk_state_lock", threading.Lock()):
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        # Re-checked under the state lock, before anything is
+                        # cleared: the marker may have appeared, and the same reason
+                        # may have been raised again, during the broker calls above.
+                        if reason == _OPERATOR_HALT_REASON and self._operator_halt_marker_active():
+                            raise ValueError(
+                                "Operator halt marker is still present; run `parayabuck resume` before resetting"
+                            )
+                        if getattr(self, "_halt_raised_seq", {}).get(reason) != raised_before.get(reason):
+                            raise ValueError(
+                                f"Safety lock remains active: {reason} was raised again during the reset; "
+                                "reset again once it is verified"
+                            )
+                        # Only the reset's own reason, and the rearmed reasons that are
+                        # not in force in this process, are released. A rearmed reason
+                        # still in force keeps its halt (R2-1-1).
+                        live_reasons = set(getattr(self, "_halt_reasons", ()))
+                        leftover_rearmed = sorted(_RESTART_REARMED_REASONS - live_reasons)
+                    self._clear_reconciliation_incidents()
+                    with getattr(self, "_state_lock", threading.RLock()):
+                        # Lift only the reason being reset (and the leftover rearmed
+                        # set): a halt another thread raised during the broker calls
+                        # above stays in force, and so does every other active reason
+                        # (R9-3).
+                        self._release_halt_reason(reason)
+                        for cleared in leftover_rearmed:
+                            self._release_halt_reason(cleared)
+                    released = True
+                    # The operator verified THIS halt's recovery condition above;
+                    # clear exactly its incident, never unrelated incidents (those
+                    # need their own per-halt verification). A leftover rearmed row
+                    # from an earlier worker state has no verification left to
+                    # perform, and clearing it here keeps a reset from leaving a row
+                    # that would halt the next start behind the operator's back.
+                    for cleared in sorted({reason, *leftover_rearmed}):
+                        self.ledger.clear_safety_incident(account_id, cleared)
+                market_halts = getattr(self, "_market_entry_halts", None)
+                if market_halts is not None:
+                    self._verify_market_halts(market_halts)
+                with getattr(self, "_risk_state_lock", threading.Lock()):
+                    self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
+                self._persist_risk_state(account)
+            # A halt withholds the risk-increasing BUY phase of a two-phase
+            # rebalance (F12). The reset is the operator-verified recovery point,
+            # so resume the persisted rebalances here — exactly what the startup
+            # resume does, against the same fresh, reconciled snapshot.
+            self._resume_startup_rebalances(account=account)
+            # R9-9: a decision loop that exited is restarted now that the reset
+            # has verified the broker; without it the cleared breaker would report
+            # "running" over a dead decision worker.
+            self._respawn_decision_worker()
+        except Exception as exc:
+            if not released:
+                raise
+            # The halt was released but the reset did not finish. Halt again with
+            # a reason the operator can reset, so the state never stays "halted"
+            # with no breaker that no reset can clear (R2-1-3).
+            self._raise_halt("portfolio_runtime_failure")
+            log.exception("Safety lock reset failed after the release; runtime halted")
+            raise ValueError(f"Safety lock reset failed after the release; runtime halted: {exc}") from exc
+        finally:
+            with getattr(self, "_state_lock", threading.RLock()):
+                # A halt raised by another thread since the breaker was cleared
+                # above set a new reason: keep that halt. A trade-update blip while
+                # a non-halting breaker (protection_failure) was set left the
+                # runtime "degraded"; the blip restore never passes a breaker, so
+                # un-pin it here too, while the trade-update worker is alive.
+                # Re-derived here as well, so a reset that raised after the
+                # release cannot leave "halted" with no breaker (R2-1-3).
+                trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
+                state = getattr(self, "_state", None)
+                restorable = state == "halted" or (
+                    state == "degraded" and trade_updates is not None and trade_updates.alive
                 )
-            self._last_reconciliation_at = datetime.now(UTC)
-            self._last_clean_reconciliation_at = self._last_reconciliation_at
-            account_id = self.broker.account_id or "unknown"
-            entries = self.ledger.managed_entries_for_account(account_id)
-            if any(item.status == "manual_intervention_required" for item in entries):
-                raise ValueError("A managed position still requires manual intervention")
-            account = self.broker.account()
-            self._publish_account_snapshot(account)
-            # The breaker and its incident rows clear together under the risk
-            # state lock: the account loop's _persist_risk_state re-saves
-            # whatever halts it read under that lock, so clearing outside it
-            # could resurrect a row the operator just cleared. Clearing waits
-            # for the manual-intervention check and the account fetch above
-            # (R9-6): a refused reset must leave the incidents in place.
-            with getattr(self, "_risk_state_lock", threading.Lock()):
-                self._clear_reconciliation_incidents()
-                with getattr(self, "_state_lock", threading.RLock()):
-                    # Lift only the reason being reset (and the rearmed set below):
-                    # a halt another thread raised during the broker calls above
-                    # stays in force, and so does every other active reason (R9-3).
-                    self._release_halt_reason(reason)
-                # The operator verified THIS halt's recovery condition above;
-                # clear exactly its incident, never unrelated incidents (those
-                # need their own per-halt verification). The one exception is
-                # ``_RESTART_REARMED_REASONS``: a leftover row from an earlier
-                # worker state has no verification left to perform, and
-                # clearing it here keeps a reset from leaving a row that would
-                # halt the next start behind the operator's back.
-                with getattr(self, "_state_lock", threading.RLock()):
-                    for cleared in sorted(_RESTART_REARMED_REASONS):
-                        self._release_halt_reason(cleared)
-                for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
-                    self.ledger.clear_safety_incident(account_id, cleared)
-            market_halts = getattr(self, "_market_entry_halts", None)
-            if market_halts is not None:
-                self._verify_market_halts(market_halts)
-            with getattr(self, "_risk_state_lock", threading.Lock()):
-                self._entry_risk_latch = dict.fromkeys(getattr(self, "_entry_risk_latch", {}))
-            self._persist_risk_state(account)
-        # A halt withholds the risk-increasing BUY phase of a two-phase
-        # rebalance (F12). The reset is the operator-verified recovery point,
-        # so resume the persisted rebalances here — exactly what the startup
-        # resume does, against the same fresh, reconciled snapshot.
-        self._resume_startup_rebalances(account=account)
-        # R9-9: a decision loop that exited is restarted now that the reset
-        # has verified the broker; without it the cleared breaker would report
-        # "running" over a dead decision worker.
-        self._respawn_decision_worker()
-        with getattr(self, "_state_lock", threading.RLock()):
-            # A halt raised by another thread since the breaker was cleared
-            # above set a new reason: keep that halt. A trade-update blip while
-            # a non-halting breaker (protection_failure) was set left the
-            # runtime "degraded"; the blip restore never passes a breaker, so
-            # un-pin it here too, while the trade-update worker is alive.
-            trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
-            restorable = self._state == "halted" or (
-                self._state == "degraded" and trade_updates is not None and trade_updates.alive
-            )
-            if self._running and restorable and self._circuit_breaker_reason is None:
-                self._state = "running"
-            retained = self._active_halt_reasons()
+                if getattr(self, "_running", False) and restorable and self._circuit_breaker_reason is None:
+                    self._state = "running"
+                retained = self._active_halt_reasons()
         if retained:
             log.warning("Operator reset safety lock: halts still in force: %s", ", ".join(retained))
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)

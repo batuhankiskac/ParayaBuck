@@ -1586,12 +1586,15 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
-        persisted_high_water = self.repository.high_water(self.account_id)
+        # The snapshot's risk epoch fences a pre-reset equity out of the
+        # rebased high-water (C2-4-2).
+        epoch = getattr(account, "peak_epoch", None)
+        persisted_high_water = self.repository.high_water(self.account_id, epoch=epoch)
         account = replace(
             account,
             peak_equity=max(account.peak_equity, persisted_high_water, account.equity),
         )
-        self.repository.update_high_water(self.account_id, account.equity)
+        self.repository.update_high_water(self.account_id, account.equity, epoch=epoch)
         context = self.decision_service.build_context(
             self.strategy,
             ready_history,

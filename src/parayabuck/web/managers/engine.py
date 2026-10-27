@@ -1331,7 +1331,13 @@ class EngineManager:
             if runtime is None:
                 raise ValueError("Motor çalışmıyor; yeni risk dönemi için önce motoru başlatın.")
             baseline = runtime.start_new_risk_epoch()
-        return {"baseline_equity": baseline}
+            # Read under the same ops lock: the epoch and outcome of this call (R2-6-2).
+            outcome = dict(getattr(runtime, "_last_risk_epoch_reset", None) or {})
+        return {
+            "baseline_equity": baseline,
+            "epoch": outcome.get("epoch"),
+            "changed": outcome.get("changed"),
+        }
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:

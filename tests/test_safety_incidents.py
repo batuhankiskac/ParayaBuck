@@ -651,7 +651,7 @@ class _EpochRepository:
     def __init__(self) -> None:
         self.resets: list[tuple[str, float]] = []
 
-    def reset_high_water(self, account_id: str, equity: float) -> None:
+    def reset_high_water(self, account_id: str, equity: float, *, epoch: int | None = None) -> None:
         self.resets.append((account_id, equity))
 
 

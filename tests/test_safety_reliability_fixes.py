@@ -24,6 +24,13 @@ _CLEAN_RECONCILIATION = {category: [] for category in RECONCILIATION_CATEGORIES}
 _TEST_APPROVAL_SECRET = "t" * 32
 
 
+@pytest.fixture(autouse=True)
+def _fixed_config_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The runtime fingerprints its real Config (R2-8-1); these fixtures carry a
+    # partial config only, so the fingerprint is pinned to a constant here.
+    monkeypatch.setattr(runtime_module, "config_fingerprint", lambda _config: "fp-test")
+
+
 class _BrokerSpy:
     account_id = "acct"
     # A LIVE account number (paper accounts are "PA..."): B3 environment check.
@@ -71,6 +78,7 @@ def _approval_file(path: Path, *, account_id: str = "acct", digests: tuple[str, 
         approved_at=datetime.now(UTC) - timedelta(seconds=1),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         nonce="test-nonce",
+        config_fingerprint="fp-test",
     ).signed(_TEST_APPROVAL_SECRET)
     path.write_text(json.dumps(approval.to_dict()), encoding="utf-8")
 
@@ -82,10 +90,11 @@ def _live_runtime(proof: LiveStartupProof | None, approval_path: Path, broker: _
     runtime.broker = broker
     runtime._live_startup_proof = proof
     runtime.app_config = SimpleNamespace(
+        signal_cross_check=SimpleNamespace(enabled=True),
         live=SimpleNamespace(
             operator_approval_key_env="PB_TEST_OPERATOR_KEY",
             operator_approval_path=str(approval_path),
-        )
+        ),
     )
     return runtime
 

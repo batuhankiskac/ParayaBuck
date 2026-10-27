@@ -56,6 +56,7 @@ from parayabuck.live_safety import (
     LiveOperatorApproval,
     LiveStartupProof,
     StandingLiveAuthorization,
+    config_fingerprint,
     operator_halt_active,
     operator_halt_marker_path,
     verify_account_environment,
@@ -713,6 +714,11 @@ class EngineRuntime:
             raise RuntimeError("Live startup proof does not match the configured credentials")
         if proof.configuration_digests != expected_digests:
             raise RuntimeError("Live startup proof does not match the loaded configuration")
+        # LIVE refuses to run without the second-source cross-check: with it off,
+        # no decision is compared against a second source, and an approval given
+        # while it was on must not carry over silently (R2-8-1).
+        if not getattr(getattr(self.app_config, "signal_cross_check", None), "enabled", False):
+            raise RuntimeError("LIVE start refused: signal_cross_check.enabled is false")
         approval: LiveOperatorApproval | StandingLiveAuthorization
         if proof.authorization == "standing":
             # Unattended start (reboot/deploy): the owner's standing LIVE
@@ -732,6 +738,7 @@ class EngineRuntime:
                 secret=secret,
                 account_id=proof.account_id,
                 configuration_digests=expected_digests,
+                config_fingerprint=config_fingerprint(self.app_config),
             )
         self.broker.account()
         account_id = str(getattr(self.broker, "account_id", "") or "")
@@ -1106,6 +1113,8 @@ class EngineRuntime:
             return "engine_not_running"
         if getattr(self, "_circuit_breaker_reason", None) is not None:
             return "circuit_breaker"
+        if self._operator_halt_held():
+            return "operator_halt"
         if (
             getattr(order, "side", None) == PortfolioOrderSide.BUY
             and self.trading_state(market) is not TradingState.ACTIVE
@@ -1122,6 +1131,8 @@ class EngineRuntime:
         if not getattr(self, "_running", False) or not getattr(self, "_startup_committed", False):
             return True
         if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
+            return True
+        if self._operator_halt_held():
             return True
         if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
             return True
@@ -2488,7 +2499,8 @@ class EngineRuntime:
         incident whose explicit recovery is a verified risk-epoch reset
         (``start_new_risk_epoch``) — the incident keeps that state visible
         across restarts until the operator acts. The incident clears when the
-        breach recovers (e.g. an external deposit) or the epoch is reset.
+        breach recovers (e.g. an external deposit) in this process, or when the
+        epoch is reset. A restored incident waits for the reset (R2-8-3).
         """
         account_id = self.broker.account_id or "unknown"
         equity = max(1e-9, account.equity)
@@ -2497,15 +2509,19 @@ class EngineRuntime:
         day_start_equity = max(1e-9, account.equity - account.daily_pnl)
         daily_loss = max(0.0, -account.daily_pnl / day_start_equity)
         drawdown_breached = account.drawdown_pct >= self.app_config.risk.max_drawdown_pct
+        # A drawdown incident restored from a previous process is held until an
+        # operator starts a new risk epoch: a limit raised before the restart
+        # must not clear it without that reset (R2-8-3).
+        drawdown_held = drawdown_breached or bool(getattr(self, "_drawdown_halt_restored", False))
         # Drawdown is evaluated first and on its own: a concurrent daily-loss
         # breach must never clear (and the next poll re-save) the persisted
         # drawdown incident while the drawdown is still past its limit.
-        if drawdown_breached:
+        if drawdown_held:
             self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
         else:
             self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
         breach: str | None = None
-        if drawdown_breached:
+        if drawdown_held:
             breach = "portfolio_drawdown_halt"
         elif daily_loss >= self.app_config.risk.daily_loss_limit_pct:
             breach = "daily_loss_limit"
@@ -2746,21 +2762,46 @@ class EngineRuntime:
             self._circuit_breaker_reason = ordered[0] if ordered else None
 
     def _save_halt_incident_best_effort(self, reason: str) -> None:
-        """Write one halt row now. A failure is logged, never raised: the halt
-        is already in force in memory, and the next successful account pass
-        re-saves every active reason."""
+        """Write one halt row now. A failure is retried once, then logged and
+        alerted, never raised: the halt is already in force in memory, and the
+        next successful account pass re-saves every active reason (R2-9-5).
+
+        A reset may release and clear this reason between the in-memory raise
+        and the write. The row is then removed again under the state lock, so a
+        released incident is not resurrected (R2-9-10).
+        """
         account_id = getattr(getattr(self, "broker", None), "account_id", None) or "unknown"
-        save = getattr(getattr(self, "ledger", None), "save_safety_incident", None)
+        ledger = getattr(self, "ledger", None)
+        save = getattr(ledger, "save_safety_incident", None)
         if not callable(save):
             return
-        try:
-            save(account_id, reason)
-        except Exception:
-            log.critical(
-                "Halt %s could not be persisted when raised; it stays in memory until a later save succeeds",
-                reason,
-                exc_info=True,
+        saved = False
+        for attempt in (1, 2):
+            try:
+                save(account_id, reason)
+                saved = True
+                break
+            except Exception:
+                if attempt == 2:
+                    log.critical(
+                        "Halt %s could not be persisted when raised; it stays in memory until a later save succeeds",
+                        reason,
+                        exc_info=True,
+                    )
+        if not saved:
+            alerts.emit(
+                "circuit_breaker",
+                message=f"Halt {reason} could not be written to the incident table; a restart would drop it",
+                reason="halt_persist_failed",
+                halt_reason=reason,
             )
+            return
+        with getattr(self, "_state_lock", threading.RLock()):
+            if reason in self._active_halt_reasons():
+                return
+            clear = getattr(ledger, "clear_safety_incident", None)
+            if callable(clear):
+                clear(account_id, reason)
 
     def _operator_halt_marker_active(self) -> bool:
         """True while the operator halt marker of this runtime's data dir exists."""
@@ -2770,6 +2811,19 @@ class EngineRuntime:
         if not decision_db_path:
             return False
         return operator_halt_active(operator_halt_marker_path(Path(decision_db_path).parent))
+
+    def _operator_halt_held(self) -> bool:
+        """Marker check for the order gates (R2-9-4).
+
+        The decision loop polls the marker only every ``_OPERATOR_HALT_CHECK_SECONDS``,
+        so the per-order gates read it directly. Fails closed: a marker that
+        cannot be checked holds the order.
+        """
+        try:
+            return self._operator_halt_marker_active()
+        except Exception:
+            log.warning("Operator halt marker could not be checked; holding the order", exc_info=True)
+            return True
 
     def _maybe_check_operator_halt(self) -> None:
         """Halt a RUNNING engine when the operator halt marker appears (Q-8).
@@ -2935,12 +2989,13 @@ class EngineRuntime:
         self._halt_reasons = list(dict.fromkeys(restorable))
         if preferred or restorable:
             self._circuit_breaker_reason = (preferred or restorable)[0]
-        if any(incident.reason == "portfolio_drawdown_halt" for incident in incidents):
+        self._drawdown_halt_restored = any(incident.reason == "portfolio_drawdown_halt" for incident in incidents)
+        if self._drawdown_halt_restored:
             # A drawdown breach is an operational incident with an explicit
             # recovery (verified risk-epoch reset). Restore the entry latch
             # from the persisted incident so the halt is visible immediately
-            # after restart; the first account poll re-evaluates it against
-            # the broker state (a recovered breach clears it).
+            # after restart. The account polls keep it latched until the
+            # operator starts a new risk epoch (R2-8-3).
             self._entry_risk_latch = dict.fromkeys(self._entry_risk_latch, "portfolio_drawdown_halt")
             runtime_metrics_store.record_event("drawdown_halt")
             alerts.emit(
@@ -6071,13 +6126,16 @@ class EngineRuntime:
                 if not peak_service.reset_peak_equity(new_baseline, expected_epoch=expected_epoch):
                     log.info("Risk epoch already active; the operator reset is a no-op")
                     return float(peak_service.peak_equity)
+            restored_before = bool(getattr(self, "_drawdown_halt_restored", False))
             try:
+                self._drawdown_halt_restored = False
                 self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
                 if repository is not None:
                     repository.reset_high_water(account_id, new_baseline)
             except Exception:
                 # Roll back: the peak returns to its pre-reset epoch and the
                 # drawdown halt the operator still sees stays on record.
+                self._drawdown_halt_restored = restored_before
                 if prior is not None and peak_service is not None:
                     peak_service.restore_peak_state(prior)
                 if self._entry_risk_latch.get(Market.EQUITY) == "portfolio_drawdown_halt":

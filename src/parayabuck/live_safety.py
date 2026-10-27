@@ -157,8 +157,19 @@ def operator_halt_marker_path(runtime_dir: str | os.PathLike[str]) -> Path:
 
 
 def operator_halt_active(marker: str | os.PathLike[str]) -> bool:
-    """True while the halt marker exists (a broken symlink counts too)."""
-    return os.path.lexists(os.fspath(marker))
+    """True while the halt marker exists (a broken symlink counts too).
+
+    Fails closed: only a definite ENOENT means "no marker". Any other lstat
+    error (EACCES on the parent, a stale mount) counts as a halt.
+    ``os.path.lexists`` would return False there, which breaks the rule (R2-9-3).
+    """
+    try:
+        os.lstat(os.fspath(marker))
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def read_operator_halt(marker: str | os.PathLike[str]) -> dict[str, Any] | None:
@@ -168,7 +179,7 @@ def read_operator_halt(marker: str | os.PathLike[str]) -> dict[str, Any] | None:
     ``unreadable`` reason instead of being ignored.
     """
     path = Path(marker)
-    if not os.path.lexists(os.fspath(path)):
+    if not operator_halt_active(path):
         return None
     unreadable = {"reason": "unreadable halt marker", "created_at": None, "user": None}
     try:
@@ -204,10 +215,16 @@ def write_operator_halt(marker: str | os.PathLike[str], *, reason: str, user: st
 
 
 def clear_operator_halt(marker: str | os.PathLike[str]) -> bool:
-    """Remove the halt marker. Returns False when there was none to remove."""
+    """Remove the halt marker. Returns False when there was none to remove.
+
+    A marker that is a directory is not removed by this call: it raises
+    ``IsADirectoryError`` with the remedy, so the halt stays in force (R2-9-7).
+    """
     path = Path(marker)
-    if not os.path.lexists(os.fspath(path)):
+    if not operator_halt_active(path):
         return False
+    if path.is_dir() and not path.is_symlink():
+        raise IsADirectoryError(f"{path} is a directory, not a halt marker; remove it by hand (rmdir) and retry")
     path.unlink()
     return True
 
@@ -262,6 +279,10 @@ class LiveOperatorApproval:
     approved_at: datetime
     expires_at: datetime
     nonce: str
+    # config_fingerprint(config) of the loaded settings at approval time. Signed,
+    # so an edit to any trading-relevant section (cross-check, live gap margin,
+    # cash-flow risk, stale-account mode, ...) voids the approval on restart (R2-8-1).
+    config_fingerprint: str = ""
     signature: str = ""
 
     def __post_init__(self) -> None:
@@ -285,6 +306,7 @@ class LiveOperatorApproval:
             "approved_at": self.approved_at.astimezone(UTC).isoformat(),
             "expires_at": self.expires_at.astimezone(UTC).isoformat(),
             "nonce": self.nonce,
+            "config_fingerprint": self.config_fingerprint,
         }
 
     def calculated_signature(self, secret: str) -> str:
@@ -304,6 +326,7 @@ class LiveOperatorApproval:
         secret: str,
         account_id: str,
         configuration_digests: tuple[str, ...],
+        config_fingerprint: str,
         now: datetime | None = None,
     ) -> LiveOperatorApproval:
         try:
@@ -318,6 +341,7 @@ class LiveOperatorApproval:
                 approved_at=datetime.fromisoformat(str(raw.get("approved_at", ""))),
                 expires_at=datetime.fromisoformat(str(raw.get("expires_at", ""))),
                 nonce=str(raw.get("nonce", "")),
+                config_fingerprint=str(raw.get("config_fingerprint", "")),
                 signature=str(raw.get("signature", "")),
             )
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -332,6 +356,10 @@ class LiveOperatorApproval:
             raise LiveApprovalError("Live operator approval account does not match")
         if set(approval.configuration_digests) != set(configuration_digests):
             raise LiveApprovalError("Live operator approval configuration does not match")
+        # The strategy digests do not cover every setting that changes what LIVE
+        # trades; the whole trading-relevant fingerprint must match too (R2-8-1).
+        if not config_fingerprint or not _signatures_equal(approval.config_fingerprint, config_fingerprint):
+            raise LiveApprovalError("Live operator approval does not match the current settings")
         current = now or datetime.now(UTC)
         if approval.approved_at > current:
             raise LiveApprovalError("Live operator approval is not yet valid")

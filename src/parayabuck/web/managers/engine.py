@@ -445,7 +445,8 @@ class EngineManager:
         return (
             f"Motor başlatılamadı: operatör durdurması etkin (sebep: "
             f"{record.get('reason') or 'belirtilmemiş'}). Kaldırmak için sunucuda "
-            "`parayabuck resume` komutunu çalıştırın."
+            "`parayabuck resume` komutunu çalıştırın. Kalıcı durdurma kaydı kalmışsa, motor "
+            "başlatıldıktan sonra güvenlik kilidini sıfırlayın."
         )
 
     def _operator_stop_marker(self) -> Path:
@@ -1738,6 +1739,7 @@ class EngineManager:
                     approved_at=datetime.fromisoformat(str(parsed.get("approved_at", ""))),
                     expires_at=datetime.fromisoformat(str(parsed.get("expires_at", ""))),
                     nonce=str(parsed.get("nonce", "")),
+                    config_fingerprint=str(parsed.get("config_fingerprint", "")),
                     signature=str(parsed.get("signature", "")),
                 )
                 expected = approval.calculated_signature(hmac_key)

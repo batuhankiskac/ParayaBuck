@@ -176,6 +176,16 @@ class IncidentRecord:
     error: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def episode_key(self) -> str:
+        """Stable identity of the incident episode, for alert throttling.
+
+        ``incident_id`` is a fresh uuid per record, so keying a throttle on it
+        never coalesces a repeat. The episode is the category on one account,
+        strategy and market: its repeats share one key.
+        """
+        return ":".join(str(part or "") for part in (self.category.value, self.account_id, self.strategy, self.market))
+
 
 def create_incident(
     category: IncidentCategory,

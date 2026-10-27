@@ -456,6 +456,12 @@ sudo journalctl -u parayabuck -g 'ALERT ' --since today
 
 `ops status` prints the engine's emitted/throttled counters (from
 `health_snapshot.json`); a throttled repeat is logged at INFO with its count.
+When e-mail is enabled, the same snapshot holds its counters under `alerts.email`:
+`sent`, `failed`, `dropped`, `queued` and `last_success_age_seconds` (null until
+the first successful send). A mail that failed for good is in
+`parayabuck ops events --kind alert_delivery_failed`, never in your inbox, and it
+is not sent again. A CRITICAL `paper_incident` (for example `DATABASE_ERROR`)
+logs at ERROR.
 A configuration that still carries `alerting.webhook_url`, `alerting.enabled`
 or `alerting.events` fails to load (doctor/`ExecStartPre` refuses the start)
 with a message naming the keys: delete them.
@@ -530,13 +536,13 @@ which shows the account and the error text.
 | `POSITION_DRIFT` | `ops bundle` against the Alpaca positions | Halt. Follow "Ownership drift after a split or a foreign sell", then a verified reset. |
 | `ORDER_DRIFT` | open orders at Alpaca against `ops timeline` | Reconciliation retries on its own. If halted, settle the unknown order by hand, then a verified reset. |
 | `PENDING_ORDER_UNKNOWN` | `ops timeline --order <client_order_id>` | Wait for broker finality; the next reconcile settles it. Never resubmit. |
-| `SIGNAL_HISTORY_UNVERIFIED` | `ops status` (Adjustment) and provider coverage | Equity entries and exits are held until the hourly check verifies the history. If it persists, check the digest and the universe. |
-| `DATABASE_ERROR` | disk space, file permissions, `parayabuck backup --verify-only` on the newest backup | Fix the disk or the permissions. Restore only as in "State, backup and restore". |
-| `STATE_RESTORE_FAILED` | `safety_incidents` and the log | Restore the database from a verified backup before any reset. |
-| `DUPLICATE_DECISION` | `portfolio_decisions` count for the period | Informational: the duplicate was skipped. Act only if the count is wrong. |
-| `DUPLICATE_ORDER_RISK` | `ops timeline --order` for the repeated client id | Halt. Verify the order at the broker first; never resubmit. |
-| `CLOCK_OR_SESSION_MISMATCH` | host time against NTP, the log | Sync the clock. Restart the engine if the bars have gaps. |
-| `RESTART_RECOVERY_FAILED` | `safety_incidents` and `runtime_sessions` | Clear each listed reason by its own verified recovery, then reset. |
+| `DATABASE_ERROR` | disk space, file permissions, `parayabuck backup --verify-only` on the newest backup | Fix the disk or the permissions. Restore only as in "State, backup and restore". A critical one is logged at ERROR and e-mailed. |
+
+Six categories in the taxonomy have **no emitter in this build** and never appear in an
+alert: `SIGNAL_HISTORY_UNVERIFIED`, `STATE_RESTORE_FAILED`, `DUPLICATE_DECISION`,
+`DUPLICATE_ORDER_RISK`, `CLOCK_OR_SESSION_MISMATCH` and `RESTART_RECOVERY_FAILED`. Their
+rows in `docs/paper_incident_taxonomy.md` describe the intended behaviour. Do not wait
+for one of them in the journal: read the halt reason in `ops status` and the log instead.
 
 ## Other alerted reasons
 

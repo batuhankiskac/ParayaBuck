@@ -34,7 +34,8 @@ log = logging.getLogger("parayabuck.monitoring.alerts")
 _DEFAULT_THROTTLE_SECONDS = 60.0
 _THROTTLE_KEYS_MAX = 4096
 # Alerts that end or start a reconciliation episode: observe re-journals the next clean run after them.
-_RECONCILIATION_ALERT_KINDS = frozenset({"reconciliation_failure", "reconciliation_recovered", "broker_local_drift"})
+_RECONCILIATION_ALERT_KINDS = frozenset({"reconciliation_failure", "reconciliation_recovered"})
+_DELIVERY_FAILED_KIND = "alert_delivery_failed"
 
 _lock = threading.Lock()
 _throttle_seconds = _DEFAULT_THROTTLE_SECONDS
@@ -47,12 +48,24 @@ _delivered_counts: dict[str, int] = {}
 def _throttle_key(kind: str, fields: dict[str, object]) -> str:
     """Throttle per distinct actionable incident, not merely per kind.
 
-    For paper_incident — per (category, incident_id) or message hash.
+    An explicit ``episode_key`` field names the incident episode and wins over
+    every other dimension: callers pass a STABLE identity (category, account,
+    check name), never a per-record uuid, so repeats of one episode coalesce
+    and distinct episodes stay apart.
+    For paper_incident without an episode — per (category, incident_id) or message hash.
+    For alert_delivery_failed — per (failed alert kind, reason).
     For other kinds — up to two correlation dimensions (market/order/decision)
     plus ``reason`` and ``state``, so a different failure reason or a state
     transition of the same kind is never swallowed by an earlier one.
     """
-    if kind == "paper_incident":
+    if kind == _DELIVERY_FAILED_KIND:
+        alert_kind = str(fields.get("alert_kind", "") or "").strip()
+        reason = str(fields.get("reason", "") or "").strip()
+        return f"{kind}:{alert_kind}:reason={reason}"
+    episode = str(fields.get("episode_key", "") or "").strip()
+    if episode:
+        parts: list[str] = [kind, f"episode={episode}"]
+    elif kind == "paper_incident":
         category = str(fields.get("category", "") or "").strip()
         incident_id = str(fields.get("incident_id", "") or "").strip()
         if incident_id:
@@ -60,14 +73,15 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
         msg = str(fields.get("message", "") or fields.get("detail", "") or "")
         digest = hashlib.sha256(msg.encode("utf-8")).hexdigest()[:16] if msg else "empty"
         return f"{kind}:{category}:{digest}"
-    parts: list[str] = [kind]
-    for key in ("market", "decision_id", "client_order_id", "incident_id", "category", "symbol"):
-        val = str(fields.get(key, "") or "").strip()
-        if val:
-            parts.append(val)
-            # limit to the first 2 dimensions to avoid key explosion
-            if len(parts) >= 3:
-                break
+    else:
+        parts = [kind]
+        for key in ("market", "decision_id", "client_order_id", "incident_id", "category", "symbol"):
+            val = str(fields.get(key, "") or "").strip()
+            if val:
+                parts.append(val)
+                # limit to the first 2 dimensions to avoid key explosion
+                if len(parts) >= 3:
+                    break
     for key in ("reason", "state"):
         val = str(fields.get(key, "") or "").strip()
         if val:
@@ -75,16 +89,20 @@ def _throttle_key(kind: str, fields: dict[str, object]) -> str:
     return ":".join(parts)
 
 
-def _severity(kind: str) -> int:
+def _severity(kind: str, fields: dict[str, object] | None = None) -> int:
+    # A CRITICAL incident (its ``severity`` field) logs at ERROR whatever its kind.
+    if fields is not None and str(fields.get("severity", "") or "").strip().lower() == "critical":
+        return logging.ERROR
     return logging.WARNING if kind in _WARNING_KINDS else logging.INFO
 
 
 def emit(kind: str, *, message: str, **fields: object) -> None:
     """Emit one alert event to the log and the event journal. Never raises.
 
-    Per-key throttling coalesces repeats within the throttle window; for
-    ``paper_incident`` the key is (kind, category, incident_id) so two
-    distinct incidents are both recorded.
+    Per-key throttling coalesces repeats within the throttle window. The key is
+    (kind, ``episode_key``) when the caller passes one; ``paper_incident`` without
+    an episode keys on (kind, category, incident_id) so two distinct incidents
+    are both recorded.
     """
     global _suppressed_count
     try:
@@ -124,7 +142,7 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
             _delivered_counts[kind] = _delivered_counts.get(kind, 0) + 1
         # The journal redacts its copy; the log line must never carry a
         # secret-named field in the clear either
-        log.log(_severity(kind), "ALERT %s: %s fields=%s", kind, message, redact_fields(fields))
+        log.log(_severity(kind, fields), "ALERT %s: %s fields=%s", kind, message, redact_fields(fields))
         # Durable operational journal — best effort, never raises, isolated from trading
         try:
             from parayabuck.monitoring.journal import emit_journal
@@ -157,9 +175,24 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
 
 
 def alert_stats() -> dict[str, object]:
-    """Process-local emission counters (accepted per kind, throttled repeats)."""
+    """Process-local emission counters (accepted per kind, throttled repeats).
+
+    When the e-mail channel is enabled, ``email`` carries its delivery counters
+    (sent, failed, dropped, queued and the age of the last successful send). The
+    engine writes this into its health snapshot, which ``ops status`` and the
+    diagnostic bundle read.
+    """
     with _lock:
-        return {"suppressed": _suppressed_count, "delivered": dict(_delivered_counts)}
+        stats: dict[str, object] = {"suppressed": _suppressed_count, "delivered": dict(_delivered_counts)}
+    try:
+        from parayabuck.monitoring import email_alerts
+
+        sink = email_alerts.current_sink()
+        if sink is not None:
+            stats["email"] = sink.delivery_status()
+    except Exception:  # pragma: no cover - counters must never break a snapshot
+        log.debug("e-mail delivery counters unavailable", exc_info=True)
+    return stats
 
 
 def reset_for_tests() -> None:

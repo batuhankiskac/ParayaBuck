@@ -119,7 +119,7 @@ def test_routine_kinds_are_still_not_forwarded() -> None:
 # --- Task 1: retry with backoff ---------------------------------------------
 
 
-def test_persistent_failure_is_retried_three_times_then_counted_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_persistent_failure_is_retried_four_times_then_counted_once(monkeypatch: pytest.MonkeyPatch) -> None:
     journaled: list[str] = []
     monkeypatch.setattr(email_alerts, "_record_delivery_failure", lambda kind, reason, error: journaled.append(kind))
     _CountingSMTP.failures_before_success = 99
@@ -127,8 +127,9 @@ def test_persistent_failure_is_retried_three_times_then_counted_once(monkeypatch
     sink = _sink(sleeps)
     assert sink.notify("circuit_breaker", "halted", {}, "circuit_breaker:x") is True
     assert sink.process_one(timeout=0.1) is True
-    assert _CountingSMTP.attempts == 3
-    assert sleeps == [1.0, 4.0]
+    assert _CountingSMTP.attempts == 4
+    # Bounded in-memory retry window: 65 s of waits in total, no outbox.
+    assert sleeps == [5.0, 15.0, 45.0]
     assert sink.stats() == {"sent": 0, "failed": 1, "dropped": 0}
     assert journaled == ["circuit_breaker"]
 
@@ -141,7 +142,7 @@ def test_transient_failure_recovers_on_a_later_attempt(monkeypatch: pytest.Monke
     sink.notify("backup_failed", "m", {}, "backup_failed:x")
     assert sink.process_one(timeout=0.1) is True
     assert _CountingSMTP.attempts == 2
-    assert sleeps == [1.0]
+    assert sleeps == [5.0]
     assert sink.stats() == {"sent": 1, "failed": 0, "dropped": 0}
 
 

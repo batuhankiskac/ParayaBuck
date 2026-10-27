@@ -15,10 +15,19 @@ kinds in ``monitoring.events.EMAIL_ALERT_KINDS`` (plus ``daily_summary`` when
   and one daemon worker talks to the SMTP server with a socket timeout, so a
   slow, failing or unreachable mail server can never block or crash trading.
 - Repeats are coalesced per incident with the alert throttle key (kind +
-  correlation + reason + state) over ``min_interval_minutes``, and at most
-  ``max_per_hour`` mails leave the host per hour.
+  episode or correlation + reason + state) over ``min_interval_minutes``.
+- At most ``max_per_hour`` mails leave the host per hour. Non-critical kinds
+  may use only ``max_per_hour`` minus a reserve (a quarter of the cap), so the
+  critical kinds in ``monitoring.events.CRITICAL_EMAIL_KINDS`` (and any
+  CRITICAL-severity incident) always find room for a halt mail.
+- A failed send is retried in memory, ``_DELIVERY_ATTEMPTS`` times with
+  growing waits (about one minute in total). There is no on-disk outbox: a
+  mail that still fails is journaled and is not sent again, and mails queued
+  when the process stops are lost.
 - Every failed or dropped delivery is recorded in the local event journal as
-  ``alert_delivery_failed`` (never e-mailed itself).
+  ``alert_delivery_failed`` (never e-mailed itself), keyed by the failed kind
+  and the reason. ``delivery_status`` exposes the sent, failed and dropped
+  counters and the age of the last successful send to the engine snapshot.
 
 ``validate_email_setup`` checks the configuration and the credential
 environment without any network access (``parayabuck doctor``);
@@ -44,7 +53,7 @@ from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from typing import Any
 
-from parayabuck.monitoring.events import EMAIL_ALERT_KINDS
+from parayabuck.monitoring.events import CRITICAL_EMAIL_KINDS, EMAIL_ALERT_KINDS
 
 log = logging.getLogger("parayabuck.monitoring.email_alerts")
 
@@ -53,13 +62,16 @@ SMTP_PASSWORD_ENV = "PARAYABUCK_SMTP_PASSWORD"
 
 _QUEUE_CAPACITY = 64
 _FIELD_VALUE_MAX = 400
+_SUBJECT_HEADLINE_MAX = 200
 _THROTTLE_KEYS_MAX = 4096
 _DELIVERY_FAILED_KIND = "alert_delivery_failed"
-# One mail gets three attempts. Each retry waits longer than the last, so a
-# transient SMTP hiccup (timeout, 4xx, dropped connection) clears; a failure
-# that survives the last attempt is counted once and journaled, never raised.
-_DELIVERY_ATTEMPTS = 3
-_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 4.0)
+# One mail gets four attempts. Each retry waits longer than the last, so a
+# transient SMTP outage of a minute or so clears; the waits total 65 s, so one
+# mail holds the single worker for about 65 s plus the socket timeouts at most.
+# A failure that survives the last attempt is counted once and journaled, never
+# raised, and never re-sent (there is no on-disk outbox).
+_DELIVERY_ATTEMPTS = 4
+_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (5.0, 15.0, 45.0)
 
 SmtpFactory = Callable[..., Any]
 
@@ -118,14 +130,24 @@ def _scrub(text: str, secrets_: tuple[str, ...]) -> str:
     return scrubbed
 
 
+def _render_value(value: object) -> str:
+    """Plain text for a field value: lists and dicts as ``a, b`` / ``k=v``, not Python reprs."""
+    if isinstance(value, Mapping):
+        return ", ".join(f"{key}={_render_value(item)}" for key, item in sorted(value.items(), key=lambda p: str(p[0])))
+    if isinstance(value, list | tuple | set | frozenset):
+        return ", ".join(_render_value(item) for item in value)
+    return str(value)
+
+
 def _format_fields(fields: Mapping[str, object]) -> list[str]:
     from parayabuck.monitoring.operational_event import redact_fields
 
     lines: list[str] = []
+    # redact_fields walks nested values too, so the rendering below sees the masked copy.
     for key, value in sorted(redact_fields(dict(fields)).items()):
         if value is None or value == "":
             continue
-        text = str(value)
+        text = _render_value(value)
         if len(text) > _FIELD_VALUE_MAX:
             text = text[:_FIELD_VALUE_MAX] + "..."
         lines.append(f"  {key}: {text}")
@@ -147,8 +169,10 @@ def build_message(
     host = hostname if hostname is not None else socket.gethostname()
     label = f"ParayaBuck {mode.upper()}".strip() if mode else "ParayaBuck"
     headline = " ".join(str(message).split())
-    if len(headline) > 120:
-        headline = headline[:117] + "..."
+    # The body carries the full message; the subject keeps the status summary's
+    # leading part (a 120-character cut lost the daily summary's status fields).
+    if len(headline) > _SUBJECT_HEADLINE_MAX:
+        headline = headline[: _SUBJECT_HEADLINE_MAX - 3] + "..."
     msg = EmailMessage()
     msg["Subject"] = f"[{label}] {kind}: {headline}"
     msg["From"] = settings.from_address
@@ -217,6 +241,18 @@ def send_email_message(
                 pass
 
 
+def _is_critical(kind: str, fields: Mapping[str, object]) -> bool:
+    """A kind the hourly cap must not drop for a non-critical mail (see CRITICAL_EMAIL_KINDS)."""
+    if kind in CRITICAL_EMAIL_KINDS:
+        return True
+    return str(fields.get("severity", "") or "").strip().lower() == "critical"
+
+
+def _critical_reserve(max_per_hour: int) -> int:
+    """Hourly slots only critical mails may use: a quarter of the cap (0 for a cap below four)."""
+    return max(0, max_per_hour // 4)
+
+
 class EmailAlertSink:
     """Bounded queue + one daemon worker; ``notify`` never blocks or raises."""
 
@@ -250,6 +286,8 @@ class EmailAlertSink:
         self.sent = 0
         self.failed = 0
         self.dropped = 0
+        # Clock reading of the last successful send (None until the first one).
+        self._last_success_at: float | None = None
         self._closed = False
         self._worker: threading.Thread | None = None
         if start_worker:
@@ -278,7 +316,12 @@ class EmailAlertSink:
                 return False
             while self._sent_times and now - self._sent_times[0] >= 3600.0:
                 self._sent_times.popleft()
-            if len(self._sent_times) >= int(self.settings.max_per_hour):
+            # Critical kinds may use the whole hourly cap; the others stop short of
+            # the reserve, so a storm of repeats cannot starve a drawdown_halt.
+            limit = int(self.settings.max_per_hour)
+            if not _is_critical(kind, fields):
+                limit -= _critical_reserve(limit)
+            if len(self._sent_times) >= limit:
                 self.dropped += 1
                 rate_limited = True
             else:
@@ -286,7 +329,7 @@ class EmailAlertSink:
                 self._sent_times.append(now)
                 self._pending[throttle_key] = now
         if rate_limited:
-            _record_delivery_failure(kind, "rate_limited", f"more than {self.settings.max_per_hour} e-mails this hour")
+            _record_delivery_failure(kind, "rate_limited", f"more than {limit} e-mails this hour")
             return False
         item = _Outgoing(kind, str(message), dict(fields), datetime.now(UTC), throttle_key=throttle_key)
         try:
@@ -352,6 +395,7 @@ class EmailAlertSink:
                     # delivery leaves the next repeat free to be queued and retried.
                     now = self._clock()
                     self._last_sent[item.throttle_key] = now
+                    self._last_success_at = now
                     window = max(0.0, float(self.settings.min_interval_minutes)) * 60.0
                     if len(self._last_sent) > _THROTTLE_KEYS_MAX:
                         for key in [k for k, t in self._last_sent.items() if now - t >= window]:
@@ -388,6 +432,23 @@ class EmailAlertSink:
     def stats(self) -> dict[str, int]:
         with self._lock:
             return {"sent": self.sent, "failed": self.failed, "dropped": self.dropped}
+
+    def delivery_status(self) -> dict[str, object]:
+        """Counters and freshness for the engine snapshot (``alert_stats()["email"]``).
+
+        ``last_success_age_seconds`` is None until the first successful send, so
+        a silent channel is visible as a growing age, not a missing field.
+        """
+        with self._lock:
+            last = self._last_success_at
+            age = None if last is None else round(max(0.0, self._clock() - last), 1)
+            return {
+                "sent": self.sent,
+                "failed": self.failed,
+                "dropped": self.dropped,
+                "queued": self._queue.qsize(),
+                "last_success_age_seconds": age,
+            }
 
 
 def _record_delivery_failure(kind: str, reason: str, error: str) -> None:

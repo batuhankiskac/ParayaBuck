@@ -92,6 +92,8 @@ def _clean_state() -> Any:
 
 
 def _sink(settings: EmailAlertConfig | None = None, **kwargs: Any) -> EmailAlertSink:
+    # Retry waits are injected away: a real failing send would otherwise wait ~65 s.
+    kwargs.setdefault("sleep", lambda _delay: None)
     return EmailAlertSink(
         settings or _settings(),
         mode="live",

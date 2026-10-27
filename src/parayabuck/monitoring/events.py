@@ -15,6 +15,9 @@ from __future__ import annotations
 
 ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "runtime_started",
+    # A LIVE engine runtime started (manual start or standing-authorization
+    # auto-start). Mailed: an unattended LIVE start must never be silent.
+    "live_started",
     "runtime_stopped_unexpected",
     # Engine start failed: permanent error, a startup guard (secret scan /
     # live arming) blocking the start, or N transient auto-start retries.
@@ -32,6 +35,9 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "risk_incident",
     "drawdown_halt",
     "risk_epoch_reset",
+    # The operator cleared a halt through reset_safety_lock after a verified
+    # reconcile; the message lists any halts still in force.
+    "safety_lock_reset",
     "circuit_breaker",
     "signal_adjustment_failure",
     "signal_adjustment_recovery",
@@ -56,9 +62,6 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # A session closed with missing stream minutes: the incomplete daily bar
     # was withheld and the SIP daily bar is fetched for the decision.
     "session_close_bar_incomplete",
-    # A broker FILL activity carried a side outside Alpaca's vocabulary: it is
-    # skipped and reported, never fatal for reconciliation.
-    "reconciliation_unexpected_fill_side",
     # A broker-rejected SELL that would exit or reduce the held position:
     # escalated beyond ``order_rejected`` (e-mailed when e-mail is enabled)
     # and retried once with a new deterministic client order id.
@@ -90,13 +93,13 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "risk_incident",
         "drawdown_halt",
         "circuit_breaker",
+        "signal_adjustment_failure",
         "paper_incident",
         "intent_alarm",
         "signal_source_mismatch",
         "decision_deferred",
         "market_data_degraded",
         "session_close_bar_incomplete",
-        "reconciliation_unexpected_fill_side",
         "exit_sell_rejected",
         "live_rearm_required",
         "live_authorization_expiring",
@@ -114,6 +117,8 @@ WARNING_KINDS: frozenset[str] = frozenset(
 # journal). ``reconciliation_failure`` already covers the reconciliation and
 # ownership/protection halts (their reasons travel in the ``reason`` field).
 # ``daily_summary`` is added only when ``alerting.email.daily_summary`` is true.
+# NOTE: ``monitoring.journal.SAFETY_JOURNAL_KINDS`` is this same set, so every kind
+# here is also committed to the journal synchronously, in the caller's thread.
 EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",
@@ -126,10 +131,19 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
         "order_rejected",
         "exit_sell_rejected",
         "intent_alarm",
+        # The recovery that closes an intent alarm, so the owner learns it cleared.
+        "intent_recovered",
         "reconciliation_failure",
         "live_rearm_required",
         "live_authorization_expiring",
         "live_authorization_expired",
+        # Safety-state changes an operator or an unattended start made: a halt
+        # cleared by hand, a drawdown baseline rebased, a LIVE engine started,
+        # and equity entries failing closed on an unverified split basis.
+        "safety_lock_reset",
+        "risk_epoch_reset",
+        "live_started",
+        "signal_adjustment_failure",
         # Market data fell back to a lower feed (and recovered), a provider
         # outage that did not halt the engine, and a backup that could not be
         # written, verified or copied off-host (the timer's unattended failure).
@@ -139,7 +153,25 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
     }
 )
 
+# Kinds the e-mail hourly cap never drops in favour of a non-critical mail:
+# non-critical kinds may use only ``max_per_hour`` minus a reserve (see
+# ``monitoring.email_alerts``). A CRITICAL-severity incident of any kind is
+# reserved as well (its ``severity`` field).
+CRITICAL_EMAIL_KINDS: frozenset[str] = frozenset(
+    {
+        "drawdown_halt",
+        "circuit_breaker",
+        "runtime_stopped_unexpected",
+        "runtime_start_failed",
+        "risk_incident",
+        "ambiguous_order",
+        "exit_sell_rejected",
+        "live_authorization_expired",
+    }
+)
+
 __all__ = [
+    "CRITICAL_EMAIL_KINDS",
     "EMAIL_ALERT_KINDS",
     "ALERT_KINDS",
     "ALERT_KINDS_ORDERED",

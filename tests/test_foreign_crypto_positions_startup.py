@@ -138,11 +138,13 @@ def test_foreign_positions_raise_one_alert_and_are_never_pinned(monkeypatch, cap
         (
             "risk_incident",
             {
+                # The reason keys the throttle apart from daily-loss risk incidents.
+                "reason": "foreign_inventory",
                 "foreign": [
                     {"market": "crypto", "symbol": "BTC/USD"},
                     {"market": "crypto", "symbol": "SOL/USD"},
                     {"market": "equity", "symbol": "AAPL"},
-                ]
+                ],
             },
         )
     ]
@@ -228,10 +230,11 @@ def test_runtime_starts_equity_only_while_crypto_is_held(monkeypatch) -> None:
     incidents = [fields for kind, _message, fields in emitted if kind == "risk_incident"]
     assert incidents == [
         {
+            "reason": "foreign_inventory",
             "foreign": [
                 {"market": "crypto", "symbol": "BTC/USD"},
                 {"market": "crypto", "symbol": "ETH/USD"},
-            ]
+            ],
         }
     ]
     # Only equity symbols are streamed; no crypto stream worker exists.

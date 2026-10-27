@@ -12,6 +12,8 @@ from datetime import time as dt_time
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from alpaca.trading.enums import TimeInForce
+
 from parayabuck.config import DrawdownLiquidationConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import signal_session_date
@@ -362,8 +364,10 @@ if TYPE_CHECKING:
 OPG_SUBMIT_CUTOFF = dt_time(9, 28)
 # Turkish calendar for the TCMB USD/TRY dates used by the shadow gain fraction.
 ISTANBUL = ZoneInfo("Europe/Istanbul")
-# Every order the runtime builds is a DAY market order (execution/alpaca_orders.py).
-RUNTIME_ORDER_TIME_IN_FORCE = "day"
+# Every order the runtime builds is a DAY market order. The value comes from the
+# same SDK enum that execution/alpaca_orders.py submits with, so the clock gate
+# cannot drift from the time-in-force actually sent.
+RUNTIME_ORDER_TIME_IN_FORCE = TimeInForce.DAY.value
 
 
 def market_clock_refusal(clock: BrokerClock, *, time_in_force: str) -> tuple[str, str] | None:
@@ -979,6 +983,7 @@ class PortfolioRuntime:
         *,
         entry_latch: str | None = None,
         account: AccountSnapshot | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Decide immediately on the latest completed warmup bars.
 
@@ -1138,6 +1143,7 @@ class PortfolioRuntime:
         advance_result = self.advance_rebalance(
             account=account,
             submit_deferred_buys=entry_latch is None and stale_decision is None,
+            submit_gate=submit_gate,
         )
         if stale_decision is not None:
             self._close_superseded_rebalance(stale_decision)
@@ -1184,6 +1190,7 @@ class PortfolioRuntime:
             # recovery is distinguished by startup_catch_up_status instead.
             decision_origin="startup_catch_up",
             account=account,
+            submit_gate=submit_gate,
         )
         self.startup_catch_up_status = f"recovered_session:{result.status}" if recovering_session else result.status
         return result
@@ -1303,8 +1310,13 @@ class PortfolioRuntime:
         decision_origin: str = "scheduled",
         account: AccountSnapshot | None = None,
         signal_cross_check: CrossCheckOutcome | None = None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Decide on a closed batch and plan/submit its orders.
+
+        ``submit_gate`` (optional) is consulted before each submit of this
+        decision, SELLs included, exactly as in ``advance_rebalance``: a
+        held order stays unsent and the rest of the decision proceeds.
 
         A failure before the decision is persisted (a broker read raising,
         for instance) restores the cadence high-water, so a retry of the same
@@ -1320,6 +1332,7 @@ class PortfolioRuntime:
                 decision_origin=decision_origin,
                 account=account,
                 signal_cross_check=signal_cross_check,
+                submit_gate=submit_gate,
             )
         except BaseException:
             if not self._decision_recorded:
@@ -1335,6 +1348,7 @@ class PortfolioRuntime:
         decision_origin: str,
         account: AccountSnapshot | None,
         signal_cross_check: CrossCheckOutcome | None,
+        submit_gate: Callable[[PortfolioOrderRequest], str | None] | None = None,
     ) -> PortfolioRuntimeResult:
         """Body of :meth:`process_closed_bars`.
 
@@ -1432,6 +1446,7 @@ class PortfolioRuntime:
         advance_result = self.advance_rebalance(
             account=account,
             submit_deferred_buys=entry_latch is None and stale_decision is None,
+            submit_gate=submit_gate,
         )
         if stale_decision is not None:
             self._close_superseded_rebalance(stale_decision)
@@ -1892,7 +1907,7 @@ class PortfolioRuntime:
             )
             self._decision_recorded = True
             # Orders are already persisted as submitting; submit them idempotently.
-            submitted = self._submit_orders(orders)
+            submitted = self._submit_orders(orders, submit_gate=submit_gate)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
                 market=self._market_name(),
@@ -1944,7 +1959,7 @@ class PortfolioRuntime:
                 drawdown_liquidation_state=self._drawdown_liquidation_write(risk),
             )
             self._decision_recorded = True
-            submitted = self._submit_orders(sells)
+            submitted = self._submit_orders(sells, submit_gate=submit_gate)
             _emit_decision_summary_safe(
                 decision_id=decision_id,
                 market=self._market_name(),
@@ -1998,7 +2013,7 @@ class PortfolioRuntime:
         )
         self._decision_recorded = True
         self._record_buy_admission_observation(decision_id, admission, buys)
-        submitted = self._submit_orders(buys)
+        submitted = self._submit_orders(buys, submit_gate=submit_gate)
         _emit_decision_summary_safe(
             decision_id=decision_id,
             market=self._market_name(),
@@ -3192,9 +3207,12 @@ class PortfolioRuntime:
         is marked so) and alerted, like a locally invalid order; the rest of the
         batch is untouched. A failed clock read keeps today's behaviour: the batch
         is submitted and a warning is logged, so an unavailable clock never
-        blocks an exit.
+        blocks an exit. A DAY batch is never refused (``market_clock_refusal``),
+        so it skips the REST clock read entirely.
         """
         if not orders:
+            return orders
+        if RUNTIME_ORDER_TIME_IN_FORCE.lower() == "day":
             return orders
         clock_reader = getattr(self.broker, "clock", None)
         if not callable(clock_reader):
@@ -3392,8 +3410,22 @@ class PortfolioRuntime:
         realized_gross = sum(position.market_value for position in account.positions if not position.is_flat)
         committed = self._committed_buy_notional(account, broker_buys, unknown_symbols)
         limits = self.risk_overlay.limits
+        # Every headroom below is in reference-price dollars, the same basis as
+        # the notional sized further down. A DAY market BUY sized at the
+        # reference fills at up to (1 + margin) x reference on a gap-up open, so
+        # in LIVE the cash and dollar-cap terms are fill-basis: committed BUYs
+        # are gap-priced and the result is converted back by ``gap``. PAPER has
+        # no gap term (gap == 1).
+        gap = 1.0 + float(getattr(self, "live_buy_gap_margin", 0.03)) if self.mode == "live" else 1.0
+        committed_fill = (committed or 0.0) * gap
+        # Non-borrowed buying power: min(cash, non-marginable buying power)
+        # where the broker reports it, in both modes.
+        spendable = account.cash
+        non_marginable = getattr(account, "non_marginable_buying_power", None)
+        if non_marginable is not None and math.isfinite(non_marginable):
+            spendable = min(spendable, non_marginable)
         gross_headroom = max(0.0, limits.maximum_gross * account.equity - realized_gross - (committed or 0.0))
-        cash_headroom = max(0.0, account.cash - limits.minimum_cash * account.equity - (committed or 0.0))
+        cash_headroom = max(0.0, (spendable - limits.minimum_cash * account.equity - committed_fill) / gap)
         if committed is None:
             gross_headroom = cash_headroom = 0.0
         capacity = min(gross_headroom, cash_headroom)
@@ -3404,18 +3436,16 @@ class PortfolioRuntime:
                 for position in account.positions
                 if not position.is_flat and position.managed_qty > 1e-12
             )
-            capacity = min(capacity, max(0.0, self.live_dollar_cap - managed - (committed or 0.0)))
+            capacity = min(
+                capacity,
+                max(0.0, (self.live_dollar_cap - managed - committed_fill) / gap),
+            )
             # R1 gap-safe cap: a DAY market BUY sized at the close fills at
             # the next open. Size it so notional x (1 + margin) still fits in
             # the non-borrowed buying power, min(cash, non-marginable buying
             # power) less committed BUYs: a gap-up open of up to the margin
             # never borrows on a (multiplier >= 1) margin account.
-            spendable = account.cash
-            non_marginable = getattr(account, "non_marginable_buying_power", None)
-            if non_marginable is not None and math.isfinite(non_marginable):
-                spendable = min(spendable, non_marginable)
-            margin = float(getattr(self, "live_buy_gap_margin", 0.03))
-            gap_headroom = max(0.0, (spendable - (committed or 0.0)) / (1.0 + margin))
+            gap_headroom = max(0.0, (spendable - committed_fill) / gap)
             if committed is None:
                 gap_headroom = 0.0
             capacity = min(capacity, gap_headroom)

@@ -86,19 +86,22 @@ def _admitted(tmp_path, broker: _CashBroker, mode: str) -> float:  # type: ignor
     return sum(order.quantity for order in admission.orders)
 
 
-def test_paper_buy_sizing_is_unchanged(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    # 0.98 x 100k from flat: the 2 % cash buffer alone bounds it (as before).
-    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "paper") == 980
+def test_paper_buy_sizing_uses_non_marginable_buying_power(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # PAPER now reads min(cash, non-marginable buying power) like LIVE:
+    # (50k - 2k cash buffer) = 48k -> 480 shares. Without the report the 2 % buffer alone gives 980.
+    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "paper") == 480
+    assert _admitted(tmp_path, _CashBroker(), "paper") == 980
 
 
 def test_live_buy_leaves_room_for_a_three_percent_gap(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    # 100k / 1.03 = 97,087 -> 970 shares at 100: a +3 % open costs 99,910.
-    assert _admitted(tmp_path, _CashBroker(), "live") == 970
+    # (100k - 2k buffer) / 1.03 = 95,146 -> 951 shares at 100: a +3 % open costs 97,980,
+    # which keeps the 2 % buffer after the fill.
+    assert _admitted(tmp_path, _CashBroker(), "live") == 951
 
 
 def test_live_buy_never_exceeds_non_marginable_buying_power(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    # 50k / 1.03 = 48,543 -> 485 shares.
-    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "live") == 485
+    # (50k - 2k buffer) / 1.03 = 46,602 -> 466 shares.
+    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "live") == 466
 
 
 def test_live_gap_margin_is_configurable_and_validated(tmp_path) -> None:  # type: ignore[no-untyped-def]

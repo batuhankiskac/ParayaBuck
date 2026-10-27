@@ -322,6 +322,18 @@ account state is not trusted (ownership, protection, reconciliation or a
 crashed worker), so no order of any side is submitted: a decision blocked at
 the close is re-queued for the retry window, and the dependent BUY phase of a
 two-phase rebalance stays at `buy_ready` until a verified reset submits it.
+
+**A hard halt holds exits too.** Planned SELLs, including risk-reducing exits
+such as a flip-down to cash, are held along with BUYs for as long as the halt
+stands ("halted = no orders"). This is deliberate: the halt means the account
+state is not trusted, so no exit is sent on it either. Do not expect an exit to
+go out while `CIRCUIT_BREAKER` is active; it goes out after the verified reset
+and the retry window is still open, or the session is lost. The soft
+reconcile-pending latch (`trade_updates_restart`, `trade_feed_stale`,
+`premarket_probe_failed`) is not a halt and works differently: there the
+decision runs and its planned SELLs go out, and only BUYs wait for a clean
+reconciliation.
+
 Review `active_incidents.json` in the bundle and the broker account, then
 reset. Restarting does not clear it.
 

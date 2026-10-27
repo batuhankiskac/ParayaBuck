@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from datetime import time as dt_time
+from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from parayabuck.config import DrawdownLiquidationConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
@@ -26,6 +28,7 @@ from parayabuck.execution.portfolio import (
     PortfolioRiskOverlay,
     RiskOverlayDecision,
     TargetToOrderPlanner,
+    downsize_gain_fraction_tl,
     floor_increment,
     gain_band_bypass_metadata,
     record_december_deferral_holds,
@@ -37,6 +40,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     DEFAULT_SIP_EMBARGO,
+    NEW_YORK,
     equity_day_bar_is_closed,
     provider_day_bar_is_final,
 )
@@ -47,6 +51,7 @@ from parayabuck.portfolio.base import (
     require_product_universe_dependency,
 )
 from parayabuck.portfolio.models import MAX_WEIGHT, TargetPortfolio, TargetWeight
+from parayabuck.portfolio.ownership_rebase import BUY
 from parayabuck.portfolio.runtime_models import (
     _AMBIGUOUS_ORDER_STATUSES,
     REBALANCE_PHASE_BLOCKED,
@@ -71,6 +76,8 @@ from parayabuck.portfolio.runtime_rebalance import (
 )
 from parayabuck.portfolio.runtime_repository import PortfolioStateRepository
 from parayabuck.portfolio.signal_cross_check import CrossCheckOutcome
+from parayabuck.tax.errors import TaxDataError
+from parayabuck.tax.rates import RateBook, load_rate_book
 from parayabuck.utils import is_crypto
 
 log = get_logger("parayabuck.portfolio.runtime_service")
@@ -341,6 +348,47 @@ def emit_exit_sell_rejected_safe(
         )
     except Exception:
         log.warning("Exit-SELL rejection alert failed for %s", client_order_id, exc_info=True)
+
+
+if TYPE_CHECKING:
+    from parayabuck.execution.alpaca_client import BrokerClock
+
+# Alpaca accepts a market-on-open (OPG) order until 09:28 ET of the session it targets.
+OPG_SUBMIT_CUTOFF = dt_time(9, 28)
+# Turkish calendar for the TCMB USD/TRY dates used by the shadow gain fraction.
+ISTANBUL = ZoneInfo("Europe/Istanbul")
+# Every order the runtime builds is a DAY market order (execution/alpaca_orders.py).
+RUNTIME_ORDER_TIME_IN_FORCE = "day"
+
+
+def market_clock_refusal(clock: BrokerClock, *, time_in_force: str) -> tuple[str, str] | None:
+    """``(reason code, message)`` when the broker clock forbids submitting an order now, else ``None``.
+
+    A DAY market order is never refused: the strategy decides after the close
+    and Alpaca queues a DAY market order sent while the market is closed for
+    the next open, which is the intended fill. An OPG order is refused once the
+    09:28 ET cutoff of the session it targets has passed; that session is the
+    one of ``next_open``, which is also the target while the market is open.
+    """
+    tif = time_in_force.lower()
+    if tif == "opg":
+        session = clock.next_open.astimezone(NEW_YORK).date()
+        cutoff = datetime.combine(session, OPG_SUBMIT_CUTOFF, tzinfo=NEW_YORK)
+        if clock.timestamp >= cutoff:
+            return (
+                "opg_after_cutoff",
+                f"OPG order after the {OPG_SUBMIT_CUTOFF:%H:%M} ET cutoff of the {session.isoformat()} session",
+            )
+    return None
+
+
+def _load_tl_rate_book() -> RateBook | None:
+    """The default TCMB rate files, or ``None`` (the shadow is then skipped silently)."""
+    try:
+        return load_rate_book()
+    except Exception as exc:
+        log.debug("TL gain shadow skipped: USD/TRY rates unavailable (%s)", exc)
+        return None
 
 
 def _emit_order_rejected_safe(
@@ -646,6 +694,66 @@ class PortfolioRuntime:
                 self.account_id, self.configuration_digest, self.market
             )
         )
+
+    def _managed_buy_dates(self, symbol: str, count: int) -> list[date] | None:
+        """Istanbul trade dates of the ``count`` buys behind the open FIFO lots of ``symbol``.
+
+        A sale consumes the oldest lots first, so the open lots are always the
+        last ``count`` buys still open, in order: the tail of the buy history
+        pairs one-to-one with ``owned_fifo_lots``. ``None`` when the history
+        holds fewer buys than lots, so the shadow stays absent.
+        """
+        buys = [
+            occurred_at
+            for occurred_at, kind, quantity, price, _fee in self.repository._owned_events(
+                self.account_id, symbol, self.market
+            )
+            if kind == BUY and price is not None and quantity > 0
+        ]
+        if count <= 0 or len(buys) < count:
+            return None
+        return [instant.astimezone(ISTANBUL).date() for instant in buys[-count:]]
+
+    def _gain_band_tl_shadow_probe(
+        self,
+    ) -> Callable[[str, Sequence[Sequence[float]], float, float, datetime], float | None]:
+        """Metadata-only TL gain fraction for one downsize the USD band holds.
+
+        Each lot's TL cost is its USD cost times USD/TRY on its buy date; the sale
+        is valued at USD/TRY on the decision date. The TCMB files are loaded at
+        most once per planning call; when they are missing the probe returns
+        ``None`` and the decision metadata simply omits the shadow fields.
+        """
+        rates: dict[str, RateBook | None] = {}
+
+        def probe(
+            symbol: str,
+            lots: Sequence[Sequence[float]],
+            units: float,
+            price: float,
+            decision_timestamp: datetime,
+        ) -> float | None:
+            if "book" not in rates:
+                rates["book"] = _load_tl_rate_book()
+            book = rates["book"]
+            if book is None or not lots:
+                return None
+            buy_dates = self._managed_buy_dates(symbol, len(lots))
+            if buy_dates is None:
+                return None
+            instant = decision_timestamp if decision_timestamp.tzinfo else decision_timestamp.replace(tzinfo=UTC)
+            try:
+                decision_rate = book.usd_try_for_trade_date(instant.astimezone(ISTANBUL).date()).rate
+                lot_rates = [
+                    (float(quantity), float(cost), book.usd_try_for_trade_date(buy_date).rate)
+                    for (quantity, cost), buy_date in zip(lots, buy_dates, strict=True)
+                ]
+            except TaxDataError as exc:
+                log.debug("TL gain shadow skipped for %s: %s", symbol, exc)
+                return None
+            return downsize_gain_fraction_tl(lot_rates, units, price, decision_rate)
+
+        return probe
 
     def _managed_open_lots(self, symbols: Iterable[str]) -> dict[str, tuple[tuple[float, float], ...]] | None:
         """FIFO managed lots per symbol for the downsize gain band, else ``None``.
@@ -1614,6 +1722,7 @@ class PortfolioRuntime:
             open_lots=self._managed_open_lots(held_symbols | targeted_symbols),
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
+            gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
@@ -2418,6 +2527,7 @@ class PortfolioRuntime:
             ),
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
+            gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
@@ -2548,6 +2658,61 @@ class PortfolioRuntime:
                 side=order.side.value,
             )
         return tuple(order for order in orders if order.client_order_id not in reasons)
+
+    def _market_clock_gate(self, orders: tuple[PortfolioOrderRequest, ...]) -> tuple[PortfolioOrderRequest, ...]:
+        """Refuse, locally and before any broker submit, an order the broker clock forbids now.
+
+        Consulted once per batch and only when the broker exposes ``clock()``. A
+        refused order is recorded ``rejected`` (an order already at ``submitting``
+        is marked so) and alerted, like a locally invalid order; the rest of the
+        batch is untouched. A failed clock read keeps today's behaviour: the batch
+        is submitted and a warning is logged, so an unavailable clock never
+        blocks an exit.
+        """
+        if not orders:
+            return orders
+        clock_reader = getattr(self.broker, "clock", None)
+        if not callable(clock_reader):
+            return orders
+        try:
+            refusal = market_clock_refusal(clock_reader(), time_in_force=RUNTIME_ORDER_TIME_IN_FORCE)
+        except Exception:
+            log.warning("Broker market clock unavailable; submitting without the clock gate", exc_info=True)
+            return orders
+        if refusal is None:
+            return orders
+        code, message = refusal
+        recorded = {
+            str(row["client_order_id"]): str(row["status"])
+            for row in self.repository.orders_for_decision(orders[0].decision_id)
+        }
+        refused: set[str] = set()
+        for order in orders:
+            status = recorded.get(order.client_order_id)
+            if status is not None and status != "submitting":
+                # Already handled by the idempotency check of the submit loop.
+                continue
+            if status is None:
+                self.repository.record_order(order, "rejected")
+            else:
+                self.repository.update_order(order.client_order_id, "rejected")
+            refused.add(order.client_order_id)
+            log.error(
+                "Order refused by the broker clock: market=%s client_order_id=%s reason=%s",
+                self._market_name(),
+                order.client_order_id,
+                message,
+            )
+            _emit_order_rejected_safe(
+                client_order_id=order.client_order_id,
+                symbol=order.symbol,
+                market=self._market_name(),
+                decision_id=order.decision_id,
+                reason=code,
+                error=message,
+                side=order.side.value,
+            )
+        return tuple(order for order in orders if order.client_order_id not in refused)
 
     def _enter_buy_pending(
         self,
@@ -2888,6 +3053,8 @@ class PortfolioRuntime:
         # A malformed order never reaches the broker: invalid ones are dropped
         # here, before any of the batch is recorded as ``submitting``.
         orders = self._validated_batch(orders, rules_by_symbol)
+        # The broker clock gate runs after local validation, so only sendable orders are checked.
+        orders = self._market_clock_gate(orders)
         submitted: list[str] = []
         # Every order in a batch shares one decision id, so the ledger is read
         # once. The map is keyed by client order id, which is stable per

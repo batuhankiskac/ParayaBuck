@@ -9,6 +9,7 @@ is enforced so a verified backup survives a crash.
 from __future__ import annotations
 
 import errno
+import json
 import logging
 import math
 import os
@@ -22,6 +23,8 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from parayabuck.utils.io import atomic_write, sweep_orphan_temp_files
 
 log = logging.getLogger("parayabuck.backup")
 
@@ -41,6 +44,15 @@ BACKUP_SUFFIX = ".sqlite3"
 # late rollback may still need it.
 KEEP_PREFIX = f"{BACKUP_PREFIX}keep-"
 AUTO_BACKUP_GLOB = f"{BACKUP_PREFIX}[0-9]*{BACKUP_SUFFIX}"
+# The drawdown peak lives in these sidecars next to the decision database, not
+# in the database. Each backup set carries a verified copy of every sidecar
+# that exists, published as ``<snapshot stem>.<sidecar name>``.
+PEAK_SIDECAR_NAMES = ("paper_equity_peak.json", "live_equity_peak.json")
+AUTO_PEAK_GLOB = f"{BACKUP_PREFIX}[0-9]*_equity_peak.json"
+STAGE_PREFIX = ".parayabuck-stage-"
+# A staging file younger than this may belong to a concurrent backup run; an
+# older one is left by a run that was killed mid-copy.
+STAGE_ORPHAN_MIN_AGE_SECONDS = 3600.0
 # Freshness bound for the 6 h backup timer: two consecutive missed runs mean
 # the backup path is broken, and a later database loss would force a restore
 # from a stale snapshot. Checked by `parayabuck doctor`.
@@ -50,6 +62,14 @@ _LABEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 class BackupVerificationError(RuntimeError):
     """Raised when a newly created backup fails integrity verification."""
+
+
+class BackupSourceMissing(FileNotFoundError):
+    """The runtime database does not exist yet (first boot, before any decision).
+
+    Not a failure: nothing is written. Subclasses FileNotFoundError so existing
+    handlers keep working.
+    """
 
 
 class BackupDurabilityError(RuntimeError):
@@ -123,6 +143,62 @@ def _fsync_directory(directory: Path) -> None:
             raise
 
 
+def _valid_peak_payload(payload: str) -> bool:
+    """True for a peak record the runtime accepts: a JSON object with a finite,
+    non-negative ``peak_equity`` and an integer ``epoch`` when present."""
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    try:
+        peak = float(data["peak_equity"])
+        int(data.get("epoch", 0) or 0)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return math.isfinite(peak) and peak >= 0
+
+
+def _copy_peak_sidecars(source_dir: Path, destination: Path, copies: list[Path]) -> None:
+    """Copy each peak sidecar next to the published snapshot and verify the copy.
+
+    A missing sidecar is skipped (a host that has not traded has none). A
+    present one must be a valid peak record, and its copy must read back
+    byte-identical. Copies are appended to ``copies`` as they are written so the
+    caller can remove a partial set.
+    """
+    for name in PEAK_SIDECAR_NAMES:
+        sidecar = source_dir / name
+        try:
+            payload = sidecar.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
+        except (OSError, UnicodeDecodeError) as exc:
+            raise BackupVerificationError(f"Peak sidecar unreadable: {sidecar}: {exc}") from exc
+        if not _valid_peak_payload(payload):
+            raise BackupVerificationError(f"Peak sidecar failed validation: {sidecar}")
+        copy = destination.with_name(f"{destination.stem}.{name}")
+        atomic_write(copy, payload)
+        copies.append(copy)
+        try:
+            written = copy.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise BackupVerificationError(f"Peak sidecar copy unreadable: {copy}: {exc}") from exc
+        if written != payload or not _valid_peak_payload(written):
+            raise BackupVerificationError(f"Peak sidecar copy failed verification: {copy}")
+
+
+def _file_mtime(path: Path) -> float | None:
+    """Modification time of a regular file; None when it vanished or cannot be read."""
+    try:
+        if not path.is_file():
+            return None
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
 def backup_database(
     source_path: str | Path,
     backup_dir: str | Path,
@@ -155,11 +231,19 @@ def backup_database(
     source = Path(source_path)
     target_dir = Path(backup_dir)
     if not source.is_file():
-        raise FileNotFoundError(f"Runtime database not found: {source}")
+        # Before the first decision there is nothing to back up. Raising the
+        # dedicated subclass lets the caller skip without an alert.
+        log.warning("Backup skipped: runtime database %s does not exist yet", source)
+        raise BackupSourceMissing(f"Runtime database not found: {source}")
     target_dir.mkdir(parents=True, exist_ok=True)
+    # A run killed mid-copy (SIGKILL, power loss) leaves a staging file that the
+    # publish path never reaches. Sweep the ones from earlier runs; the age floor
+    # spares a staging file a concurrent run is still writing.
+    for stale in sweep_orphan_temp_files(target_dir, STAGE_PREFIX, min_age_seconds=STAGE_ORPHAN_MIN_AGE_SECONDS):
+        log.info("Removed orphan backup staging file %s", stale.name)
 
     stamp = now or datetime.now(UTC)
-    stage_fd, stage_name = tempfile.mkstemp(prefix=".parayabuck-stage-", suffix=".tmp", dir=target_dir)
+    stage_fd, stage_name = tempfile.mkstemp(prefix=STAGE_PREFIX, suffix=".tmp", dir=target_dir)
     stage = Path(stage_name)
     try:
         os.close(stage_fd)
@@ -167,6 +251,7 @@ def backup_database(
         _remove_candidate(stage)
         raise
     destination: Path | None = None
+    peak_copies: list[Path] = []
     try:
         with (
             closing(sqlite3.connect(source)) as source_connection,
@@ -219,21 +304,31 @@ def backup_database(
             _fsync_directory(target_dir)
         except OSError as exc:
             raise BackupDurabilityError(f"Backup publication fsync failed for {target_dir}: {exc}") from exc
+        # The backup set is the snapshot plus the peak sidecars. A sidecar that
+        # fails verification fails the whole set: nothing is kept half-complete.
+        _copy_peak_sidecars(source.parent, destination, peak_copies)
     except BaseException:
         _remove_candidate(stage)
         if destination is not None:
             _remove_candidate(destination)
+        for copy in peak_copies:
+            _remove_candidate(copy)
         raise
 
     assert destination is not None
-    # Only after successful verification do we prune expired backups.
-    prune_backups(target_dir, retention_days=retention, now=stamp)
-    # The local snapshot is verified and kept either way; an off-host failure is
-    # recorded as an alert (backup_failed) instead of discarding it.
+    # Only after successful verification do we prune expired backups. A prune
+    # failure is logged and never blocks the verified set or its off-host copy.
     try:
-        copy_offhost(destination)
-    except OffhostCopyError as exc:
-        _record_offhost_failure(destination, exc)
+        prune_backups(target_dir, retention_days=retention, now=stamp)
+    except Exception:
+        log.exception("Backup retention prune failed in %s; the new backup is kept", target_dir)
+    # The local set is verified and kept either way; an off-host failure is
+    # recorded as an alert (backup_failed) instead of discarding it.
+    for artifact in (destination, *peak_copies):
+        try:
+            copy_offhost(artifact)
+        except OffhostCopyError as exc:
+            _record_offhost_failure(artifact, exc)
     return destination
 
 
@@ -345,19 +440,26 @@ def prune_backups(
     directory = Path(backup_dir)
     if not directory.is_dir():
         return []
-    backups = sorted(
-        (candidate for candidate in directory.glob(AUTO_BACKUP_GLOB) if candidate.is_file()),
-        key=lambda candidate: candidate.stat().st_mtime,
-    )
+    # Peak copies age out with the snapshot they were taken with.
+    aged: list[tuple[float, Path]] = []
+    for candidate in (*directory.glob(AUTO_BACKUP_GLOB), *directory.glob(AUTO_PEAK_GLOB)):
+        mtime = _file_mtime(candidate)
+        if mtime is not None:
+            aged.append((mtime, candidate))
     removed: list[Path] = []
-    for candidate in backups:
-        if candidate.stat().st_mtime < cutoff:
+    for mtime, candidate in sorted(aged, key=lambda item: item[0]):
+        if mtime >= cutoff:
+            continue
+        try:
             candidate.unlink()
-            # Drop any WAL sidecar siblings left by pre-normalization backups.
-            for sidecar in (Path(f"{candidate}-wal"), Path(f"{candidate}-shm")):
-                if sidecar.is_file():
-                    sidecar.unlink()
-            removed.append(candidate)
+        except FileNotFoundError:
+            # Removed concurrently by another run; nothing left to do.
+            continue
+        # Drop any WAL sidecar siblings left by pre-normalization backups.
+        for sidecar in (Path(f"{candidate}-wal"), Path(f"{candidate}-shm")):
+            if sidecar.is_file():
+                sidecar.unlink()
+        removed.append(candidate)
     return removed
 
 
@@ -397,6 +499,7 @@ __all__ = [
     "MAX_BACKUP_AGE_HOURS",
     "OFFHOST_CMD_ENV",
     "BackupDurabilityError",
+    "BackupSourceMissing",
     "BackupVerificationError",
     "OffhostCopyError",
     "backup_database",

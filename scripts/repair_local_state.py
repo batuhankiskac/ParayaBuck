@@ -49,6 +49,8 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -73,10 +75,48 @@ LEDGER = DEFAULT_LEDGER
 # A live engine rewrites its health snapshot every snapshot interval and marks
 # it "stopped" on a clean shutdown.
 ENGINE_HEARTBEAT_MIN_TTL_SECONDS = 60.0
+# The engine's systemd unit (deploy/systemd/parayabuck.service). The health
+# snapshot is not written until warmup and startup reconcile finish, so during a
+# restart it still reads "stopped" from the previous shutdown. systemd knows the
+# unit is starting, so it is consulted first when present.
+SYSTEMD_UNIT = "parayabuck"
+_UNIT_INACTIVE_STATES = frozenset({"inactive", "failed"})
+_SYSTEMCTL_TIMEOUT_SECONDS = 10
+
+
+def _systemd_unit_state() -> str | None:
+    """``systemctl is-active`` state of the engine unit; None when systemd is absent.
+
+    Any output or failure other than a clean answer comes back as "unknown", so
+    the caller fails closed.
+    """
+    try:
+        completed = subprocess.run(
+            ["systemctl", "is-active", SYSTEMD_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=_SYSTEMCTL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    lines = (completed.stdout or "").strip().splitlines()
+    return lines[0].strip() if lines else "unknown"
 
 
 def _engine_is_active(config: Any) -> bool:
-    """True while the engine looks live; fail closed on an unreadable snapshot."""
+    """True while the engine looks live; fail closed on an unreadable snapshot.
+
+    When systemd reports the unit as anything other than ``inactive``/``failed``
+    (``activating``, ``active``, ``deactivating``, or an unclassifiable answer),
+    the engine counts as live whatever the snapshot says. Without systemd only the
+    health snapshot is left, and a ``stopped`` snapshot is trusted.
+    """
+    unit_state = _systemd_unit_state()
+    if unit_state is not None and unit_state not in _UNIT_INACTIVE_STATES:
+        return True
     from parayabuck.monitoring.snapshot import read_snapshot
 
     path = Path(config.observability.snapshot_path)
@@ -226,18 +266,16 @@ def backup_ledger(qdir: Path, ledger: str | Path | None = None):
         # ledger at this path, which the repair step then fails on.
         return None
     dst = qdir / "runtime" / f"parayabuck.sqlite3.backup.{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
-    # Use sqlite backup API for safety while WAL open
+    # The sqlite backup API is the only copy of the ledger this script makes. A
+    # plain file copy would miss WAL frames not yet checkpointed, and would pass
+    # for a complete backup. On failure, abort rather than repair without one.
     try:
-        src_con = sqlite3.connect(str(ledger_path))
-        dst_con = sqlite3.connect(str(dst))
-        src_con.backup(dst_con)
-        src_con.close()
-        dst_con.close()
+        with closing(sqlite3.connect(str(ledger_path))) as src_con, closing(sqlite3.connect(str(dst))) as dst_con:
+            src_con.backup(dst_con)
         print(f"  Backup via sqlite backup API: {dst} ({dst.stat().st_size} bytes)")
     except Exception as e:
-        print(f"  Backup API failed {e}, falling back to copy2")
-        shutil.copy2(ledger_path, dst)
-        print(f"  Backup via copy2: {dst}")
+        dst.unlink(missing_ok=True)
+        raise RuntimeError(f"ledger backup failed for {ledger_path}: {e}") from e
     # Also copy -wal/-shm if exist as separate files for forensic
     for ext in ["-wal", "-shm"]:
         src = Path(str(ledger_path) + ext)
@@ -513,7 +551,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     qdir = make_quarantine_dir(_quarantine_root(ledger))
     quarantine_files(qdir, obs_files=obs_files)
-    backup_ledger(qdir, ledger)
+    try:
+        backup_ledger(qdir, ledger)
+    except RuntimeError as exc:
+        print(f"Abort: {exc}. The ledger was not repaired; quarantined files stay in {qdir}.")
+        return 1
     reconciled = repair_runtime_db(ledger, config)
     print("\nDone. Quarantine at", qdir)
     if not reconciled:

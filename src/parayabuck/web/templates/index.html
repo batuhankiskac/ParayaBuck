@@ -21,12 +21,12 @@
 
         <div class="chart-toolbar">
             <div id="periodSwitch" class="segmented" role="tablist" aria-label="Grafik dönemi">
-                <button type="button" data-period="1D">1G</button>
-                <button type="button" data-period="1W">1H</button>
-                <button type="button" data-period="1M" class="active">1A</button>
-                <button type="button" data-period="3M">3A</button>
-                <button type="button" data-period="1A">1Y</button>
-                <button type="button" data-period="ALL">Tümü</button>
+                <button type="button" role="tab" aria-selected="false" data-period="1D">1G</button>
+                <button type="button" role="tab" aria-selected="false" data-period="1W">1H</button>
+                <button type="button" role="tab" aria-selected="true" data-period="1M" class="active">1A</button>
+                <button type="button" role="tab" aria-selected="false" data-period="3M">3A</button>
+                <button type="button" role="tab" aria-selected="false" data-period="1A">1Y</button>
+                <button type="button" role="tab" aria-selected="false" data-period="ALL">Tümü</button>
             </div>
             <div class="legend">
                 <span><i></i>Portföy <b id="legendPortfolio">—</b></span>
@@ -73,7 +73,7 @@
     <article class="card kpi">
         <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-check"/></svg>Bugünkü değişim (gerçekleşen, tahmini)</span>
         <span id="realizedPnlValue" class="kpi-value">—</span>
-        <span class="kpi-sub">bugünkü özkaynak değişimi − açık K/Z; yatırma ve çekmeler dahil</span>
+        <span class="kpi-sub">bugünkü özkaynak değişimi − açık K/Z; bugünkü yatırma ve çekmeler bu tutarı değiştirebilir</span>
     </article>
     <article class="card kpi">
         <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-activity"/></svg>Açık pozisyon K/Z</span>
@@ -194,7 +194,7 @@
     <details class="more">
         <summary><svg class="icon icon-sm"><use href="#i-chevron"/></svg>Alım kapasitesi ayrıntıları</summary>
         <div class="kv-grid">
-            <div class="kv"><small>Pozisyon / dolu slot / limit</small><strong id="riskSlots">—</strong></div>
+            <div class="kv"><small>Açık pozisyon / dolu slot (açık emirler dahil) / en çok pozisyon</small><strong id="riskSlots">—</strong></div>
             <div class="kv"><small>Broker'da bekleyen emir</small><strong id="riskWorking">—</strong></div>
             <div class="kv"><small>Brüt alım alanı</small><strong id="riskGrossHeadroom">—</strong></div>
             <div class="kv"><small>Taahhüt edilmiş alım</small><strong id="riskCommittedBuy">—</strong></div>
@@ -224,16 +224,16 @@
 </div>
 <section class="card" aria-label="Emirler ve dolumlar">
     <div class="tabs" role="tablist">
-        <button class="tab active" type="button" data-tab="fills">Son işlemler <span id="fillsCount" class="count">0</span></button>
-        <button class="tab" type="button" data-tab="orders">Bekleyen emirler <span id="ordersCount" class="count">0</span></button>
+        <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="fills">Son işlemler <span id="fillsCount" class="count">0</span></button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-tab="orders">Bekleyen emirler <span id="ordersCount" class="count">0</span></button>
     </div>
-    <div class="table-wrap" data-panel="fills">
+    <div class="table-wrap" data-panel="fills" role="tabpanel">
         <table class="table">
             <thead><tr><th>Zaman</th><th>Sembol</th><th>Yön</th><th class="r">Miktar</th><th class="r">Fiyat</th><th class="r">Kayma</th><th class="r">Ücret</th></tr></thead>
             <tbody id="recentFillsBody"><tr class="empty"><td colspan="7">Henüz işlem yok</td></tr></tbody>
         </table>
     </div>
-    <div class="table-wrap" data-panel="orders" hidden>
+    <div class="table-wrap" data-panel="orders" role="tabpanel" hidden>
         <table class="table">
             <thead><tr><th>Sembol</th><th>Yön</th><th class="r">Miktar</th><th class="r">Referans fiyat</th><th>Durum</th><th>Karar</th></tr></thead>
             <tbody id="openOrdersBody"><tr class="empty"><td colspan="6">Bekleyen emir yok</td></tr></tbody>

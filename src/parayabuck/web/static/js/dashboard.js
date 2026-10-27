@@ -18,7 +18,7 @@
 
     // ---------- labels ----------
     const STRATEGY_STATUS = {
-      active: "Aktif", warming: "Isınıyor", halted: "Güvenlik durdurdu",
+      active: "Aktif", warming: "Isınıyor", halted: "Güvenlik kilidi devrede",
       disabled: "Kapalı", stopped: "Motor kapalı", starting: "Başlatılıyor", stopping: "Durduruluyor",
       error: "Hata", stop_failed: "Durdurma hatası", unknown: "Bilinmiyor", unavailable: "Yok"
     };
@@ -94,7 +94,7 @@
         fresh.className = "freshness" + (stale ? " stale" : "");
         const label = a.source === "unavailable" ? "hesap verisi yok"
           : stale ? "eski veri · " + fmt.duration(a.age_seconds) + " önce"
-          : "canlı · " + fmt.time(a.snapshot_at);
+          : "güncel · " + fmt.time(a.snapshot_at);
         fresh.replaceChildren(el("span", { className: "dot" + (stale ? "" : " running") }), el("span", { text: label }));
       }
       setText("grossExposureSub", a.stale ? "eski veri (" + (a.source || "?") + ")" : "brüt maruziyet");
@@ -204,7 +204,10 @@
     }
     document.querySelectorAll("#periodSwitch button").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        document.querySelectorAll("#periodSwitch button").forEach(function (b) { b.classList.toggle("active", b === btn); });
+        document.querySelectorAll("#periodSwitch button").forEach(function (b) {
+          b.classList.toggle("active", b === btn);
+          b.setAttribute("aria-selected", String(b === btn));
+        });
         view.period = btn.dataset.period;
         loadPerformance();
       });
@@ -428,6 +431,16 @@
       }
       fill.className = tone;
       bar.insertBefore(fill, bar.firstChild);
+      // Colour is not the only cue: the level is written out, with the 70% line the warning starts at.
+      const levelText = tone === "bad" ? (opts.minimum ? "en az değerin altında" : "sınır aşıldı")
+        : tone === "warn" ? (opts.minimum ? "en az değere yaklaşıyor" : "sınırın %70'ine yaklaştı") : "";
+      if (levelText) wrap.firstChild.lastChild.appendChild(el("small", { text: "  · " + levelText }));
+      bar.setAttribute("role", "meter");
+      bar.setAttribute("aria-label", label);
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", String(scale));
+      bar.setAttribute("aria-valuenow", String(Math.max(0, Number(value) || 0)));
+      bar.setAttribute("aria-valuetext", valueText + (levelText ? ", " + levelText : ""));
       wrap.appendChild(bar);
       if (opts.note) wrap.appendChild(el("div", { className: "meter-note", text: opts.note }));
       return wrap;
@@ -447,7 +460,7 @@
           meter("Nakit tamponu", risk.cash_pct, risk.cash_buffer_limit_pct, { minimum: true })
         );
       }
-      setText("riskCircuitBadge", risk.circuit_breaker ? "Kesici: " + risk.circuit_breaker : "Limitler içinde", risk.circuit_breaker ? "badge bad" : "badge ok");
+      setText("riskCircuitBadge", risk.circuit_breaker ? "Güvenlik kilidi: " + risk.circuit_breaker : "Limitler içinde", risk.circuit_breaker ? "badge bad" : "badge ok");
       const latch = Object.entries(risk.entry_risk_latch || {}).filter(function (e) { return e[1]; }).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
       setText("riskEntryLatch", latch || "Yok — alım serbest", latch ? "neg" : "pos");
       const epoch = risk.risk_epoch;
@@ -502,7 +515,10 @@
     }
     document.querySelectorAll(".tab[data-tab]").forEach(function (tab) {
       tab.addEventListener("click", function () {
-        document.querySelectorAll(".tab[data-tab]").forEach(function (t) { t.classList.toggle("active", t === tab); });
+        document.querySelectorAll(".tab[data-tab]").forEach(function (t) {
+          t.classList.toggle("active", t === tab);
+          t.setAttribute("aria-selected", String(t === tab));
+        });
         document.querySelectorAll("[data-panel]").forEach(function (panel) { panel.hidden = panel.dataset.panel !== tab.dataset.tab; });
       });
     });
@@ -526,7 +542,7 @@
       const fresh = h.account_freshness || {};
       setText("healthAccount", (fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
       setText("healthHeartbeat", h.last_heartbeat ? fmt.relative(h.last_heartbeat) : "—");
-      setText("healthRestarts", String(h.restart_count || 0));
+      setText("healthRestarts", (h.restart_count || 0) + " kez");
       const db = h.database || {};
       setText("healthDatabase", (db.exists ? "Açık" : "Yok") + (db.size_bytes ? " · " + fmt.num(db.size_bytes / 1048576, 1) + " MB" : ""));
       const rec = h.reconciliation || {};
@@ -539,7 +555,7 @@
         const w = workers[n] || {};
         return el("tr", null, [
           cell(el("span", { className: "mono", text: n })),
-          cell(el("span", { className: w.alive ? "badge ok" : "badge bad", text: w.alive ? "Canlı" : "Durdu" })),
+          cell(el("span", { className: w.alive ? "badge ok" : "badge bad", text: w.alive ? "Çalışıyor" : "Durdu" })),
           cell(w.last_heartbeat ? fmt.relative(w.last_heartbeat) : "—"), cell(String(w.restart_count || 0), "r"),
           cell(w.last_error || "—", "wrap")
         ]);
@@ -560,9 +576,15 @@
         chips("eqSymbols", u.equity.observation_set);
       }
     }
+    // Health enums arrive as English codes; the owner reads these labels.
+    const HEALTH_LABELS = { OK: "Sağlıklı", DEGRADED: "Kısıtlı", BLOCKED: "Engelli", CRITICAL: "Kritik", UNKNOWN: "Bilinmiyor" };
+    const TRADING_STATE_LABELS = {
+      ACTIVE: "Aktif", ENTRY_BLOCKED: "Alım engelli", REBALANCE_BLOCKED: "Dengeleme kilitli", MARKET_HALTED: "Piyasa durduruldu",
+      CIRCUIT_BREAKER: "Güvenlik kilidi devrede", STOPPED: "Motor kapalı", UNKNOWN: "Bilinmiyor"
+    };
     function renderOps(data) {
-      setText("opsOverall", data.overall_health || "UNKNOWN", PB.badgeClass(data.overall_health));
-      setText("opsTradingState", data.trading_state || "UNKNOWN", PB.badgeClass(data.trading_state));
+      setText("opsOverall", HEALTH_LABELS[data.overall_health] || data.overall_health || "Bilinmiyor", PB.badgeClass(data.overall_health));
+      setText("opsTradingState", TRADING_STATE_LABELS[data.trading_state] || data.trading_state || "Bilinmiyor", PB.badgeClass(data.trading_state));
       setText("opsSnapshotAge", "Anlık görüntü yaşı: " + fmt.duration(data.snapshot_age_seconds) + " · " + fmt.dateTime(data.as_of));
       const box = byId("opsChecks");
       const checks = data.checks || [];
@@ -651,9 +673,12 @@
       set("taxNetGain", tl(t.net_gain_tl));
       set("taxEstimate", tl(t.estimated_tax_tl));
       set("taxDividends", tl(t.dividend_gross_tl) + " / " + tl(t.dividend_withheld_tl));
-      // "veri eksik" when the ledger has no income rows: "aşılmadı" would read as a verified zero.
-      set("taxThreshold", t.income_declaration_status || (t.income_declaration_required ? "aşıldı, beyan gerekir" : "aşılmadı"));
-      set("taxNote", "Tahmini değerlerdir; yalnızca bu yılın net kazancı üzerinden hesaplanır.");
+      // A missing status is unknown ("veri eksik"), never a verified zero.
+      const threshold = t.income_declaration_status || (t.income_declaration_required ? "aşıldı, beyan gerekir" : "veri eksik");
+      const declarationDue = threshold === "aşıldı, beyan gerekir";
+      set("taxThreshold", declarationDue ? "Beyan gerekir" : threshold);
+      set("taxNote", "Tahmini değerlerdir; yalnızca bu yılın net kazancı üzerinden hesaplanır."
+        + (declarationDue ? " Yıllık gelir beyannamesinde bildirin; son tarih bu ekranda hesaplanmaz." : ""));
     }
     let overviewBusy = false;
     async function refreshOverview() {

@@ -89,7 +89,9 @@
       if (!s) { box.hidden = true; return; }
       const pct = function (key) { return fmt.signedPct(Number(s[key] || 0) * 100, 2); };
       const tone = function (key) { return fmt.tone(s[key]); };
+      const period = data.period;
       const items = [
+        ["Dönem", period ? period.start + " – " + period.end + " (" + period.days + " gün)" : "—", ""],
         ["Toplam getiri", pct("total_return"), tone("total_return")],
         ["Yıllık (CAGR)", pct("cagr"), tone("cagr")],
         ["Benchmark (" + (s.benchmark_symbol || "—") + ")", pct("benchmark_return"), ""],
@@ -144,7 +146,7 @@
         strategy: byId("btStrategy").value.trim(),
         parameters: parameters,
         years: parseInt(byId("btYears").value, 10) || 3,
-        days: Number.isNaN(days) ? 90 : days,
+        days: Number.isNaN(days) ? 0 : days,
         symbols: byId("btSymbols").value.trim()
       };
       const btn = byId("backtestRunBtn");

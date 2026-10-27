@@ -56,7 +56,7 @@ _ENGINE_STATE_TR: dict[str, str] = {
     "starting": "başlatılıyor",
     "warming_up": "ısınıyor",
     "degraded": "kısıtlı çalışıyor",
-    "halted": "güvenlik durdurdu",
+    "halted": "güvenlik kilidi devrede",
     "stopping": "durduruluyor",
     "stop_failed": "durdurma hatası",
     "error": "hata",

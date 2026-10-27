@@ -131,7 +131,7 @@
     window.setTimeout(function () {
       node.classList.add("leaving");
       window.setTimeout(function () { node.remove(); }, 220);
-    }, level === "error" ? 7000 : 4500);
+    }, level === "error" ? 15000 : 4500);
   }
 
   // ---------- dialogs (native <dialog>) ----------
@@ -243,7 +243,7 @@
   // ---------- engine status ----------
   const STATE_LABELS = {
     running: "Çalışıyor", stopped: "Durdu", starting: "Başlatılıyor", warming_up: "Isınıyor",
-    degraded: "Kısıtlı çalışıyor", halted: "Güvenlik durdurdu", stopping: "Durduruluyor",
+    degraded: "Kısıtlı çalışıyor", halted: "Güvenlik kilidi devrede", stopping: "Durduruluyor",
     stop_failed: "Durdurma hatası", error: "Hata"
   };
   const ACTIVE_STATES = ["running", "warming_up", "degraded", "halted"];
@@ -313,6 +313,9 @@
       danger = true;
     }
     const breaker = status.runtime && status.runtime.circuit_breaker_reason;
+    // "Kilidi doğrula" only means something while a lock is in force; a degraded engine without one has nothing to reset.
+    const resetBtn = byId("resetSafetyBtn");
+    if (resetBtn && !breaker) resetBtn.hidden = true;
     if (breaker) { messages.push("Güvenlik kilidi devrede (" + breaker + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz."); danger = true; }
     if (status.engine_error) { messages.push("Motor hatası: " + status.engine_error); danger = true; }
     const retry = status.engine && status.engine.retry;
@@ -466,6 +469,13 @@
     const form = byId("settingsForm");
     const openBtn = byId("settingsBtn");
     if (!drawer || !form || !openBtn) return;
+    // Paper OFF means real money: the warning sits next to the switch, not only in a dialog.
+    const paperCheck = byId("paperModeCheck");
+    const syncPaperWarning = function () {
+      const warn = byId("paperOffWarning");
+      if (warn && paperCheck) warn.hidden = paperCheck.checked;
+    };
+    if (paperCheck) paperCheck.addEventListener("change", syncPaperWarning);
     const setOpen = function (open) {
       drawer.classList.toggle("open", open);
       if (scrim) scrim.classList.toggle("open", open);
@@ -506,6 +516,7 @@
           byId("secretKey").placeholder = "Mevcut secret korunacak";
         }
         byId("paperModeCheck").checked = !!data.paper_mode;
+        syncPaperWarning();
         byId("equityTradingCheck").checked = data.equity_trading_enabled !== false;
         // No made-up defaults: a missing limit leaves the field empty, so the save is refused.
         byId("maxDailyLoss").value = data.daily_loss_limit_pct ?? "";

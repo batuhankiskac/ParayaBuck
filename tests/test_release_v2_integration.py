@@ -232,8 +232,10 @@ def test_equity_parameter_promotion_uses_normal_delta_and_restart_idempotency(
         assert position.ownership in {"managed", "mixed"}
 
     # The promoted catch-up must not fire over managed positions nor be
-    # confused by the baseline decision (digest-scoped guards).
-    assert runtime.startup_catch_up().status == "already_invested"
+    # confused by the baseline decision. The baseline already decided this
+    # session under the old digest, so it is a duplicate even under the new
+    # digest (R-5: a configuration change does not re-decide a session).
+    assert runtime.startup_catch_up().status == "duplicate_decision"
     assert _decision_count(repo, Market.EQUITY, runtime.configuration_digest) == 0
     first = runtime.process_closed_bars(
         [bar for bar in bars if bar.timestamp == days[300]],

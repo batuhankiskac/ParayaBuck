@@ -263,10 +263,16 @@ def test_sell_exists_buy_exists_no_buy_submission_before_sell_terminal(tmp_path)
     _fill(repository, sell)
     broker.positions = [_position("AAPL", 150)]
     broker.open_symbols.discard("AAPL")
-    resumed = runtime.advance_rebalance()
-    assert resumed is not None and resumed.status == "buy_phase_submitted"
-    buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
-    assert [order.symbol for order in buys] == ["MSFT"]
+    # The decision that owned the BUY predates the session the bars moved to:
+    # its deferred BUY is discarded at that session (P9-1), never resumed.
+    assert runtime.advance_rebalance() is None
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    # The next scheduled session plans a fresh decision. Its exit goes first
+    # and its BUY waits behind that new sell (sells before buys).
+    later = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_day + timedelta(days=40)))
+    assert later.status == "sell_phase_submitted"
+    assert later.decision_id != result.decision_id
+    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
 
 
 def test_partial_sell_keeps_buy_deferred(tmp_path) -> None:
@@ -738,8 +744,10 @@ def test_local_nonterminal_order_suppresses_deferred_planner_when_broker_is_empt
 
 
 def test_process_closed_bars_exposes_deferred_buys_advanced_in_same_cycle(tmp_path) -> None:
-    """When the bar path advances a ready rebalance, its BUYs remain visible
-    to the engine's same-cycle reservation accounting."""
+    """When the bar path advances a ready rebalance, the BUYs it submits remain
+    visible to the engine's same-cycle reservation accounting. At a new session
+    the superseded decision's BUYs are discarded (P9-1), so the BUYs visible in
+    the cycle belong to the fresh decision planned in that same cycle."""
     broker = _SimBroker((_position("AAPL", 400),))
     runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
 
@@ -750,11 +758,14 @@ def test_process_closed_bars_exposes_deferred_buys_advanced_in_same_cycle(tmp_pa
     broker.positions = [_position("AAPL", 150)]
     broker.open_symbols.discard("AAPL")
 
-    next_day = sell.decision_timestamp + timedelta(days=1)
-    resumed = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_day))
+    # A scheduled session (a month later) so the fresh decision plans its BUY.
+    next_session = sell.decision_timestamp + timedelta(days=40)
+    resumed = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_session))
 
-    assert resumed.status == "rebalance_in_progress"
-    assert any(order.side == PortfolioOrderSide.BUY for order in resumed.orders)
+    assert resumed.status == "sell_phase_submitted"
+    assert resumed.decision_id != sell.decision_id
+    assert [order.symbol for order in resumed.orders if order.side == PortfolioOrderSide.BUY] == ["MSFT"]
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.SELL]
 
 
 def test_process_closed_bars_returns_after_rebalance_completion_without_new_decision(tmp_path) -> None:

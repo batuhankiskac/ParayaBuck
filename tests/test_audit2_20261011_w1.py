@@ -134,6 +134,8 @@ def test_session_decided_under_the_other_label_is_not_deferrable() -> None:
     runtime.repository = SimpleNamespace(
         has_decision=lambda _account, _digest, timestamp, _market: timestamp == provider_label,
         recent_decision_timestamps=lambda *_args, **_kwargs: (provider_label,),
+        # Newest decision of any digest (R-5); this test only exercises the label match.
+        latest_decision_target=lambda *_args, **_kwargs: None,
     )
     engine = _engine()
     failure = RequestsConnectionError("broker read reset")

@@ -155,20 +155,30 @@ def _sell_to_buy_ready(tmp_path: Path) -> tuple[PortfolioRuntime, _Broker, str, 
 
 
 def test_w3_latched_decision_path_withholds_persisted_deferred_buy(tmp_path: Path) -> None:
-    """A1/R5D-1 (decision path): process_closed_bars with a latch keeps buy_ready."""
+    """A1/R5D-1 (decision path): a latched new session never submits the withheld BUY.
+
+    P9-1 changed the outcome: the new session supersedes the buy_ready decision, so
+    its BUY side is closed (not kept for a later submission) and the decision
+    plans on its own target.
+    """
     runtime, broker, decision_id, next_day = _sell_to_buy_ready(tmp_path)
     result = runtime.process_closed_bars(
         _bars(("AAPL", "MSFT"), next_day), entry_latch="portfolio_drawdown_halt", force_scheduled=True
     )
-    assert len(broker.submitted) == 1  # no BUY submitted
+    # The stale BUY is never submitted; the latched decision only reduces risk.
+    assert not [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
     state = runtime.repository.current_rebalance_execution(runtime.account_id, Market.EQUITY)
-    assert state is not None and state.phase == REBALANCE_PHASE_BUY_READY
-    assert state.decision_id == decision_id
-    assert result.status in {"rebalance_in_progress", "rebalance_blocked"}
+    assert state is not None
+    assert (state.decision_id, state.phase, state.status) == (decision_id, "complete", "closed_unresolved")
+    assert all(order.decision_id != decision_id for order in result.orders)
 
 
 def test_w3_latched_catch_up_path_withholds_persisted_deferred_buy(tmp_path: Path) -> None:
-    """A1/R5D-1 (catch-up path): startup_catch_up with a latch keeps buy_ready."""
+    """A1/R5D-1 (catch-up path): a latched catch-up never submits the withheld BUY.
+
+    As in the decision path, the superseded buy_ready decision is closed at the
+    new session instead of being kept for a later submission (P9-1).
+    """
     runtime, broker, decision_id, next_day = _sell_to_buy_ready(tmp_path)
     # A new closed session past a monthly boundary, so the catch-up treats
     # it as a recovering session and reaches its rebalance-advance gate
@@ -176,11 +186,11 @@ def test_w3_latched_catch_up_path_withholds_persisted_deferred_buy(tmp_path: Pat
     later = next_day + timedelta(days=40)
     runtime.seed(_bars(("AAPL", "MSFT"), later))
     result = runtime.startup_catch_up(entry_latch="signal_adjustment_unverified")
-    assert result.status in {"rebalance_in_progress", "rebalance_blocked"}
-    assert len(broker.submitted) == 1  # no BUY submitted
+    assert all(order.decision_id != decision_id for order in result.orders)
+    assert len(broker.submitted) == 1  # the stale BUY is never submitted
     state = runtime.repository.current_rebalance_execution(runtime.account_id, Market.EQUITY)
-    assert state is not None and state.phase == REBALANCE_PHASE_BUY_READY
-    assert state.decision_id == decision_id
+    assert state is not None
+    assert (state.decision_id, state.phase, state.status) == (decision_id, "complete", "closed_unresolved")
 
 
 def test_w3_unlatched_advance_still_submits_deferred_buy(tmp_path: Path) -> None:

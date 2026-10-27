@@ -273,16 +273,16 @@ def _gain_band_policy() -> PortfolioExecutionPolicy:
     return PortfolioExecutionPolicy(
         rebalance_band_pct=0.005,
         minimum_order_notional=10.0,
-        downsize_gain_band=DownsizeGainBand(thresholds=(0.01,), bands=(0.25, 0.25)),
+        downsize_gain_band=DownsizeGainBand(thresholds=(0.01,), bands=(0.125, 0.125)),
     )
 
 
 def test_a_downsize_gap_of_exactly_the_gain_band_sells() -> None:
     holds: list = []
-    # 50 shares of 10 000 at 100 = weight 0.50 -> target 0.25: gap 0.25 exactly.
-    # The lot is bought at the sell price, so the gain fraction is 0 and the band is 0.25.
+    # 50 shares of 10 000 at 100 = weight 0.50 -> target 0.375: gap 0.125 exactly.
+    # The lot is bought at the sell price, so the gain fraction is 0 and the band is 0.125.
     orders = TargetToOrderPlanner(_gain_band_policy()).plan(
-        _spy_target(0.25),
+        _spy_target(0.375),
         _spy_account(qty=50.0, current_price=100.0),
         market=Market.EQUITY,
         prices={"SPY": 100.0},
@@ -292,14 +292,14 @@ def test_a_downsize_gap_of_exactly_the_gain_band_sells() -> None:
         open_lots={"SPY": [(50.0, 100.0)]},
         gain_band_holds=holds,
     )
-    assert [(order.side, order.quantity) for order in orders] == [(PortfolioOrderSide.SELL, 25.0)]
+    assert [(order.side, order.quantity) for order in orders] == [(PortfolioOrderSide.SELL, 12.5)]
     assert holds == []
 
 
 def test_a_downsize_gap_just_under_the_gain_band_is_held() -> None:
     holds: list = []
     orders = TargetToOrderPlanner(_gain_band_policy()).plan(
-        _spy_target(0.2501),
+        _spy_target(0.3751),
         _spy_account(qty=50.0, current_price=100.0),
         market=Market.EQUITY,
         prices={"SPY": 100.0},

@@ -5437,7 +5437,11 @@ class EngineRuntime:
         # (memory and sidecar), so the halt stays latched and a retry starts from
         # the same epoch. The peak lock keeps the account loop from re-raising the
         # peak against the old baseline while this is in progress.
-        peak_lock = getattr(self.broker, "_peak_lock", None) or threading.Lock()
+        # Without a peak service the broker's own reset takes its peak lock, so
+        # it must not be called under that (non-reentrant) lock here.
+        peak_lock = (
+            getattr(self.broker, "_peak_lock", None) if peak_service is not None else None
+        ) or threading.Lock()
         with peak_lock:
             prior = None
             if peak_service is None:

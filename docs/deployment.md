@@ -207,8 +207,10 @@ The e-mail channel cannot report that the VM itself is down. The unit
 readiness endpoint (`PARAYABUCK_READYZ_URL`, default
 `http://127.0.0.1:8000/readyz`) and pings the heartbeat URL on HTTP 200, or
 `<url>/fail` on any other status or error. The external service e-mails the
-owner when pings stop. With no URL configured the unit does nothing. Its only
-outbound traffic is one HTTPS request per run.
+owner when pings stop. With no URL configured the run prints
+`deadman: no heartbeat URL configured` to stderr and exits 1, so the unit
+shows as failed instead of passing silently. Its only outbound traffic is one
+HTTPS request per run.
 
 1. In healthchecks.io create a check with period 5 minutes and grace 10
    minutes, attach the owner's e-mail, and copy the ping URL

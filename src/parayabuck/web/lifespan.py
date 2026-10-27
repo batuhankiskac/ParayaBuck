@@ -20,10 +20,12 @@ from __future__ import annotations
 import asyncio
 import time
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from parayabuck.logger import get_logger
 from parayabuck.utils import sd_notify
+from parayabuck.utils.io import sweep_orphan_temp_files
 
 if TYPE_CHECKING:
     pass
@@ -40,6 +42,26 @@ def _watchdog_gate(manager: Any) -> Any:
     """Predicate for the systemd watchdog pinger (manager-less apps always pass)."""
     gate = getattr(manager, "watchdog_healthy", None) if manager is not None else None
     return gate if callable(gate) else (lambda: True)
+
+
+def _sweep_settings_temp_files(manager: Any) -> None:
+    """Remove temp files a settings save left after a kill mid-write. Never raises.
+
+    Only the directories of the managed settings YAML and .env are swept, and
+    only the names ``atomic_write`` (``.<name>.XXXX``) and the validate step
+    (``.<name>.validate``) create for those files. Each file is handled on its
+    own so a failure on one does not skip the other.
+    """
+    for attribute in ("config_path", "env_path"):
+        managed_value = getattr(manager, attribute, None)
+        if managed_value is None:
+            continue
+        try:
+            managed = Path(managed_value)
+            for removed in sweep_orphan_temp_files(managed.parent, f".{managed.name}."):
+                log.info("Removed orphan settings temp file %s", removed)
+        except Exception as exc:
+            log.warning("Orphan settings temp sweep skipped for %s: %s", attribute, exc)
 
 
 async def _auto_start_paper_engine(manager: Any) -> None:
@@ -129,6 +151,10 @@ def create_lifespan(state_provider: Any) -> Any:
                 configure_alerts()
             except Exception as exc:  # pragma: no cover - defensive
                 log.warning("Alert delivery configuration failed: %s", exc)
+        if manager is not None:
+            # Once per web start: a settings save killed mid-write leaves a temp file
+            # behind, and nothing else removes it. Best effort; never blocks startup.
+            _sweep_settings_temp_files(manager)
         should_auto_start = (
             getattr(manager, "should_auto_start", lambda: False) if manager is not None else (lambda: False)
         )

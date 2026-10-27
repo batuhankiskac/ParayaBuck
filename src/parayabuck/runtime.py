@@ -4507,6 +4507,21 @@ class EngineRuntime:
                 return
             from parayabuck.monitoring.daily_summary import build_equity_daily_summary
 
+            # Per side: planned orders and the ones submitted in this decision, so
+            # submitted SELLs are not netted against BUYs the rebalance deferred.
+            submitted_ids = set(result.submitted_order_ids)
+            order_sides: dict[str, tuple[int, int]] = {}
+            for side in ("sell", "buy"):
+                planned_orders = [
+                    order
+                    for order in result.orders
+                    if str(getattr(getattr(order, "side", None), "value", getattr(order, "side", ""))).lower() == side
+                ]
+                if planned_orders:
+                    done = sum(
+                        1 for order in planned_orders if getattr(order, "client_order_id", None) in submitted_ids
+                    )
+                    order_sides[side] = (done, len(planned_orders))
             message, fields = build_equity_daily_summary(
                 result.target,
                 account,
@@ -4515,6 +4530,7 @@ class EngineRuntime:
                 orders=len(result.orders),
                 submitted=len(result.submitted_order_ids),
                 tax_ytd=self._daily_summary_tax_line(),
+                order_sides=order_sides,
             )
             alerts.emit("daily_summary", message=message, **fields)
         except Exception:

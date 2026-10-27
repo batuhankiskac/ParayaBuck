@@ -201,7 +201,7 @@ def test_repair_script_sets_an_owner_only_umask(restore_umask: None) -> None:
 # --- S2-4-3: orphaned credential temp files are ignored by git ---
 
 
-def test_gitignore_covers_atomic_write_env_temp_files_and_not_the_backup_file() -> None:
+def test_gitignore_covers_atomic_write_env_temp_files_and_the_backup_file() -> None:
     patterns = [
         line.strip()
         for line in (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()

@@ -1427,6 +1427,7 @@ def test_flat_position_with_stale_ownership_does_not_raise_drift(tmp_path) -> No
 def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) -> None:
     """Ownership drift during account polling must halt the runtime and
     persist the safety state instead of being retried as a transient error."""
+    today = datetime.now(UTC).date()
     import time
 
     from parayabuck.execution.alpaca import OwnershipDriftError
@@ -1438,7 +1439,7 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
     ledger.save_risk_state(
         RiskState(
             account_id="acct",
-            session_date=datetime.now(UTC).date(),
+            session_date=today,
             day_start_equity=100_000.0,
             peak_equity=105_000.0,
             realized_pnl=1_000.0,
@@ -1500,7 +1501,7 @@ def test_account_loop_drift_halts_runtime_and_persists_safety_state(tmp_path) ->
     # Risk-increasing orders are blocked at the readiness gate.
     assert "ownership_drift" in runtime._entry_readiness_reasons(Market.EQUITY)
     # The safety state survived the halt with the drift reason.
-    persisted = ledger.load_risk_state("acct", datetime.now(UTC).date())
+    persisted = ledger.load_risk_state("acct", today)
     assert persisted is not None
     assert persisted.circuit_breaker_reason == "ownership_drift"
     assert persisted.peak_equity == pytest.approx(105_000.0)

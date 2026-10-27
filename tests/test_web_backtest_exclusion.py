@@ -9,7 +9,6 @@ Covers the critical rule from web/server.py:
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any
 
 import pytest
@@ -60,9 +59,9 @@ def test_engine_rejected_while_backtest_running():
             mgr.start_engine()
         # Wait for backtest to finish, then engine can start (or at least not blocked by backtest)
         release.set()
-        deadline = time.time() + 2.0
-        while bm.is_running and time.time() < deadline:
-            time.sleep(0.01)
+        assert bm._thread is not None
+        bm._thread.join(timeout=5)
+        assert not bm._thread.is_alive()
         assert not bm.is_running
     finally:
         bm._run = original_run  # type: ignore
@@ -114,19 +113,20 @@ def test_engine_backtest_race_only_one_wins(monkeypatch: pytest.MonkeyPatch, tmp
     t2 = threading.Thread(target=backtest_start)
     t1.start()
     t2.start()
-    t1.join(timeout=2)
-    t2.join(timeout=2)
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+    # A contender still running would leave its result unset, and the check
+    # below would then pass vacuously, so both must have finished and reported.
+    assert not t1.is_alive() and not t2.is_alive(), results
+    assert results["engine"] is not None and results["backtest"] is not None, results
     # At most one should have succeeded
     successes = sum(1 for v in results.values() if v == "ok")
     assert successes <= 1, f"both won unexpectedly: {results}"
-    # At least one should have run (or both failed due to engine already active etc.)
-    # The point is no corruption and exclusion is enforced — if backtest won, engine is blocked
     # Clean up
     bm._run = orig_run  # type: ignore
     release.set()
-    deadline = time.time() + 1.0
-    while bm.is_running and time.time() < deadline:
-        time.sleep(0.01)
+    if bm._thread is not None:
+        bm._thread.join(timeout=5)
 
 
 def test_backtest_lock_is_rlock_and_reentrant():

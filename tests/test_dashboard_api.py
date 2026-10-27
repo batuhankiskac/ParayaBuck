@@ -504,13 +504,16 @@ assert get_web_state() is server.web_state and server.app.state.web is server.we
 """
 
 
-def test_serving_module_builds_exactly_one_engine_manager_and_app() -> None:
+def test_serving_module_builds_exactly_one_engine_manager_and_app(tmp_path: Path) -> None:
     """``uvicorn parayabuck.web.server:app`` composes one process-wide state;
     importing the application factory builds nothing."""
     repo = Path(__file__).resolve().parents[1]
+    # The child is outside the in-process isolation fixture and its engine
+    # manager resolves relative data/runtime paths from the cwd, so it runs
+    # from tmp_path, never from the checkout that holds the operator's state.
     result = subprocess.run(
         [sys.executable, "-c", _ONE_PROCESS_WIDE_STATE, str(repo / "src")],
-        cwd=str(repo),
+        cwd=str(tmp_path),
         env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True,
         text=True,

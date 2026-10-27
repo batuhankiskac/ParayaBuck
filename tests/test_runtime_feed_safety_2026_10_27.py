@@ -286,6 +286,8 @@ def test_notify_sends_datagrams_to_notify_socket(monkeypatch: pytest.MonkeyPatch
         server = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         try:
             server.bind(path)
+            # A regression must fail the test, not block the whole suite on recv().
+            server.settimeout(2.0)
             monkeypatch.setenv("NOTIFY_SOCKET", path)
 
             assert sd_notify.ready() is True
@@ -316,6 +318,7 @@ def test_notify_supports_abstract_sockets(monkeypatch: pytest.MonkeyPatch) -> No
     server = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     try:
         server.bind("\0" + name)
+        server.settimeout(2.0)
         monkeypatch.setenv("NOTIFY_SOCKET", "@" + name)
 
         assert sd_notify.ready() is True

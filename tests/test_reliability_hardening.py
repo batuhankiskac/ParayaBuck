@@ -339,12 +339,10 @@ def _engine_with_symbols(symbols: tuple[str, ...]):
             for sym, vt in verified_through.items():
                 if sym in rt.history:
                     rt.signal_verified_through_by_symbol[sym] = vt  # type: ignore[attr-defined]
-            rt.signal_last_verified_at = datetime.now(UTC)  # type: ignore[attr-defined]
             return changed
 
         rt.adopt_authoritative_signal_history = adopt  # type: ignore[attr-defined]
         rt.signal_verified_through_by_symbol = {}  # type: ignore[attr-defined]
-        rt.signal_last_verified_at = None  # type: ignore[attr-defined]
         runtimes.append(rt)
 
     # Simplify: use first runtime for all symbols (single runtime with all histories)

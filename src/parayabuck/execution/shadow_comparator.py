@@ -184,7 +184,7 @@ def _metadata_value(target_json: object, key: str, default: str) -> str:
     return default
 
 
-def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = None) -> tuple[ShadowOrder, ...]:
+def _load_orders(connection: sqlite3.Connection) -> tuple[ShadowOrder, ...]:
     required = {"portfolio_runtime_sessions", "portfolio_decisions", "portfolio_orders"}
     if not all(_table_exists(connection, table) for table in required):
         return ()
@@ -221,8 +221,6 @@ def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = Non
             continue
         origin = str(row[10]) if row[10] is not None else _metadata_value(row[9], "decision_origin", "scheduled")
         role = str(row[11]) if row[11] is not None else _metadata_value(row[9], "execution_role", "immediate")
-        if as_of is not None and timestamp > as_of:
-            continue
         result.append(
             ShadowOrder(
                 client_order_id=str(row[0]),
@@ -256,7 +254,7 @@ def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = Non
             market = Market(str(market_value).lower())
         except ValueError:
             continue
-        if timestamp is not None and (as_of is None or timestamp <= as_of):
+        if timestamp is not None:
             by_market.setdefault(market, set()).add(timestamp)
     superseded: dict[str, datetime] = {}
     for order in result:
@@ -269,9 +267,7 @@ def _load_orders(connection: sqlite3.Connection, *, as_of: datetime | None = Non
     return tuple(replace(order, superseded_at=superseded.get(order.client_order_id)) for order in result)
 
 
-def _actual_from_events(
-    connection: sqlite3.Connection, client_order_id: str, *, as_of: datetime | None = None
-) -> dict[str, object] | None:
+def _actual_from_events(connection: sqlite3.Connection, client_order_id: str) -> dict[str, object] | None:
     if not _table_exists(connection, "portfolio_execution_events"):
         return None
     cols = _columns(connection, "portfolio_execution_events")
@@ -295,8 +291,6 @@ def _actual_from_events(
     ).fetchall()
     valid_fill_qualities = {"first_fill", "valid_incremental"}
     benign_nonfill_qualities = {"status_only", "duplicate_or_zero_delta"}
-    if as_of is not None:
-        rows = [row for row in rows if (event_at := _parse_timestamp(row[0])) is not None and event_at <= as_of]
     observed_qualities = [str(row[6]) if row[6] is not None else "missing_measurement_quality" for row in rows]
     blocking = sorted(
         {quality for quality in observed_qualities if quality not in valid_fill_qualities | benign_nonfill_qualities}
@@ -552,24 +546,18 @@ def run_shadow_comparator(
     config: Any,
     *,
     dataset: dict[str, object],
-    as_of: datetime | None = None,
 ) -> dict[str, object]:
-    """Build an offline comparison report from a read-only PAPER ledger.
-
-    ``as_of`` makes the result historical: later decisions and raw broker
-    events are invisible, while the default preserves the existing latest
-    snapshot behavior.
-    """
+    """Build an offline comparison report from a read-only PAPER ledger."""
     # Use the engine's existing duplicate/canonical-symbol contract before the
     # comparator applies its independent, golden-locked schedule loop.
     local_bars = tuple(PortfolioBacktestEngine._deduplicate(list(bars)))
     connection = _open_readonly(db_path, missing_ok=False)
     connection.row_factory = sqlite3.Row
     try:
-        orders = _load_orders(connection, as_of=as_of)
+        orders = _load_orders(connection)
         records: list[dict[str, object]] = []
         for order in orders:
-            actual = _actual_from_events(connection, order.client_order_id, as_of=as_of) or _actual_from_legacy_fills(
+            actual = _actual_from_events(connection, order.client_order_id) or _actual_from_legacy_fills(
                 connection, order.client_order_id
             )
             records.append(_order_record(order, actual, local_bars, config))

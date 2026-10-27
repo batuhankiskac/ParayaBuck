@@ -136,12 +136,12 @@ def test_stream_health_owes_nothing_outside_the_calendar_session() -> None:
     engine.config = SimpleNamespace(account_poll_interval_seconds=15.0)
     # No bar ever delivered: on a holiday and after an early close the
     # runtime is ready anyway, mid-session it is not.
-    assert engine._stream_worker_delivering(Market.EQUITY, worker, _et(THANKSGIVING, 12, 0)) is True
-    assert engine._stream_worker_delivering(Market.EQUITY, worker, _et(EARLY_CLOSE, 14, 0)) is True
-    assert engine._stream_worker_delivering(Market.EQUITY, worker, _et(FULL_EST, 12, 0)) is False
+    assert engine._stream_worker_delivering(worker, _et(THANKSGIVING, 12, 0)) is True
+    assert engine._stream_worker_delivering(worker, _et(EARLY_CLOSE, 14, 0)) is True
+    assert engine._stream_worker_delivering(worker, _et(FULL_EST, 12, 0)) is False
     # A dead worker is unhealthy whatever the calendar says.
     worker.alive = False
-    assert engine._stream_worker_delivering(Market.EQUITY, worker, _et(THANKSGIVING, 12, 0)) is False
+    assert engine._stream_worker_delivering(worker, _et(THANKSGIVING, 12, 0)) is False
 
 
 def test_out_of_process_health_agrees_with_the_runtime_calendar() -> None:
@@ -316,7 +316,7 @@ def test_session_close_fallback_gives_up_within_bounded_attempts(monkeypatch: py
     close = _et(EARLY_CLOSE, 13, 0)
     engine = _flush_engine(monkeypatch, close)
     engine._historical = _Historical(error=ConnectionError("provider down"))
-    engine._arm_session_close_fallback({"SPY": close - timedelta(minutes=2)}, close, close)
+    engine._arm_session_close_fallback({"SPY": close - timedelta(minutes=2)}, close)
     now = close + timedelta(minutes=15)
     for _attempt in range(runtime_module._SESSION_CLOSE_FALLBACK_ATTEMPTS + 1):
         engine._run_session_close_fallback(now)

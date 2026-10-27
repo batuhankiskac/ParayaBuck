@@ -94,7 +94,7 @@ def test_provider_timeout_exponential_retry_recovers() -> None:
     alerts.reset_for_tests()
     metrics.reset_for_tests()
     # Throttle disabled for deterministic delivery count
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     attempts = {"n": 0}
 
     def flaky() -> str:
@@ -123,7 +123,7 @@ def test_provider_timeout_exponential_retry_recovers() -> None:
 
 def test_provider_timeout_exhausts_after_5_attempts() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
 
     def always_timeout() -> str:
         raise TimeoutError("provider timeout")
@@ -146,7 +146,7 @@ def test_provider_timeout_exhausts_after_5_attempts() -> None:
 # ---------------------------------------------------------------------------
 def test_broker_timeout_reconcile_first_never_blind_retry() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     _FakeBroker(_account())
     # Simulate broker timeout on account fetch; reconcile must be called before retry
     broker_reconciled = {"called": False}
@@ -188,7 +188,7 @@ def test_accepted_but_timeout_ambiguous_reconciles_without_duplicate(tmp_path: P
     Recovery must reconcile, never blind-resubmit with same client_order_id.
     """
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     # Use automate with reconcile path for PENDING_ORDER_UNKNOWN
 
     reconcile_calls = {"n": 0}
@@ -229,7 +229,7 @@ def test_accepted_but_timeout_ambiguous_reconciles_without_duplicate(tmp_path: P
 # ---------------------------------------------------------------------------
 def test_db_locked_fail_closed_immediately() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     record = db_integrity_fail_closed(IncidentCategory.DATABASE_ERROR, account_id="acct", error="database is locked")
     assert record.recovery_result == "halted_trading_persisted"
     assert record.attempted_recovery == "fail_closed_no_retry"
@@ -281,7 +281,7 @@ def test_restart_resumes_without_duplicate_orders(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 def test_stale_account_blocks_entries_and_emits_incident() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     metrics.reset_for_tests()
     # stale account snapshot age > threshold
     _account(stale=True)

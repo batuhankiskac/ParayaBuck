@@ -131,7 +131,7 @@ def test_coalescing_key_includes_market() -> None:
     assert q.put_market_event(_Event(equity, stamp)) == "added"
     crypto = Bar(stamp, "X", "1d", 2, 2, 2, 2, 1.0, Market.CRYPTO)
     assert q.put_market_event(_Event(crypto, stamp)) == "overflow"
-    assert q.drain_for_test()[0] is not None and q.drain_for_test()[0].bar.close == 1.0  # type: ignore[union-attr]
+    assert tuple(q._items)[0] is not None and tuple(q._items)[0].bar.close == 1.0  # type: ignore[union-attr]
 
 
 # R2A2: a batch parked past its retry window expires instead of re-deciding.

@@ -22,7 +22,7 @@ from __future__ import annotations
 import sqlite3
 from collections import deque
 from collections.abc import Collection, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
@@ -78,14 +78,6 @@ class LotDisposal:
     cost_tl_used: float
     proceeds_tl: float
     gain_tl: float
-
-    def to_dict(self) -> dict[str, Any]:
-        """JSON-ready mapping (dates as ISO strings)."""
-        record = asdict(self)
-        for key, value in record.items():
-            if isinstance(value, date):
-                record[key] = value.isoformat()
-        return record
 
 
 def turkey_date(instant: datetime) -> date:

@@ -35,7 +35,7 @@ _REAL_SLEEP = asyncio.sleep
 def _alert_sink() -> Any:
     alerts.reset_for_tests()
     # Throttling is not the subject here: count every delivered alert.
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     yield
     alerts.reset_for_tests()
 

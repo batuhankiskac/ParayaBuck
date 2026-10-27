@@ -175,10 +175,6 @@ class AlpacaHistoricalData:
         self._provider_fallbacks: int = 0
         self._last_batch_degraded: bool = False
         self.last_incomplete_symbols: frozenset[str] = frozenset()
-        # Observability counters (measured provider calls).
-        self.provider_calls: int = 0
-        self.provider_symbols_requested: int = 0
-        self.provider_bars_returned: int = 0
 
     def feed_status(self) -> dict[str, object]:
         """Configured and effective equity historical feed for reporting."""
@@ -192,7 +188,6 @@ class AlpacaHistoricalData:
             # fallback the health surface already reads.
             "quote_effective": bars_effective,
             "sip_fallback_active": self._sip_fallback_active,
-            "sip_quote_fallback_active": self._sip_fallback_active,
             # A downgrade is bounded, not permanent: the next SIP request at
             # or after this instant re-probes and restores the configured feed.
             "sip_fallback_since": (fallback_since.isoformat() if isinstance(fallback_since, datetime) else None),
@@ -305,11 +300,6 @@ class AlpacaHistoricalData:
                 adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
             )
         )
-        try:
-            self.provider_calls += 1
-            self.provider_symbols_requested += len(symbols)
-        except Exception:
-            pass
         frame = response.df
         result: dict[str, Bar] = {}
         if frame.empty:
@@ -343,8 +333,6 @@ class AlpacaHistoricalData:
         adjustment: str,
     ) -> tuple[list[str], datetime, datetime]:
         """Validate and normalize one batch request."""
-        if not symbols:
-            return [], datetime.now(UTC), datetime.now(UTC)
         if timeframe not in _TIMEFRAMES:
             raise ValueError(f"Unsupported timeframe: {timeframe}")
         if adjustment not in {"raw", "splits", "all"}:
@@ -750,13 +738,6 @@ class AlpacaHistoricalData:
             )
             self._provider_fallbacks = getattr(self, "_provider_fallbacks", 0) + 1
         log.info("Fetched %d %s bars for %d symbols", total, timeframe, len(symbols))
-        # Measured provider-call observability (for signal/universe hardening).
-        try:
-            self.provider_calls += 1
-            self.provider_symbols_requested += len(symbols)
-            self.provider_bars_returned += total
-        except Exception:
-            pass
         return bars
 
     @staticmethod
@@ -780,7 +761,6 @@ class AlpacaHistoricalData:
         timeframe: str,
         start_at: datetime,
         end_at: datetime,
-        min_pct: float = MIN_CACHE_COVERAGE_PCT,
     ) -> bool:
         """Whether cached bars plausibly cover the requested window.
 
@@ -797,7 +777,7 @@ class AlpacaHistoricalData:
         trading_days = weekday_count(start_at, end_at)
         bars_per_day = max(1, 390 // minutes)
         expected = trading_days * bars_per_day
-        return bool(expected <= 0 or unique / expected >= min_pct)
+        return bool(expected <= 0 or unique / expected >= MIN_CACHE_COVERAGE_PCT)
 
     @staticmethod
     def _expected_session_slots(timeframe: str, start_at: datetime, end_at: datetime) -> dict[date, int] | None:

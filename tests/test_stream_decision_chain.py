@@ -210,7 +210,7 @@ def _engine(portfolio_runtime: Any, historical: Any) -> EngineRuntime:
 
 
 def _events(engine: EngineRuntime) -> list[_Event]:
-    return [item for item in engine._events.drain_for_test() if item is not None]
+    return [item for item in tuple(engine._events._items) if item is not None]
 
 
 def test_minute_stream_defers_the_equity_batch_and_the_loop_reruns_it(

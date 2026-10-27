@@ -243,7 +243,6 @@ def test_disabled_brake_never_reads_or_writes_the_state(tmp_path, monkeypatch, p
         raise AssertionError("drawdown liquidation state accessed while the brake is off")
 
     monkeypatch.setattr(PortfolioStateRepository, "drawdown_liquidation_state", _forbidden)
-    monkeypatch.setattr(PortfolioStateRepository, "put_drawdown_liquidation_state", _forbidden)
     broker = _Broker((_position("AAPL", 10),), equity=50_000.0)
     runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.30}, liquidation=policy)
 

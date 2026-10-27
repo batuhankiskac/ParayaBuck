@@ -14,7 +14,10 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
+from parayabuck.execution.alpaca_account import AccountService
 from parayabuck.execution.alpaca_client import AlpacaClient, BrokerClock, parse_broker_timestamp
+from parayabuck.execution.alpaca_orders import OrderService
+from parayabuck.execution.alpaca_reconciliation import ReconciliationService
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -26,18 +29,7 @@ from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol, same_symbol
 from parayabuck.utils import is_crypto
 
-log = get_logger("parayabuck.execution.alpaca")
-
-_emit_alert = emit_execution_alert
-# Alpaca's asset metadata has no notional minimum (the SDK Asset model carries
-# none); the broker's order minimum is $1.
-_ALPACA_MINIMUM_ORDER_NOTIONAL = 1.0
-
-from parayabuck.execution.alpaca_account import AccountService  # noqa: E402
-from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
-from parayabuck.execution.alpaca_reconciliation import ReconciliationService  # noqa: E402
-
-from .alpaca_models import (  # noqa: E402
+from .alpaca_models import (
     DEAD_BROKER_ORDER_STATUSES,
     AmbiguousOrderState,
     DefiniteOrderRejection,
@@ -45,6 +37,13 @@ from .alpaca_models import (  # noqa: E402
     ProtectionReconciliationError,
     RiskStatePersistenceError,
 )
+
+log = get_logger("parayabuck.execution.alpaca")
+
+_emit_alert = emit_execution_alert
+# Alpaca's asset metadata has no notional minimum (the SDK Asset model carries
+# none); the broker's order minimum is $1.
+_ALPACA_MINIMUM_ORDER_NOTIONAL = 1.0
 
 
 class AlpacaBroker:

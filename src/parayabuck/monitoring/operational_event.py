@@ -253,34 +253,6 @@ class OperationalEvent:
             "fields": dict(self.fields),
         }
 
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> OperationalEvent:
-        occurred_at_raw = data["occurred_at"]
-        if isinstance(occurred_at_raw, str):
-            occurred_at = datetime.fromisoformat(occurred_at_raw)
-            if occurred_at.tzinfo is None:
-                occurred_at = occurred_at.replace(tzinfo=UTC)
-        else:
-            occurred_at = occurred_at_raw
-        return cls(
-            event_id=str(data["event_id"]),
-            occurred_at=occurred_at,
-            kind=str(data["kind"]),
-            severity=str(data["severity"]),
-            message=str(data["message"]),
-            session_id=data.get("session_id"),
-            account_id=data.get("account_id"),
-            mode=data.get("mode"),
-            market=data.get("market"),
-            strategy=data.get("strategy"),
-            decision_id=data.get("decision_id"),
-            client_order_id=data.get("client_order_id"),
-            broker_order_id=data.get("broker_order_id"),
-            incident_id=data.get("incident_id"),
-            correlation_id=data.get("correlation_id"),
-            fields=redact_fields(dict(data.get("fields") or {})),
-        )
-
 
 def create_event(
     *,

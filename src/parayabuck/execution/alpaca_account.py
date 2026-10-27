@@ -80,6 +80,24 @@ def quantities_agree(owned: float, broker: float) -> bool:
     return abs(owned - broker) <= max(QUANTITY_MATCH_FLOOR, owned * QUANTITY_TOLERANCE)
 
 
+def bot_tradable_symbols(broker: Any) -> frozenset[str] | None:
+    """Canonical symbols the bot trades, or None when no provider says.
+
+    The brokerage account is shared, so the bot's own tradable universe is
+    the boundary between its positions and someone else's. None (no
+    provider, or an unreadable one) is fail-closed: every unowned equity
+    position then stays drift, exactly as before.
+    """
+    provider = getattr(broker, "bot_tradable_symbols", None)
+    if provider is None:
+        return None
+    try:
+        return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
+    except Exception:
+        log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
+        return None
+
+
 def _trading_day(now: datetime) -> date:
     """The New York calendar date a poll belongs to."""
     return now.astimezone(_NEW_YORK).date()
@@ -322,17 +340,6 @@ class AccountService:
             return snapshot  # type: ignore[no-any-return]
         return None
 
-    def _bot_tradable_symbols(self) -> frozenset[str] | None:
-        """Canonical symbols the bot trades, or None when no provider says."""
-        provider = getattr(self._broker, "bot_tradable_symbols", None)
-        if provider is None:
-            return None
-        try:
-            return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
-        except Exception:
-            log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
-            return None
-
     @staticmethod
     def _price(value: Any, *, symbol: str, tolerate_missing: bool) -> float:
         """A finite broker mark; a foreign position reads a bad one as ``0.0``.
@@ -435,7 +442,7 @@ class AccountService:
         portfolio_owned_provider = getattr(broker, "portfolio_owned_quantities", None)
         if portfolio_owned_provider is not None:
             owned_quantities = portfolio_owned_provider() or {}
-        tradable_symbols = self._bot_tradable_symbols()
+        tradable_symbols = bot_tradable_symbols(self._broker)
         unrealized = 0.0
         intraday_unrealized = 0.0
         raw_positions: Any = client.get_all_positions()

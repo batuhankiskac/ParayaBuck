@@ -50,7 +50,6 @@ def _verifier_engine(symbols: tuple[str, ...], stored: dict[str, list[Bar]]):
     runtime.history = {symbol: list(bars) for symbol, bars in stored.items()}
     runtime.symbols = tuple(symbols)
     runtime.signal_verified_through_by_symbol = {}
-    runtime.signal_last_verified_at = None
     runtime.adopt_authoritative_signal_history = lambda *_a, **_k: 0  # type: ignore[attr-defined]
 
     engine = EngineRuntime.__new__(EngineRuntime)

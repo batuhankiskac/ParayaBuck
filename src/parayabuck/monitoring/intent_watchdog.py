@@ -45,7 +45,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
 from parayabuck.core.models import AccountSnapshot, Market
-from parayabuck.markets.nyse_calendar import NEW_YORK, nyse_sessions, sessions_around
+from parayabuck.markets.nyse_calendar import NEW_YORK, sessions_around
 from parayabuck.markets.symbols import canonical_symbol
 
 # Absolute weight, as a fraction of account equity, by which a position may
@@ -117,7 +117,7 @@ class IntentAlarm:
         return asdict(self)
 
 
-def equity_decision_time(session: date, close: datetime) -> datetime:
+def equity_decision_time(close: datetime) -> datetime:
     """Wall time the session-close decision is expected: the session's close."""
     return close
 
@@ -125,7 +125,7 @@ def equity_decision_time(session: date, close: datetime) -> datetime:
 def last_due_equity_session(now: datetime, grace: timedelta) -> tuple[date, datetime] | None:
     """The newest session whose decision deadline (decision time + grace) has passed."""
     for session, _open, close in reversed(sessions_around(now)):
-        deadline = equity_decision_time(session, close) + grace
+        deadline = equity_decision_time(close) + grace
         if deadline <= now:
             return session, deadline
     return None
@@ -343,7 +343,7 @@ def evaluate_equity(
     elif latest is not None:
         session = latest.decision_timestamp.astimezone(NEW_YORK).date()
         close = next((c for s, _o, c in sessions_around(now) if s == session), None)
-        decided_at = equity_decision_time(session, close) if close is not None else latest.decision_timestamp
+        decided_at = equity_decision_time(close) if close is not None else latest.decision_timestamp
         next_open = next_equity_open_after(decided_at)
         if next_open is not None:
             fill_deadline = next_open + settings.equity_fill_grace
@@ -372,6 +372,5 @@ __all__ = [
     "held_weights",
     "last_due_equity_session",
     "next_equity_open_after",
-    "nyse_sessions",
     "over_target_tolerance",
 ]

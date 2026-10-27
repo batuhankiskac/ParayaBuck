@@ -57,7 +57,7 @@ def _pinned_host_and_alerts(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(live_authorization, "trading_host_identity", lambda: _HOST)
     monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: None)
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     yield
     alerts.reset_for_tests()
 

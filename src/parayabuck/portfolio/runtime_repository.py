@@ -872,11 +872,6 @@ class PortfolioStateRepository:
             rearmed=bool(row[1]),
         )
 
-    def put_drawdown_liquidation_state(self, account_id: str, market: Market, state: DrawdownLiquidationState) -> None:
-        """Persist the brake RED-state outside a decision (the decision path uses the same upsert in its transaction)."""
-        with self.store.lock, self.store.connection:
-            _upsert_drawdown_liquidation_state(self.store.connection, account_id, market, state)
-
     def record_order(self, order: PortfolioOrderRequest, status: str) -> None:
         with self.store.lock, self.store.connection:
             self.store.connection.execute(

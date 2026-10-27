@@ -31,7 +31,7 @@ def _reset_alert_state() -> None:
     alerts.reset_for_tests()
     # Transition semantics are the subject here, not throttling; disable the
     # per-kind window so consecutive transitions are all delivered.
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
 
 
 def _shell() -> EngineRuntime:

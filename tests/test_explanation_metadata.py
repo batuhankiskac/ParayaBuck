@@ -41,7 +41,7 @@ def test_alerts_emit_never_raises_and_accepts_all_kinds() -> None:
 
 
 def test_alerts_log_carries_kind_message_and_fields(caplog: pytest.LogCaptureFixture) -> None:
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
         alerts.emit("data_provider_unavailable", message="scanner down", market="equity", attempt=1)
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ALERT ")]
@@ -50,7 +50,7 @@ def test_alerts_log_carries_kind_message_and_fields(caplog: pytest.LogCaptureFix
 
 
 def test_alerts_throttle_coalesces_repeat_failures(caplog: pytest.LogCaptureFixture) -> None:
-    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts._throttle_seconds = 60.0
     with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
         alerts.emit("reconciliation_failure", message="first")
         alerts.emit("reconciliation_failure", message="second, throttled")
@@ -68,7 +68,7 @@ def test_alerts_throttle_coalesces_repeat_failures(caplog: pytest.LogCaptureFixt
 def test_alerts_throttle_keys_on_reason_and_state() -> None:
     """A new failure reason (or state) of the same kind must not be swallowed
     by an earlier, different one inside the throttle window."""
-    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts._throttle_seconds = 60.0
     alerts.emit("runtime_start_failed", message="a", reason="credentials_missing")
     alerts.emit("runtime_start_failed", message="b", reason="trading_host_unauthorized")
     alerts.emit("runtime_start_failed", message="c", reason="trading_host_unauthorized")

@@ -109,7 +109,6 @@ def test_signal_basis_verifies_decision_symbols_without_the_benchmark() -> None:
     runtime.symbols = universe
     runtime.history = {symbol: [_bar(symbol, day) for day in dates] for symbol in universe}
     runtime.signal_verified_through_by_symbol = {}
-    runtime.signal_last_verified_at = None
     runtime.previous_timestamp = None
     engine = EngineRuntime.__new__(EngineRuntime)
     engine._symbols_by_market = {Market.EQUITY: set(universe)}

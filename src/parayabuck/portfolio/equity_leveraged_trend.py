@@ -134,7 +134,6 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
     display_name = "Leveraged index trend v1"
     supported_timeframes = ("1d",)
     rebalance_policy_declared = "hours:24"
-    cadence_label = "daily"
 
     def __init__(self, parameters: dict[str, object] | None = None) -> None:
         merged = dict(parameters or {})

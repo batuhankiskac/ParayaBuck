@@ -251,6 +251,35 @@ around it by relaxing `ProtectSystem`.
 Config-only edits (risk limits, host/port, log level) are unaffected: they do
 not touch `.env`.
 
+### Encrypting the API keys with systemd-creds (optional)
+
+The engine reads every credential from `$CREDENTIALS_DIRECTORY/<NAME>` first and
+from the environment second (`config.read_credential`), so the Alpaca keys can
+leave the plain `.env`. Do this on the VM yourself; the keys never pass through
+any tool or log:
+
+```bash
+sudo install -d -m 0700 /etc/parayabuck/creds
+read -rs KEY && printf %s "$KEY" | sudo systemd-creds encrypt --name=ALPACA_API_KEY - /etc/parayabuck/creds/ALPACA_API_KEY.cred; unset KEY
+read -rs SECRET && printf %s "$SECRET" | sudo systemd-creds encrypt --name=ALPACA_SECRET_KEY - /etc/parayabuck/creds/ALPACA_SECRET_KEY.cred; unset SECRET
+sudo systemctl edit parayabuck
+```
+
+In the drop-in add:
+
+```ini
+[Service]
+LoadCredentialEncrypted=ALPACA_API_KEY:/etc/parayabuck/creds/ALPACA_API_KEY.cred
+LoadCredentialEncrypted=ALPACA_SECRET_KEY:/etc/parayabuck/creds/ALPACA_SECRET_KEY.cred
+```
+
+Then remove the two lines from `.env`, keep it `chmod 600` (`doctor --strict`
+refuses a group- or world-readable credential file), and run
+`sudo systemctl restart parayabuck` and `curl 127.0.0.1:8000/readyz`. SMTP
+login (`PARAYABUCK_SMTP_USERNAME` / `PARAYABUCK_SMTP_PASSWORD`) and the LIVE keys
+(`ALPACA_LIVE_API_KEY` / `ALPACA_LIVE_SECRET_KEY`) work the same way. Rollback:
+delete the drop-in, put the lines back in `.env`, restart.
+
 ## First install (fresh VM)
 
 ```bash

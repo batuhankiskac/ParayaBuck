@@ -1680,8 +1680,9 @@ def _load_bars(
     from parayabuck.config import load_env_file
 
     load_env_file()
-    key = os.getenv("ALPACA_API_KEY", "")
-    secret = os.getenv("ALPACA_SECRET_KEY", "")
+    from parayabuck.live_safety import mode_credentials
+
+    key, secret = mode_credentials(live=False)
     if not key or not secret:
         raise SystemExit("ALPACA_API_KEY and ALPACA_SECRET_KEY are required for downloads")
     symbols = _candidate_symbols(config, market, args.symbols)

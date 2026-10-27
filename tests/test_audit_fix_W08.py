@@ -375,6 +375,9 @@ def test_trade_update_sqlite_calls_run_off_the_event_loop_thread() -> None:
     repository = _TradeRepository(None)  # type: ignore[arg-type]
     runtime, record = _trade_runtime(repository)
     repository._runtime = runtime
+    # A fresh post-fill fetch, not a reused cache: a cached pre-fill snapshot is
+    # never persisted across a fill (C2-2-3).
+    runtime.broker.snapshot_if_fresh = lambda _age: None
     loop_thread = threading.get_ident()
     asyncio.run(runtime._handle_trade_update(_fill_update()))
     assert repository.threads["has_order"] != loop_thread

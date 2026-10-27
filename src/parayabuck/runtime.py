@@ -6875,6 +6875,7 @@ _HELD_SESSION_STATUSES = frozenset(
         "submit_blocked",
         "replan_sell_submitted",
         "buy_phase_submitted",
+        "replan_order_in_flight",
     }
 )
 

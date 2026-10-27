@@ -378,6 +378,9 @@ def test_restart_during_sell_phase_recovers_exactly_once(tmp_path) -> None:
         repository,
         mode="paper",
         maximum_allocation=0.50,
+        # The same configuration as before the restart: a different digest
+        # would now (R2-8-2) treat the open rebalance as superseded.
+        risk_limits=_PRE_VT35_LIMITS,
         account_id="acct",
     )
     # The SELL filled while the process was down (persisted via trade updates
@@ -421,6 +424,8 @@ def test_crash_before_broker_ack_never_submitted_recovers_autonomously(tmp_path)
         repository,
         mode="paper",
         maximum_allocation=0.50,
+        # Same configuration as the pre-restart runtime (see the restart test).
+        risk_limits=_PRE_VT35_LIMITS,
         account_id="acct",
     )
     recovered = runtime_b.advance_rebalance()
@@ -526,6 +531,8 @@ def test_crash_before_ack_but_broker_filled_recovers_real_fill(tmp_path) -> None
         repository,
         mode="paper",
         maximum_allocation=0.50,
+        # Same configuration as the pre-restart runtime (see the restart test).
+        risk_limits=_PRE_VT35_LIMITS,
         account_id="acct",
     )
     recovered = runtime_b.advance_rebalance()

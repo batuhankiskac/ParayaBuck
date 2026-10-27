@@ -1038,6 +1038,24 @@ class PortfolioStateRepository:
             "decision_timestamp": str(row[3]),
         }
 
+    def decision_configuration_digest(self, decision_id: str) -> str | None:
+        """Configuration digest a persisted decision was made under, or ``None``."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT configuration_digest FROM portfolio_decisions WHERE decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def order_created_at(self, client_order_id: str) -> datetime | None:
+        """When a portfolio order row was written (UTC-aware), or ``None`` when unknown."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                "SELECT created_at FROM portfolio_orders WHERE client_order_id = ?",
+                (client_order_id,),
+            ).fetchone()
+        return datetime.fromisoformat(str(row[0])) if row is not None and row[0] is not None else None
+
     def rebalance_buy_orders(self, decision_id: str) -> tuple[dict[str, object], ...]:
         """The BUY orders planned at decision time (deferred for the SELL phase).
 

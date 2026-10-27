@@ -912,6 +912,9 @@ def test_runtime_holds_the_downsize_and_persists_it_with_the_decision(
     )
     assert runtime._managed_open_lots((SYMBOL,)) == {SYMBOL: ((900.0, 50.0),)}
 
+    # The fixture's seeded fill records a decision under another digest; clear the
+    # cadence it carries (R2-8-5) so the decision is judged on its own terms.
+    runtime.previous_timestamp = None
     result = runtime.process_closed_bars(_runtime_bars())
     assert result.orders == ()
     # 1000 shares at $100 on $100k is 0.90; a 0.85 target with a 50 % gain is held.
@@ -946,6 +949,9 @@ def test_runtime_trades_a_risk_capped_downsize(tmp_path: Path) -> None:
         risk_limits=_risk_limits(maximum_equity_asset=0.84),
         execution_policy=PortfolioExecutionPolicy(downsize_gain_band=SHIPPED),
     )
+    # The fixture's seeded fill records a decision under another digest; clear the
+    # cadence it carries (R2-8-5) so the decision is judged on its own terms.
+    runtime.previous_timestamp = None
     result = runtime.process_closed_bars(_runtime_bars())
     assert [(order.side, order.quantity) for order in result.orders] == [(PortfolioOrderSide.SELL, 60.0)]
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]

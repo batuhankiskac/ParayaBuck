@@ -3956,6 +3956,34 @@ class EngineRuntime:
         last_chance = self._decision_session_close(session) + retry_window - 2 * retry_interval
         return now < last_chance
 
+    def _park_held_session(self, portfolio_runtime: Any, bars: list[Bar], status: str) -> bool:
+        """Re-queue a session an open rebalance held without deciding it (P2-2-4, P2-7-1).
+
+        ``rebalance_in_progress`` and ``rebalance_blocked`` leave the session
+        due; so does ``rebalance_complete`` from an advance that finished the
+        rebalance on this pass (its fill postdates the snapshot, so the batch
+        is planned on the next pass from a fresh account). A session that was
+        decided on this pass is never parked. True when re-queued.
+        """
+        if status not in _HELD_SESSION_STATUSES or not bars:
+            return False
+        decided = getattr(portfolio_runtime, "_session_decided", None)
+        if callable(decided) and decided(max(bar.timestamp for bar in bars)):
+            return False
+        return self._defer_portfolio_batch(bars, portfolio_runtime.market, f"rebalance_held:{status}")
+
+    @staticmethod
+    def _release_seeded_watermark(portfolio_runtime: Any, bars: list[Bar]) -> None:
+        """Let a parked catch-up batch retry as a cadence boundary.
+
+        A never-decided runtime's high-water is the seeded newest bar, so the
+        parked session would not be a period start on its retry and would
+        close as ``not_scheduled`` with no order. Clearing the high-water lets
+        the retry decide it through the ordinary scheduled path.
+        """
+        if bars and getattr(portfolio_runtime, "previous_timestamp", None) == max(bar.timestamp for bar in bars):
+            portfolio_runtime.previous_timestamp = None
+
     def _defer_portfolio_bars(self, bars: list[Bar], reason: str) -> bool:
         """Re-queue each market's share of a session-close batch.
 
@@ -4411,6 +4439,8 @@ class EngineRuntime:
                     market=portfolio_runtime.market.value,
                     decision_id=portfolio_result.decision_id,
                 )
+            if self._park_held_session(portfolio_runtime, relevant, portfolio_result.status):
+                deferred_any = True
             log.info(
                 "Portfolio decision: strategy=%s market=%s status=%s orders=%d submitted=%d",
                 portfolio_runtime.strategy.name,
@@ -4736,6 +4766,21 @@ class EngineRuntime:
                 basis_reason = self._equity_signal_basis_latch(newest) if newest is not None else None
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
+            # The batch the catch-up decides on: the newest bar of each history
+            # series, as startup_catch_up builds it.
+            catch_up_bars = [series[-1] for series in portfolio_runtime.history.values() if series]
+            cross_check: CrossCheckOutcome | None = None
+            if portfolio_runtime.market == Market.EQUITY and catch_up_bars:
+                # The catch-up is a session decision like any other, so it runs
+                # the second-source signal check the scheduled path runs (P2-6-1).
+                step = self._signal_cross_check_step(portfolio_runtime, catch_up_bars)
+                if step is None:
+                    # The coordinator parked the batch until the SIP bar is in;
+                    # the due loop decides it with the check.
+                    self._release_seeded_watermark(portfolio_runtime, catch_up_bars)
+                    portfolio_runtime.startup_catch_up_status = "signal_cross_check_pending"
+                    continue
+                cross_check = step if isinstance(step, CrossCheckOutcome) else None
             if account is None:
                 # Broker I/O stays outside _portfolio_lock (R2A4): the lock
                 # below covers only the in-memory catch-up, matching every
@@ -4745,10 +4790,14 @@ class EngineRuntime:
                 result = portfolio_runtime.startup_catch_up(
                     entry_latch=entry_latch,
                     account=account,
+                    signal_cross_check=cross_check,
+                    # Per-order halt re-check, as on the decision path (P2-2-2).
                     submit_gate=lambda order, market=portfolio_runtime.market: self._advance_submit_block_reason(
                         market, order
                     ),
                 )
+            if self._park_held_session(portfolio_runtime, catch_up_bars, result.status):
+                self._release_seeded_watermark(portfolio_runtime, catch_up_bars)
             self._record_paper_decision_receipt(portfolio_runtime, result, account)
             self._emit_equity_daily_summary(portfolio_runtime, result, account)
             log.info(
@@ -6603,6 +6652,23 @@ class EngineRuntime:
 
 
 _CATCH_UP_TRANSIENT_STATUSES = frozenset({"warming_up", "incomplete_strategy_batch"})
+# Portfolio results that leave a session undecided because an open rebalance
+# holds it. The batch is parked for the bounded retry instead of being lost.
+# The open-rebalance return carries the advance's own status (D2-3-1), so
+# every status that advance can return is listed here.
+_HELD_SESSION_STATUSES = frozenset(
+    {
+        "rebalance_in_progress",
+        "rebalance_blocked",
+        "rebalance_complete",
+        "rebalance_waiting_for_slot",
+        "replan_snapshot_stale",
+        "stale_decision_buy_held",
+        "submit_blocked",
+        "replan_sell_submitted",
+        "buy_phase_submitted",
+    }
+)
 
 
 def _catch_up_blocked(runtime: object) -> bool:

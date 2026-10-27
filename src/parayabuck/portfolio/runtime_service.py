@@ -1517,7 +1517,9 @@ class PortfolioRuntime:
                 None,
                 advance_result.orders if advance_result is not None else (),
                 advance_result.submitted_order_ids if advance_result is not None else (),
-                "rebalance_in_progress",
+                # The advance outcome names the hold (for example a held BUY side);
+                # a fixed token would hide it from the decision status and dashboard.
+                advance_result.status if advance_result is not None else "rebalance_in_progress",
             )
         if self._superseded_sells_working():
             self.previous_timestamp = previous_timestamp
@@ -2332,8 +2334,9 @@ class PortfolioRuntime:
 
     def _hold_unsettled_sell_leg(self, decision_id: str, leg: str, reason: str) -> None:
         """Alert and journal a SELL leg whose exit cannot be sent; the BUYs stay held."""
+        # Keyed by decision: a recurring episode in a later decision is alerted again.
         self._raise_operator_alert_once(
-            (leg, reason),
+            (decision_id, f"{reason}:{leg}"),
             message="A SELL exit cannot be sent; deferred BUYs are held and the rebalance closes once no exit is left",
             category=reason,
             decision_id=decision_id,
@@ -2343,6 +2346,30 @@ class PortfolioRuntime:
             market=self._market_name(),
             strategy=getattr(self.strategy, "name", None),
             reason=reason,
+            session_id=self.session_id,
+            account_id=self.account_id,
+        )
+
+    def _alert_buy_side_held(self, decision_id: str, status: str) -> None:
+        """Alert and journal, once per decision and status, that a BUY side was held.
+
+        The BUYs of these outcomes were not sent: they wait for a later advance
+        or the rebalance closes without them. The outcome was otherwise
+        visible only in the rebalance row.
+        """
+        key = (decision_id, f"buy_side_held:{status}")
+        if key in self._operator_alert_keys():
+            return
+        self._raise_operator_alert_once(
+            key,
+            message="Deferred BUY side held; no BUY was sent for this decision",
+            category=status,
+            decision_id=decision_id,
+        )
+        _emit_no_trade_safe(
+            market=self._market_name(),
+            strategy=getattr(self.strategy, "name", None),
+            reason=status,
             session_id=self.session_id,
             account_id=self.account_id,
         )
@@ -2377,6 +2404,7 @@ class PortfolioRuntime:
             session_id=self.session_id,
             reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
         )
+        self._alert_buy_side_held(decision_id, REBALANCE_STATUS_CLOSED_UNRESOLVED)
         return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_complete")
 
     def _log_deferred_buy_withheld(self, decision_id: str) -> None:
@@ -2954,6 +2982,7 @@ class PortfolioRuntime:
                     decision_id,
                     stale,
                 )
+                self._alert_buy_side_held(decision_id, "replan_snapshot_stale")
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "replan_snapshot_stale")
             return self._submit_replan_sells(decision_id, risk, replan_sells, rules, submit_gate=submit_gate)
         buy_orders = tuple(
@@ -2988,6 +3017,7 @@ class PortfolioRuntime:
                 # A terminal SELL update did not prove that its position slot
                 # disappeared. Keep the deferred phase retryable until a fresh
                 # account snapshot permits the replacement opening.
+                self._alert_buy_side_held(decision_id, "rebalance_waiting_for_slot")
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
             if working_buy:
                 return self._enter_buy_pending(decision_id, risk, (), ())
@@ -3010,6 +3040,7 @@ class PortfolioRuntime:
                 decision_id,
                 latest_decision,
             )
+            self._alert_buy_side_held(decision_id, "stale_decision_buy_held")
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "stale_decision_buy_held")
         submitted: tuple[str, ...] = ()
         for order in buy_orders:

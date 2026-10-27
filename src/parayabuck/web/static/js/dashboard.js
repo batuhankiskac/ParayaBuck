@@ -27,7 +27,10 @@
       duplicate_decision: "Gerek yok", already_invested: "Zaten yatırımda", warming_up: "Isınma bekleniyor",
       incomplete_strategy_batch: "Veri bekleniyor", rebalance_in_progress: "Dengeleme sürüyor",
       rebalance_blocked: "Dengeleme kilitli", no_eligible_bars: "Veri yok", not_scheduled: "Sıradaki periyot",
-      not_attempted: "Henüz denenmedi"
+      not_attempted: "Henüz denenmedi", rebalance_complete: "Dengeleme tamamlandı",
+      rebalance_waiting_for_slot: "Pozisyon yuvası bekleniyor", replan_snapshot_stale: "Hesap görüntüsü eski",
+      stale_decision_buy_held: "Eski karar, alım tutuldu", submit_blocked: "Gönderim engellendi",
+      replan_sell_submitted: "Satış gönderildi, alım bekliyor", closed_unresolved: "Alım iptal, satış çözülmedi"
     };
     const STRATEGY_DESC = {
       equity_leveraged_trend_v1: "QQQ'da üç trend sinyalinden en az ikisi (200 günlük ortalamanın üzeri, 252 günlük getiri pozitif, 126 günlük kanal ortasının üzeri) olumluyken QLD (2x Nasdaq-100) tutar; trend kapalıyken QQQ 50 günlük ortalamanın üzerinde, 20 günlük oynaklığı 252 günlük medyanının altında ve 20 günlük getirisi pozitifse yarım ağırlıkla erken giriş yapar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder."
@@ -149,10 +152,14 @@
       setText("periodLabel", PERIOD_LABEL[view.period] || "");
       setText("legendPortfolio", fmt.signedPct(last, 2));
       setText("legendBench", fmt.signedPct(benchLast, 2));
+      // The legend names the benchmark the server used (VOO unless a config key says otherwise).
+      const benchSymbol = data.benchmark_symbol || "VOO";
+      const benchName = byId("legendBench") && byId("legendBench").previousSibling;
+      if (benchName && benchName.nodeType === 3) benchName.nodeValue = benchSymbol + " ";
 
-      // The period figure is the equity change: deposits and withdrawals are included,
-      // so it is not a time-weighted return and is not compared with VOO here.
-      const note = data.available ? "Özkaynak değişimi; yatırma ve çekmeler dahildir." : "";
+      // The portfolio line is the equity change: deposits and withdrawals are included,
+      // so it is not a time-weighted return and the chart is not a performance comparison.
+      const note = data.available ? "Özkaynak değişimi; yatırma ve çekmeler dahildir. Bu bir performans karşılaştırması değildir." : "";
       setText("perfNote", note);
 
       const options = {
@@ -175,7 +182,7 @@
             : d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
           const nodes = [el("div", { className: "tip-date", text: date })];
           hits.forEach(function (h) {
-            const label = h.cls === "main" ? "Portföy" : "VOO";
+            const label = h.cls === "main" ? "Portföy" : benchSymbol;
             const value = h.cls === "main" ? fmt.money(h.point.raw) + " · " + fmt.signedPct(h.point.v, 2) : fmt.signedPct(h.point.v, 2);
             nodes.push(el("div", { className: "tip-row" }, [el("span", null, [el("i", { className: h.cls === "main" ? "" : "bench" }), label]), el("b", { text: value })]));
           });

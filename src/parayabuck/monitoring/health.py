@@ -560,6 +560,17 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
                 summary=f"{len(stuck_rb)} stuck rebalance executions >1h",
                 observed=len(stuck_rb),
             )
+        # A rebalance closed with an unsettled SELL leg discards its BUYs; without
+        # this check that closure reaches no ops or doctor surface.
+        closed_unresolved = forensics.find_closed_unresolved_rebalances(db_path, strict=True)
+        if closed_unresolved:
+            return HealthCheck(
+                code="execution",
+                status=HealthStatus.DEGRADED,
+                summary=f"{len(closed_unresolved)} rebalance(s) closed with an unsettled SELL leg; deferred BUYs discarded",
+                observed=len(closed_unresolved),
+                action="Kapanan rebalance için son satış emrini ve pozisyonu inceleyin.",
+            )
         return HealthCheck(code="execution", status=HealthStatus.OK, summary="no stuck/ambiguous orders")
     except Exception as exc:
         return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary=f"execution check failed: {exc}")

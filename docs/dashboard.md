@@ -17,7 +17,7 @@ instead of an error.
 | Endpoint | Contents |
 |---|---|
 | `GET /api/dashboard/overview` | All panels in one payload (`as_of` stamped); polled every 5 s |
-| `GET /api/performance?period=1D\|1W\|1M\|3M\|1A\|ALL` | Broker equity history vs VOO (IEX), cached 60 s per account; display only |
+| `GET /api/performance?period=1D\|1W\|1M\|3M\|1A\|ALL` | Broker equity history vs VOO (IEX, dividend-adjusted bars), cached 60 s per account; display only. The portfolio line includes deposits and withdrawals, so the chart is not a performance comparison |
 | `GET /api/ops/status` | Ops health summary; polled every 10 s |
 | `GET /api/status` | Engine state and full `RuntimeHealth`; polled every 2 s |
 
@@ -25,7 +25,7 @@ instead of an error.
 
 | Panel | Source |
 |---|---|
-| Portfolio value + chart | `/api/performance`: portfolio vs VOO; degrades to `available: false` or `benchmark_error` |
+| Portfolio value + chart | `/api/performance`: portfolio equity change (deposits included) next to the VOO benchmark; the legend names the benchmark symbol. Degrades to `available: false` or `benchmark_error` |
 | Mode badge | `runtime.mode` + `live.enabled`, never broker connectivity: green **PAPER**; red **LIVE** only when a live engine is trading; dimmed "LIVE (devre dışı)" otherwise |
 | Account | Equity, cash, daily/realized/unrealized P&L, fees, drawdown from the account snapshot; gross exposure = sum of position values; engine state |
 | Strategy card — **Leveraged Index Trend v1** | Status (active / warming / halted / disabled), configured symbols, positions and allocation vs `strategy.equity.maximum_allocation` (0.98), next expected decision (the close of the next NYSE session after the last decision, early closes included; an estimate), startup catch-up status (`submitted`, `warming_up`, `blocked:*`, `already_invested`, `catch_up_superseded`, `duplicate_decision`, `rebalance_in_progress`), holdings with target/current weight and reason (`trend_up` when QLD is targeted) |

@@ -19,6 +19,8 @@ from parayabuck.logger import get_logger
 
 log = get_logger("parayabuck.web.services.performance")
 
+# No config key selects the chart benchmark, so it is always VOO. The backtest's
+# SPY default is a separate, backtest-only choice and is not read here.
 BENCHMARK_SYMBOL = "VOO"
 CACHE_TTL_SECONDS = 60.0
 
@@ -48,8 +50,12 @@ def _series(points: list[tuple[datetime, float]]) -> list[dict[str, Any]]:
 
 
 def fetch_benchmark_bars(manager: Any, start: datetime, end: datetime, minutes: int) -> list[tuple[datetime, float]]:
-    """VOO closes from the IEX feed (free plan) over ``[start, end]``."""
-    from alpaca.data.enums import DataFeed
+    """VOO closes from the IEX feed (free plan) over ``[start, end]``.
+
+    Dividend-adjusted, so the benchmark is a total return like the backtest's
+    benchmark; raw closes would understate it by the yield.
+    """
+    from alpaca.data.enums import Adjustment, DataFeed
     from alpaca.data.historical import StockHistoricalDataClient
     from alpaca.data.requests import StockBarsRequest
     from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
@@ -76,6 +82,7 @@ def fetch_benchmark_bars(manager: Any, start: datetime, end: datetime, minutes: 
             start=start,
             end=end,
             feed=DataFeed.IEX,
+            adjustment=Adjustment.ALL,
         )
     )
     data = getattr(response, "data", None) or {}

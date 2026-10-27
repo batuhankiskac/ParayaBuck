@@ -325,7 +325,10 @@ def test_dropped_residual_alerts_journals_and_holds_the_buys(tmp_path, _captured
     assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
     assert _phase(repository, runtime) == REBALANCE_PHASE_COMPLETE
     assert any(event.get("category") == "residual_sell_dropped" for event in _captured_alerts)
-    assert [row["reason"] for row in _captured_journal] == ["residual_sell_dropped"]
+    # D2-3-2 added one journal row for the closure (the held BUY side); the leg hold stays one row.
+    reasons = [row["reason"] for row in _captured_journal]
+    assert reasons.count("residual_sell_dropped") == 1
+    assert reasons.count("closed_unresolved") == 1
 
 
 # P6-2 (held symbol): an untradable held symbol closes the rebalance without halting

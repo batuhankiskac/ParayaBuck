@@ -15,6 +15,7 @@ import pytest
 
 from parayabuck.core.models import Market
 from parayabuck.execution.alpaca import AlpacaBroker, AmbiguousOrderState
+from parayabuck.execution.alpaca_models import DefiniteOrderRejection
 from parayabuck.execution.alpaca_orders import OrderService
 from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest, PortfolioOrderSide
 from tests.helpers import make_broker
@@ -27,8 +28,9 @@ class _NotFound(Exception):
 
 
 def test_portfolio_submit_404_lookup_reraises_the_submit_failure(tmp_path: Path) -> None:
-    """The broker's 404 proves the client id never reached Alpaca, so the
-    operator must see the submit rejection, not the lookup's 404."""
+    """The broker's 404 proves the client id never reached Alpaca: the submit
+    is a definite non-submission, so the caller gets that rejection, not the
+    raw submit error or the lookup's 404."""
     submit_error = ValueError("422 insufficient buying power")
 
     def submit(_request: Any) -> Any:
@@ -46,10 +48,10 @@ def test_portfolio_submit_404_lookup_reraises_the_submit_failure(tmp_path: Path)
     )
     service = OrderService(broker)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(DefiniteOrderRejection) as excinfo:
         service._submit_with_recovery(SimpleNamespace(), "cid-1")
 
-    assert excinfo.value is submit_error
+    assert excinfo.value.__cause__ is submit_error
 
 
 def _portfolio_request() -> PortfolioOrderRequest:
@@ -136,8 +138,9 @@ def test_recovered_submission_fill_reports_the_fee_as_unobserved(tmp_path: Path)
 
 def test_terminal_partial_fill_is_booked_from_the_live_recovery_path(tmp_path: Path) -> None:
     """The live owner of fill extraction: an order that ended terminal after
-    filling still books its real fill (quantity, price, unobserved fee) and
-    falls back to the last update when the payload carries no ``filled_at``."""
+    filling still books its real fill (quantity, price, unobserved fee). With
+    no ``filled_at`` the fill is dated from ``submitted_at``, never from the
+    later ``updated_at`` (the cancel time)."""
     recovered: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     broker = make_broker(
         tmp_path,
@@ -148,7 +151,8 @@ def test_terminal_partial_fill_is_booked_from_the_live_recovery_path(tmp_path: P
                 filled_qty="1",
                 filled_avg_price="101.5",
                 filled_at=None,
-                updated_at="2026-01-02T14:30:00+00:00",
+                submitted_at="2026-01-02T14:00:00+00:00",
+                updated_at="2027-01-03T09:00:00+00:00",
             ),
         ),
         portfolio_fill_recovered=lambda *args, **kwargs: recovered.append((args, kwargs)),
@@ -159,7 +163,7 @@ def test_terminal_partial_fill_is_booked_from_the_live_recovery_path(tmp_path: P
     assert len(recovered) == 1
     args, kwargs = recovered[0]
     assert args[2:4] == (1.0, 101.5)
-    assert args[4] == datetime(2026, 1, 2, 14, 30, tzinfo=UTC)
+    assert args[4] == datetime(2026, 1, 2, 14, 0, tzinfo=UTC)
     assert args[6] is None
     assert kwargs["status"] == "expired"
 

@@ -14,7 +14,7 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
-from parayabuck.execution.alpaca_client import AlpacaClient, BrokerClock
+from parayabuck.execution.alpaca_client import AlpacaClient, BrokerClock, parse_broker_timestamp
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -29,6 +29,9 @@ from parayabuck.utils import is_crypto
 log = get_logger("parayabuck.execution.alpaca")
 
 _emit_alert = emit_execution_alert
+# Alpaca's asset metadata has no notional minimum (the SDK Asset model carries
+# none); the broker's order minimum is $1.
+_ALPACA_MINIMUM_ORDER_NOTIONAL = 1.0
 
 from parayabuck.execution.alpaca_account import AccountService  # noqa: E402
 from parayabuck.execution.alpaca_orders import OrderService  # noqa: E402
@@ -218,8 +221,7 @@ class AlpacaBroker:
             # order would be refused by the broker after planning.
             minimum = max(minimum, 1.0)
             quantity_increment = max(quantity_increment, 1.0)
-        minimum_notional = float(getattr(asset, "min_order_notional", None) or 1.0)
-        return AssetTradingRules(minimum, quantity_increment, minimum_notional)
+        return AssetTradingRules(minimum, quantity_increment, _ALPACA_MINIMUM_ORDER_NOTIONAL)
 
     def all_open_order_symbols(self) -> set[str]:
         """Broker-wide open order symbols (managed and manual).
@@ -467,7 +469,7 @@ class AlpacaBroker:
         get_by_client = getattr(self._client, "get_order_by_client_id", None)
         if get_by_client is not None:
             try:
-                order = get_by_client(client_order_id)
+                order = self._client_adapter.order_by_client_id(client_order_id)
             except Exception as exc:
                 if getattr(exc, "status_code", None) != 404:
                     raise
@@ -478,7 +480,7 @@ class AlpacaBroker:
             get_by_id = getattr(self._client, "get_order_by_id", None)
             if get_by_id is not None:
                 try:
-                    return get_by_id(broker_order_id)
+                    return self._client_adapter.order_by_id(broker_order_id)
                 except Exception as exc:
                     if getattr(exc, "status_code", None) != 404:
                         raise
@@ -551,19 +553,21 @@ class AlpacaBroker:
             return None
         if not math.isfinite(filled_qty) or not math.isfinite(avg_price) or filled_qty <= 0 or avg_price <= 0:
             return None
-        # A partially filled order that then died has no ``filled_at``; fall
-        # back to its last update rather than parsing ``None``.
+        # A partially filled order that then died has no ``filled_at``. Its
+        # ``updated_at`` is the cancel time, which can fall in a later tax year
+        # or month than the fill, so it is never the fill time. ``submitted_at``
+        # is the earliest possible fill time, and a DAY order neither fills
+        # before submission nor survives its session.
         filled_at_raw = (
             self._field(order, "filled_at", None)
-            or self._field(order, "updated_at", None)
             or self._field(order, "submitted_at", None)
             or datetime.now(UTC)
         )
-        occurred_at = (
-            filled_at_raw if isinstance(filled_at_raw, datetime) else datetime.fromisoformat(str(filled_at_raw))
-        )
-        if occurred_at.tzinfo is None:
-            occurred_at = occurred_at.replace(tzinfo=UTC)
+        try:
+            occurred_at = parse_broker_timestamp(filled_at_raw)
+        except (TypeError, ValueError):
+            log.warning("Unparseable broker fill time for %s; fill not extracted", client_order_id)
+            return None
         return (
             client_order_id,
             str(self._field(order, "id", "") or broker_order_id),
@@ -666,7 +670,7 @@ class AlpacaBroker:
             if get_by_client_id is not None:
                 lookup_error: Exception | None = None
                 try:
-                    recovered: Any = get_by_client_id(client_order_id)
+                    recovered: Any = self._client_adapter.order_by_client_id(client_order_id)
                 except Exception as lookup_exc:
                     recovered = None
                     lookup_error = lookup_exc
@@ -717,6 +721,8 @@ class AlpacaBroker:
                             ) from submit_exc
                         # Otherwise preserve the original submit failure.
                         raise submit_exc
+                    if status == "filled":
+                        self._book_filled_submission(recovered, client_order_id)
                     log.warning(
                         "Recovered Alpaca order %s after submit error: %s",
                         client_order_id,
@@ -724,14 +730,14 @@ class AlpacaBroker:
                     )
                     return recovered
                 if getattr(lookup_error, "status_code", None) == 404:
-                    # The deterministic client id was never accepted: the
-                    # original submit failure is the definite outcome, not an
-                    # ambiguity (mirrors resolve_portfolio_submission).
-                    if self._is_definite_refusal(submit_exc):
-                        raise DefiniteOrderRejection(
-                            f"Broker rejected order {client_order_id}: {submit_exc}"
-                        ) from submit_exc
-                    raise submit_exc
+                    # The deterministic client id was never accepted, so nothing
+                    # reached the broker: the submit failure is a known outcome,
+                    # not an ambiguity. The caller treats a DefiniteOrderRejection
+                    # as not sent and does not cancel the legs queued after it.
+                    # (Mirrors resolve_portfolio_submission, where a 404 is canceled.)
+                    raise DefiniteOrderRejection(
+                        f"Broker never accepted order {client_order_id}: {submit_exc}"
+                    ) from submit_exc
                 if lookup_error is not None:
                     log.warning(
                         "Recovery lookup failed for %s after submit error: %s",
@@ -747,6 +753,21 @@ class AlpacaBroker:
             raise AmbiguousOrderState(
                 f"Broker write outcome unknown for client_order_id={client_order_id}: {submit_exc}"
             ) from submit_exc
+
+    def _book_filled_submission(self, order: Any, client_order_id: str) -> None:
+        """Book the fill of a filled order recovered after a submit error.
+
+        Same path as resolve_portfolio_submission: the fill facts go to
+        ``portfolio_fill_recovered``. Unreadable facts leave the booking to the
+        next reconciliation.
+        """
+        broker_order_id = str(self._field(order, "id", "") or "")
+        recovered = self._fill_from_broker_order(order, client_order_id, broker_order_id)
+        if recovered is None:
+            log.warning("Filled order %s has no readable fill facts; reconciliation must book its fill", client_order_id)
+            return
+        if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
+            fill_recovered(*recovered)
 
     def _has_open_order(self, symbol: str) -> bool:
         orders = self._get_open_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[symbol], nested=True))

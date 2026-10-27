@@ -121,8 +121,9 @@ def test_submit_is_ambiguous_when_the_recovery_lookup_also_fails(
     ]
 
 
-def test_submit_reraises_the_original_failure_when_the_lookup_proves_absence(broker: AlpacaBroker) -> None:
-    """A 404 lookup proves the client order id was never accepted: retryable."""
+def test_submit_is_a_definite_rejection_when_the_lookup_proves_absence(broker: AlpacaBroker) -> None:
+    """A 404 lookup proves the client order id was never accepted: the order was
+    not sent, so the caller gets the definite rejection (not the raw error)."""
     submit_error = RuntimeError("submit rejected")
     fake = FakeTradingClient()
 
@@ -136,10 +137,10 @@ def test_submit_reraises_the_original_failure_when_the_lookup_proves_absence(bro
     fake.script_get_order_by_client_id = missing_lookup
     _broker_with_fake(broker, fake)
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(DefiniteOrderRejection) as excinfo:
         broker._submit_with_recovery(SimpleNamespace(client_order_id="cid-3", symbol="IWM"), "cid-3")
 
-    assert excinfo.value is submit_error
+    assert excinfo.value.__cause__ is submit_error
 
 
 def test_submit_reraises_the_original_failure_when_the_recovered_order_is_rejected(
@@ -178,7 +179,8 @@ def test_a_terminal_partial_fill_found_on_submit_recovery_is_booked_not_rejected
         filled_qty="3",
         filled_avg_price="100.5",
         filled_at=None,
-        updated_at=_FILLED_AT,
+        submitted_at=_FILLED_AT,
+        updated_at=_FILLED_AT.replace(year=2027),
     )
     recovered_fills: list[tuple[Any, ...]] = []
     fake = FakeTradingClient()

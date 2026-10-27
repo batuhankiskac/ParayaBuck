@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import Market
+from parayabuck.data.alpaca_stream import guard_sdk_cast, supervise_sdk_stream
+from parayabuck.execution.alerting import emit_execution_alert
+from parayabuck.execution.alpaca_client import parse_broker_timestamp
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils.objects import field_value as _field
 
 log = get_logger("parayabuck.execution.alpaca_updates")
+
+# Event given to a trade-update frame the SDK could not decode. It is not in the
+# runtime's booking vocabulary, so the runtime schedules a reconciliation.
+UNDECODED_TRADE_EVENT = "undecoded"
 
 
 @dataclass(frozen=True)
@@ -35,9 +43,21 @@ class TradeUpdate:
     # supplied fee as observed in that case.  Stream callers always provide
     # an explicit boolean.
     fee_observed: bool | None = None
+    # The execution's own price and quantity from the frame, when Alpaca sends
+    # them. ``average_fill_price`` above stays the order's cumulative average.
+    execution_price: float | None = None
+    execution_quantity: float | None = None
 
 
 UpdateHandler = Callable[[TradeUpdate], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class _UndecodedFrame:
+    """A trade-update frame the SDK model could not decode, kept as raw data."""
+
+    payload: Any
+    error: str
 
 
 class AlpacaTradingUpdateStream:
@@ -54,7 +74,15 @@ class AlpacaTradingUpdateStream:
 
         self._stream = TradingStream(api_key, secret_key, paper=paper)
         self._handler = handler
+        guard_sdk_cast(self._stream, self._undecoded_frame)
+        supervise_sdk_stream(self._stream, label="trade updates")
         self._stream.subscribe_trade_updates(self._on_update)
+
+    @staticmethod
+    def _undecoded_frame(frame: Any, exc: BaseException) -> _UndecodedFrame:
+        data = frame.get("data") if isinstance(frame, dict) else None
+        payload = data if isinstance(data, dict) else frame
+        return _UndecodedFrame(payload=payload, error=f"{type(exc).__name__}: {exc}")
 
     async def _on_update(self, raw: Any) -> None:
         # This coroutine runs inside alpaca-py's TradingStream dispatch: an
@@ -62,12 +90,44 @@ class AlpacaTradingUpdateStream:
         # broker event is logged and dropped; reconciliation recovers the
         # order state from the broker. Handler failures are the runtime's own
         # concern and are handled (and halted on) inside the handler.
+        if isinstance(raw, _UndecodedFrame):
+            await self._on_undecoded(raw)
+            return
         try:
             update = self._parse(raw)
         except Exception:
             log.error("Malformed Alpaca trade update dropped: %r", raw, exc_info=True)
             return
         await self._handler(update)
+
+    async def _on_undecoded(self, frame: _UndecodedFrame) -> None:
+        # The SDK could not decode a frame, so its fill facts are unread. The
+        # order may still be known to the runtime, so the frame is handed on
+        # with an unknown event: the runtime then schedules a reconciliation,
+        # which reads the broker's state and books any fill.
+        log.error("Undecodable Alpaca trade update (%s); requesting reconciliation: %r", frame.error, frame.payload)
+        try:
+            update = self._parse(frame.payload)
+        except Exception:
+            log.error("Undecodable Alpaca trade update has no usable identity: %r", frame.payload, exc_info=True)
+            emit_execution_alert(
+                "paper_incident",
+                message=f"Undecodable Alpaca trade update with no usable identity ({frame.error}); dropped",
+                category="undecoded_trade_update",
+                incident_id=f"undecoded_trade_update:unidentified:{frame.error[:120]}",
+            )
+            return
+        emit_execution_alert(
+            "paper_incident",
+            message=(
+                f"Undecodable Alpaca trade update for client_order_id={update.client_order_id}; "
+                f"reconciliation requested ({frame.error})"
+            ),
+            category="undecoded_trade_update",
+            incident_id=f"undecoded_trade_update:{update.client_order_id}:{update.activity_id}",
+            client_order_id=update.client_order_id,
+        )
+        await self._handler(replace(update, event=UNDECODED_TRADE_EVENT))
 
     @staticmethod
     def _parse(raw: Any) -> TradeUpdate:
@@ -78,7 +138,7 @@ class AlpacaTradingUpdateStream:
         market = Market.CRYPTO if "crypto" in asset_class or "/" in raw_symbol else Market.EQUITY
         timestamp = _field(raw, "timestamp") or _field(order, "updated_at") or datetime.now(UTC)
         if isinstance(timestamp, str):
-            timestamp = datetime.fromisoformat(timestamp)
+            timestamp = parse_broker_timestamp(timestamp)
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=UTC)
         average = _field(order, "filled_avg_price")
@@ -115,6 +175,8 @@ class AlpacaTradingUpdateStream:
             source="stream",
             received_at=received_at,
             fee_observed=fee_observed,
+            execution_price=_finite_or_none(_field(raw, "price")),
+            execution_quantity=_finite_or_none(_field(raw, "qty")),
         )
 
     def run(self) -> None:
@@ -128,4 +190,14 @@ class AlpacaTradingUpdateStream:
         self._stream.stop()
 
 
-__all__ = ["AlpacaTradingUpdateStream", "TradeUpdate"]
+def _finite_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+__all__ = ["UNDECODED_TRADE_EVENT", "AlpacaTradingUpdateStream", "TradeUpdate"]

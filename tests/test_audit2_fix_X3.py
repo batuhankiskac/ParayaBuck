@@ -125,8 +125,14 @@ def test_ytd_status_masks_the_account_id_on_every_path() -> None:
 
 
 def test_default_rate_files_resolve_under_the_checkout_not_the_working_directory() -> None:
-    assert Path(DEFAULT_USDTRY_PATH) == REPO_ROOT / "data" / "tax" / "usdtry.csv"
-    assert Path(DEFAULT_YIUFE_PATH) == REPO_ROOT / "data" / "tax" / "yiufe.csv"
+    import parayabuck.tax.rates as rates_module
+
+    # A checkout (editable install, the VM) anchors the files to it; an installed
+    # wheel without a checkout (CI's site-packages) keeps the relative default.
+    in_checkout = REPO_ROOT in Path(rates_module.__file__).resolve().parents
+    base = REPO_ROOT if in_checkout else Path()
+    assert Path(DEFAULT_USDTRY_PATH) == base / "data" / "tax" / "usdtry.csv"
+    assert Path(DEFAULT_YIUFE_PATH) == base / "data" / "tax" / "yiufe.csv"
 
 
 def _usd_fake_get(usd_rate: str) -> Any:

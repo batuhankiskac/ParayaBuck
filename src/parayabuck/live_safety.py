@@ -24,17 +24,46 @@ class LiveApprovalError(RuntimeError):
 # such a key can never sign or verify a LIVE approval.
 APPROVAL_KEY_PLACEHOLDER_PREFIX = "replace_with"
 APPROVAL_KEY_MIN_LENGTH = 32
+# "k" * 32 passes the length rule; a random key of this length has far more
+# distinct characters, so a repeated-character key is refused (S2-8-2).
+APPROVAL_KEY_MIN_DISTINCT_CHARACTERS = 10
+# Operator-owned approval documents are a few hundred bytes; anything larger
+# is refused before it is parsed (S2-8-5).
+APPROVAL_DOCUMENT_MAX_BYTES = 64 * 1024
 
 
-def _check_approval_key(secret: str) -> None:
+def check_approval_key(secret: str) -> None:
+    """Raise ValueError unless the approval HMAC key is usable (length, placeholder, entropy)."""
     if len(secret) < APPROVAL_KEY_MIN_LENGTH:
         raise ValueError(f"Operator approval HMAC key must contain at least {APPROVAL_KEY_MIN_LENGTH} characters")
     if secret.strip().lower().startswith(APPROVAL_KEY_PLACEHOLDER_PREFIX):
         raise ValueError("Operator approval HMAC key is the .env.example placeholder; set a real random key")
+    if len(set(secret)) < APPROVAL_KEY_MIN_DISTINCT_CHARACTERS:
+        raise ValueError(
+            f"Operator approval HMAC key must use at least {APPROVAL_KEY_MIN_DISTINCT_CHARACTERS} distinct characters"
+        )
+
+
+def _read_regular_bytes(path: str | os.PathLike[str]) -> bytes:
+    """Bytes of a small regular file. Symlinks, FIFOs and oversized files raise OSError/ValueError.
+
+    The start path reads the approval documents with the same guards the
+    display path uses, so a FIFO cannot block a LIVE start (S2-8-5).
+    """
+    # O_NOFOLLOW refuses a symlink and O_NONBLOCK keeps a FIFO from blocking the open.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(os.fspath(path), flags)
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise OSError("not a regular file")
+        raw = handle.read(APPROVAL_DOCUMENT_MAX_BYTES + 1)
+    if len(raw) > APPROVAL_DOCUMENT_MAX_BYTES:
+        raise ValueError("larger than the approval document limit")
+    return raw
 
 
 def _unsigned_hmac(secret: str, unsigned: dict[str, object]) -> str:
-    _check_approval_key(secret)
+    check_approval_key(secret)
     payload = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
     return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
@@ -262,6 +291,9 @@ class LiveOperatorApproval:
     approved_at: datetime
     expires_at: datetime
     nonce: str
+    # The trading host the approval was issued on (S2-5-6). Signed when set; a
+    # caller that passes its host refuses an approval without a matching one.
+    trading_host: str = ""
     signature: str = ""
 
     def __post_init__(self) -> None:
@@ -277,7 +309,7 @@ class LiveOperatorApproval:
             raise ValueError("Operator approval expiry must follow approval")
 
     def unsigned_dict(self) -> dict[str, object]:
-        return {
+        document: dict[str, object] = {
             "operator_id": self.operator_id,
             "account_id": self.account_id,
             "configuration_digests": list(self.configuration_digests),
@@ -286,6 +318,9 @@ class LiveOperatorApproval:
             "expires_at": self.expires_at.astimezone(UTC).isoformat(),
             "nonce": self.nonce,
         }
+        if self.trading_host:
+            document["trading_host"] = self.trading_host
+        return document
 
     def calculated_signature(self, secret: str) -> str:
         return _unsigned_hmac(secret, self.unsigned_dict())
@@ -304,10 +339,12 @@ class LiveOperatorApproval:
         secret: str,
         account_id: str,
         configuration_digests: tuple[str, ...],
+        trading_host: str | None = None,
         now: datetime | None = None,
     ) -> LiveOperatorApproval:
+        """Verified approval. ``trading_host`` (the caller's host identity) must match when given."""
         try:
-            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            raw = json.loads(_read_regular_bytes(path).decode("utf-8"))
             if not isinstance(raw, dict):
                 raise ValueError("root is not an object")
             approval = cls(
@@ -318,6 +355,7 @@ class LiveOperatorApproval:
                 approved_at=datetime.fromisoformat(str(raw.get("approved_at", ""))),
                 expires_at=datetime.fromisoformat(str(raw.get("expires_at", ""))),
                 nonce=str(raw.get("nonce", "")),
+                trading_host=str(raw.get("trading_host", "")),
                 signature=str(raw.get("signature", "")),
             )
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -332,12 +370,63 @@ class LiveOperatorApproval:
             raise LiveApprovalError("Live operator approval account does not match")
         if set(approval.configuration_digests) != set(configuration_digests):
             raise LiveApprovalError("Live operator approval configuration does not match")
+        if trading_host is not None and not _signatures_equal(approval.trading_host, trading_host):
+            raise LiveApprovalError("Live operator approval was issued for a different trading host")
         current = now or datetime.now(UTC)
         if approval.approved_at > current:
             raise LiveApprovalError("Live operator approval is not yet valid")
         if approval.expires_at <= current:
             raise LiveApprovalError("Live operator approval has expired")
         return approval
+
+
+# --- Single use of an interactive approval (S2-5-6) -------------------------
+#
+# A manual approval starts LIVE once. The runtime records its nonce after the
+# start has committed; a later start with the same approval file is refused
+# and the operator must run authorize-live again. Standing authorizations are
+# reusable by design and never recorded here.
+
+APPROVAL_CONSUMED_FILENAME = "live_approval_consumed.json"
+APPROVAL_CONSUMED_MAX_ENTRIES = 256
+
+
+def approval_consumed_path(operator_approval_path: str | os.PathLike[str]) -> Path:
+    """The consumed-approval record, next to the operator approval file."""
+    return Path(operator_approval_path).with_name(APPROVAL_CONSUMED_FILENAME)
+
+
+def _consumed_approval_nonces(operator_approval_path: str | os.PathLike[str]) -> list[str]:
+    try:
+        raw = json.loads(_read_regular_bytes(approval_consumed_path(operator_approval_path)).decode("utf-8"))
+    except FileNotFoundError:
+        return []
+    nonces = raw.get("nonces") if isinstance(raw, dict) else None
+    if not isinstance(nonces, list) or not all(isinstance(item, str) for item in nonces):
+        raise ValueError("consumed-approval record is malformed")
+    return nonces
+
+
+def approval_nonce_consumed(operator_approval_path: str | os.PathLike[str], nonce: str) -> bool:
+    """True when this approval already started LIVE, or the record cannot be read (fail closed)."""
+    try:
+        return nonce in _consumed_approval_nonces(operator_approval_path)
+    except (OSError, ValueError):
+        return True
+
+
+def record_approval_consumed(operator_approval_path: str | os.PathLike[str], nonce: str) -> None:
+    """Persist that an approval started LIVE. Raises when the record cannot be written."""
+    from parayabuck.utils.io import atomic_write
+
+    nonces = [item for item in _consumed_approval_nonces(operator_approval_path) if item != nonce]
+    nonces.append(nonce)
+    document = {"nonces": nonces[-APPROVAL_CONSUMED_MAX_ENTRIES:]}
+    atomic_write(
+        approval_consumed_path(operator_approval_path),
+        json.dumps(document, indent=2, sort_keys=True) + "\n",
+        mode=0o600,
+    )
 
 
 # --- Standing LIVE authorization (docs/live_readiness_v1.md B2) -------------
@@ -395,6 +484,49 @@ def config_fingerprint(config: Any) -> str:
         risk.pop("drawdown_liquidation")
     payload = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+STANDING_REVOCATION_FILENAME = "live_standing_revoked.json"
+
+
+def standing_revocation_path(standing_path: str | os.PathLike[str]) -> Path:
+    """The revocation record, next to the standing authorization file."""
+    return Path(standing_path).with_name(STANDING_REVOCATION_FILENAME)
+
+
+def _revoked_standing_digests(standing_path: str | os.PathLike[str]) -> frozenset[str]:
+    """SHA-256 digests of revoked standing files; raises when the record is unreadable."""
+    try:
+        raw = json.loads(_read_regular_bytes(standing_revocation_path(standing_path)).decode("utf-8"))
+    except FileNotFoundError:
+        return frozenset()
+    digests = raw.get("revoked_sha256") if isinstance(raw, dict) else None
+    if not isinstance(digests, list) or not all(isinstance(item, str) for item in digests):
+        raise ValueError("standing revocation record is malformed")
+    return frozenset(digests)
+
+
+def revoke_standing_authorization(path: str | os.PathLike[str]) -> bool:
+    """Delete the standing authorization and tombstone its exact bytes.
+
+    A copy restored from backup is byte-identical, so its digest stays refused
+    until a new authorization (with a new nonce) is written (S2-8-4). Returns
+    False when there was nothing to revoke. An unreadable file is not deleted.
+    """
+    from parayabuck.utils.io import atomic_write
+
+    target = Path(path)
+    if not os.path.lexists(os.fspath(target)):
+        return False
+    digest = hashlib.sha256(_read_regular_bytes(target)).hexdigest()
+    revoked = sorted(_revoked_standing_digests(target) | {digest})
+    atomic_write(
+        standing_revocation_path(target),
+        json.dumps({"revoked_sha256": revoked}, indent=2, sort_keys=True) + "\n",
+        mode=0o600,
+    )
+    target.unlink()
+    return True
 
 
 @dataclass(frozen=True)
@@ -457,7 +589,8 @@ class StandingLiveAuthorization:
     def read_signed(cls, path: str | Path, *, secret: str) -> StandingLiveAuthorization:
         """Parse the file and verify its signature (no binding or expiry checks)."""
         try:
-            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            raw_bytes = _read_regular_bytes(path)
+            raw = json.loads(raw_bytes.decode("utf-8"))
             if not isinstance(raw, dict) or raw.get("kind") != STANDING_AUTHORIZATION_KIND:
                 raise ValueError("not a standing LIVE authorization")
             authorization = cls(
@@ -482,6 +615,12 @@ class StandingLiveAuthorization:
             raise LiveApprovalError(f"Operator approval key is unusable: {exc}") from exc
         if not _signatures_equal(authorization.signature, expected):
             raise LiveApprovalError("Standing LIVE authorization signature is invalid")
+        try:
+            revoked = _revoked_standing_digests(path)
+        except (OSError, ValueError) as exc:
+            raise LiveApprovalError("Standing LIVE authorization revocation record is unreadable") from exc
+        if hashlib.sha256(raw_bytes).hexdigest() in revoked:
+            raise LiveApprovalError("Standing LIVE authorization was revoked")
         return authorization
 
     def verify_binding(
@@ -552,6 +691,8 @@ __all__ = [
     "LiveOperatorApproval",
     "LiveStartupProof",
     "StandingLiveAuthorization",
+    "approval_nonce_consumed",
+    "check_approval_key",
     "classify_account_environment",
     "clear_operator_halt",
     "config_fingerprint",
@@ -560,6 +701,8 @@ __all__ = [
     "operator_halt_active",
     "operator_halt_marker_path",
     "read_operator_halt",
+    "record_approval_consumed",
+    "revoke_standing_authorization",
     "standing_authorization_path",
     "verify_account_environment",
     "write_operator_halt",

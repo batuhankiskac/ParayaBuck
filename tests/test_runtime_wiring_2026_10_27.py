@@ -25,6 +25,7 @@ import socket
 import tempfile
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +39,7 @@ from parayabuck.config import (
     Config,
     EngineConfig,
     EquityUniverseConfig,
+    LiveConfig,
     RuntimeConfig,
     RuntimeMode,
     UniverseConfig,
@@ -276,10 +278,13 @@ def test_live_verify_receives_expected_account_id(tmp_path: Path, monkeypatch: p
     monkeypatch.setattr(
         runtime_module.LiveOperatorApproval,
         "load_verified",
-        staticmethod(lambda *_a, **_k: "approval"),
+        staticmethod(lambda *_a, **_k: SimpleNamespace(nonce="stub-nonce")),
     )
     runtime = _runtime(tmp_path, expected_account_id="PA123")
-    runtime.app_config = _config(tmp_path, expected_account_id="PA123")
+    runtime.app_config = replace(
+        _config(tmp_path, expected_account_id="PA123"),
+        live=LiveConfig(operator_approval_path=str(tmp_path / "approval.json")),
+    )
     runtime.mode = RuntimeMode.LIVE
     runtime.api_key = "key"
     runtime.secret_key = "secret"
@@ -297,7 +302,7 @@ def test_live_verify_receives_expected_account_id(tmp_path: Path, monkeypatch: p
 
     approval = runtime._verify_live_startup_proof(("digest",))
 
-    assert approval == "approval"
+    assert approval.nonce == "stub-nonce"
     assert len(calls) == 1
     assert calls[0]["live"] is True
     assert calls[0]["expected_account_id"] == "PA123"

@@ -24,9 +24,11 @@ from dotenv import dotenv_values
 
 from parayabuck.config import (
     DEFAULT_DECISION_DB_PATH,
+    DEFAULT_OPERATOR_APPROVAL_KEY_ENV,
     credential_file_mode_warning,
     load_config,
     read_credential,
+    same_ledger_path,
 )
 from parayabuck.live_safety import (
     LIVE_API_KEY_ENV,
@@ -356,7 +358,7 @@ class EngineManager:
     def redact_secrets(self, text: str) -> str:
         """``text`` with every configured Alpaca key/secret (both modes) replaced. Never raises."""
         try:
-            pairs = (self.get_paper_credentials(), self.get_live_credentials())
+            pairs = (self.get_paper_credentials(), self.get_live_credentials(), (self._approval_key_value(), None))
         except Exception:
             return text
         for pair in pairs:
@@ -367,6 +369,18 @@ class EngineManager:
                 for needle in {value, repr(value)[1:-1]}:
                     text = text.replace(needle, "[redacted]")
         return text
+
+    def _approval_key_value(self) -> str | None:
+        """The operator approval HMAC key's value, for redaction only (S2-8-8)."""
+        name = DEFAULT_OPERATOR_APPROVAL_KEY_ENV
+        try:
+            raw, _error = self._load_raw_config_for_prerequisites()
+            live_raw = raw.get("live") if isinstance(raw, dict) else None
+            configured = live_raw.get("operator_approval_key_env") if isinstance(live_raw, dict) else None
+            name = str(configured or "").strip() or name
+        except Exception:
+            pass
+        return os.getenv(name) or None
 
     def request_shutdown(self) -> None:
         """Application shutdown: refuse new starts and cancel the one in flight.
@@ -1152,7 +1166,7 @@ class EngineManager:
         paper_key, paper_secret = self.get_paper_credentials()
         if (paper_key and live_key == paper_key) or (paper_secret and live_secret == paper_secret):
             return "LIVE start refused: LIVE and PAPER share a key"
-        if os.path.normpath(cfg.runtime.decision_db_path) == os.path.normpath(DEFAULT_DECISION_DB_PATH):
+        if same_ledger_path(cfg.runtime.decision_db_path, DEFAULT_DECISION_DB_PATH):
             return "LIVE start refused: the LIVE ledger must not use the PAPER decision database"
         email = cfg.alerting.email
         if not email.enabled:
@@ -1435,6 +1449,12 @@ class EngineManager:
         """
         with self._account_lock:
             if self.broker is not None:
+                # A held broker keeps the endpoint it was built with. Polling a
+                # LIVE broker for a PAPER read (or the reverse) would send the
+                # wrong credentials to the wrong endpoint, so refuse the poll (S2-5-4).
+                held_paper = getattr(self.broker, "paper", None)
+                if held_paper is not None and bool(held_paper) != (not live):
+                    return None
                 return self.broker
         key, secret = self.get_live_credentials() if live else self.get_paper_credentials()
         if not key or not secret or (live and not self._live_display_allowed()):
@@ -1685,7 +1705,7 @@ class EngineManager:
         # The probe authenticates against the LIVE endpoint, so PAPER keys
         # must never reach it while the live gates are closed (settings-drawer
         # refreshes would otherwise send them on every open).
-        if bool(live_cfg.get("enabled", False)) and self._live_env_enabled():
+        if bool(live_cfg.get("enabled", False)) and self._parsed_config_is_live() and self._live_env_enabled():
             account_id, account_probe_error = self._probe_live_account(key, secret)
         else:
             account_id, account_probe_error = None, _LIVE_PROBE_SKIPPED_REASON
@@ -1697,6 +1717,18 @@ class EngineManager:
             "items": items,
             "config_error": config_error,
         }
+
+    def _parsed_config_is_live(self) -> bool:
+        """True only when the config parses and is LIVE (S2-5-5).
+
+        The raw YAML can say live while the parsed config is not (a broken or
+        partly edited file), and the LIVE endpoint must not be probed then.
+        """
+        try:
+            parsed = load_config(str(self.config_path))
+        except Exception:
+            return False
+        return bool(parsed.live.enabled) and parsed.runtime.mode.value == "live"
 
     def _load_raw_config_for_prerequisites(
         self,
@@ -1795,6 +1827,7 @@ class EngineManager:
                     approved_at=datetime.fromisoformat(str(parsed.get("approved_at", ""))),
                     expires_at=datetime.fromisoformat(str(parsed.get("expires_at", ""))),
                     nonce=str(parsed.get("nonce", "")),
+                    trading_host=str(parsed.get("trading_host", "")),
                     signature=str(parsed.get("signature", "")),
                 )
                 expected = approval.calculated_signature(hmac_key)

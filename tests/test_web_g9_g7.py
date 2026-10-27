@@ -189,7 +189,7 @@ def test_live_prerequisites_default_config_blocks_live(tmp_path: Path, monkeypat
 def test_live_prerequisites_live_config_static_checks(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     config_path = _live_config(root)
-    key = "k" * 40
+    key = "0123456789abcdef0123456789abcdef01234567"
     _write_approval(root, account_id="acct-live-1", key=key, digests=("d1", "d2"))
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)
@@ -222,7 +222,7 @@ def test_live_prerequisites_live_config_static_checks(tmp_path: Path, monkeypatc
 def test_live_prerequisites_binding_verified_when_account_and_digests_match(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     config_path = _live_config(root)
-    key = "k" * 40
+    key = "0123456789abcdef0123456789abcdef01234567"
     digests = _expected_digests(config_path)
     _write_approval(root, account_id="acct-live-1", key=key, digests=digests)
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
@@ -241,7 +241,7 @@ def test_live_prerequisites_binding_verified_when_account_and_digests_match(tmp_
 def test_live_prerequisites_rejects_future_approval(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     _live_config(root)
-    key = "k" * 40
+    key = "0123456789abcdef0123456789abcdef01234567"
     _write_approval(
         root,
         account_id="acct-live-1",
@@ -262,7 +262,7 @@ def test_live_prerequisites_rejects_future_approval(tmp_path: Path, monkeypatch:
 def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     config_path = _live_config(root)
-    key = "k" * 40
+    key = "0123456789abcdef0123456789abcdef01234567"
     _write_approval(root, account_id="acct-other-9", key=key, digests=_expected_digests(config_path))
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)
@@ -278,7 +278,7 @@ def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkey
 def test_live_prerequisites_binding_rejects_stale_digests(tmp_path: Path, monkeypatch: Any) -> None:
     root = tmp_path
     _live_config(root)  # writes settings.yaml (side effect)
-    key = "k" * 40
+    key = "0123456789abcdef0123456789abcdef01234567"
     _write_approval(root, account_id="acct-live-1", key=key, digests=("stale-digest",))
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)

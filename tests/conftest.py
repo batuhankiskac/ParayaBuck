@@ -688,3 +688,17 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             f"Test opened production state paths {sorted(set(state_accesses))} — isolation failed; "
             "tests must use tmp_path, never the repo's data/runtime, data/cache or logs"
         )
+
+
+@pytest.fixture(autouse=True)
+def _fixed_trading_host_machine_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fixed machine id for the host identity, so LIVE tests never depend on the host's /etc/machine-id.
+
+    The identity fails closed without a readable machine id (S2-8-7); a
+    developer's Mac has none, so the tests bind one instead of reading the host.
+    """
+    import parayabuck.trading_host as trading_host_module
+
+    machine_id = tmp_path / "test-machine-id"
+    machine_id.write_text("0123456789abcdef0123456789abcdef\n", encoding="utf-8")
+    monkeypatch.setattr(trading_host_module, "_MACHINE_ID_PATHS", (str(machine_id),))

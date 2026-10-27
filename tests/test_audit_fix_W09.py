@@ -458,7 +458,7 @@ def test_live_start_gates_refuse_a_configuration_doctor_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     manager = _manager(tmp_path, monkeypatch)
-    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "k" * 32)
+    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "0123456789abcdef0123456789abcdef")
     monkeypatch.setattr(manager, "get_paper_credentials", lambda: ("PKpaperkey12", "PKpapersecret"))
     monkeypatch.setattr(email_alerts_module, "validate_email_setup", lambda settings, env=None: [])
 
@@ -501,7 +501,7 @@ def _approval_items(manager: EngineManager, live_cfg: dict[str, Any]) -> tuple[A
 
 def test_oversized_approval_file_is_refused_before_it_is_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     manager = _manager(tmp_path, monkeypatch)
-    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "k" * 32)
+    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "0123456789abcdef0123456789abcdef")
     path = tmp_path / "approval.json"
     path.write_text("{" + " " * engine_module._APPROVAL_FILE_MAX_BYTES + "}", encoding="utf-8")
 
@@ -516,7 +516,7 @@ def test_oversized_approval_file_is_refused_before_it_is_read(tmp_path: Path, mo
 
 def test_approval_parse_error_does_not_echo_the_file_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     manager = _manager(tmp_path, monkeypatch)
-    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "k" * 32)
+    monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", "0123456789abcdef0123456789abcdef")
     path = tmp_path / "approval.json"
     path.write_text('{"approved_at": "not-a-date-marker-7741"}', encoding="utf-8")
 

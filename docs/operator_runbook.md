@@ -650,7 +650,12 @@ record the decision in `docs/OPERATIONS_LOG.md` before acting.
   `parayabuck authorize-live --operator <name> --standing-days <n>` before it ends. A running
   engine keeps running; only the next restart needs the renewal.
 - `live_authorization_expired`: the next restart waits for a manual re-arm, as above.
-- To revoke at any time: `parayabuck authorize-live --revoke-standing`.
+- To revoke at any time: `parayabuck authorize-live --revoke-standing`. A restored copy of
+  the revoked file stays refused; renew with a new `--standing-days` authorization.
+- VM after the approval-binding change: an approval file written before it has no host
+  binding and is refused. Run `parayabuck authorize-live --operator <name>` on the trading
+  host before the next manual LIVE start. A standing authorization keeps its signature
+  format and stays valid.
 
 ### `data_provider_unavailable`
 

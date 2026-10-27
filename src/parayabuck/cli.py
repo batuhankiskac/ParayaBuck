@@ -22,7 +22,7 @@ from parayabuck.backtest.product import (
     optimize_grid,
     run_product_backtest,
 )
-from parayabuck.config import DEFAULT_DECISION_DB_PATH, Config, RuntimeMode, load_config
+from parayabuck.config import DEFAULT_DECISION_DB_PATH, Config, RuntimeMode, load_config, same_ledger_path
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import AlpacaHistoricalData
 from parayabuck.execution.alpaca import AlpacaBroker
@@ -411,13 +411,15 @@ def backtest_main(argv: list[str] | None = None) -> int:
 
 def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     from parayabuck.live_authorization import standing_authorization_file
+    from parayabuck.live_safety import revoke_standing_authorization
+    from parayabuck.trading_host import trading_host_identity
 
     if getattr(args, "revoke_standing", False):
         standing_file = standing_authorization_file(config)
         if standing_file is None:
             raise SystemExit("live.operator_approval_path is not configured")
-        if standing_file.exists():
-            standing_file.unlink()
+        # Tombstones the exact file so a restored copy stays refused (S2-8-4).
+        if revoke_standing_authorization(standing_file):
             print(f"Standing LIVE authorization revoked: {standing_file}")
         else:
             print("No standing LIVE authorization to revoke")
@@ -450,12 +452,16 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
     hmac_secret = os.getenv(config.live.operator_approval_key_env, "")
     if not key or not secret:
         raise SystemExit(f"Live Alpaca credentials are required ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV})")
-    if len(hmac_secret) < 32:
-        # Fail here, BEFORE the live-endpoint broker probe, with the same
-        # clean SystemExit style as every other missing prerequisite —
-        # LiveOperatorApproval.calculated_signature would only raise a raw
-        # ValueError at signing time.
-        raise SystemExit(f"{config.live.operator_approval_key_env} must be set to a key of at least 32 characters")
+    from parayabuck.live_safety import check_approval_key
+
+    try:
+        # Fail here, BEFORE the live-endpoint broker probe, with the same clean
+        # SystemExit style as every other missing prerequisite. The key rules
+        # (length, placeholder, distinct characters) are the signing rules, so
+        # an unusable key is refused here, not at signing time (S2-8-6).
+        check_approval_key(hmac_secret)
+    except ValueError as exc:
+        raise SystemExit(f"{config.live.operator_approval_key_env}: {exc}") from None
     broker = AlpacaBroker(key, secret, paper=False)
     try:
         broker.account()  # Read-only identity verification against the live endpoint.
@@ -529,6 +535,10 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             )
         )
     now = datetime.now(UTC)
+    try:
+        host = trading_host_identity()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     approval = LiveOperatorApproval(
         operator_id=args.operator,
         account_id=account_id,
@@ -537,6 +547,8 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         approved_at=now,
         expires_at=now + timedelta(minutes=args.expires_minutes),
         nonce=secrets.token_hex(16),
+        # Bound to this host, so a copy of the file elsewhere never starts LIVE (S2-5-6).
+        trading_host=host,
     ).signed(hmac_secret)
     atomic_write(
         Path(config.live.operator_approval_path),
@@ -1346,7 +1358,7 @@ def _doctor_live_checks(
     add("LIVE keys differ from PAPER keys", distinct, "distinct" if distinct else "LIVE and PAPER share a key")
     add(
         "LIVE ledger separate from PAPER",
-        os.path.normpath(config.runtime.decision_db_path) != os.path.normpath(DEFAULT_DECISION_DB_PATH),
+        not same_ledger_path(config.runtime.decision_db_path, DEFAULT_DECISION_DB_PATH),
         config.runtime.decision_db_path,
     )
     status = standing_authorization_status(config)

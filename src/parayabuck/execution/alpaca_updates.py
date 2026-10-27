@@ -125,6 +125,8 @@ class AlpacaTradingUpdateStream:
             ),
             category="undecoded_trade_update",
             incident_id=f"undecoded_trade_update:{update.client_order_id}:{update.activity_id}",
+            # One episode per order, not per activity id: each undecodable frame of the order is a repeat.
+            episode_key=f"undecoded_trade_update:{update.client_order_id}",
             client_order_id=update.client_order_id,
         )
         await self._handler(replace(update, event=UNDECODED_TRADE_EVENT))

@@ -154,7 +154,7 @@ def test_persist_risk_state_keys_by_new_york_date(monkeypatch: pytest.MonkeyPatc
     engine.ledger = ledger
     engine._risk_state_lock = threading.Lock()
     engine._entry_risk_latch = {}
-    engine._evaluate_entry_risk_latch = lambda _account: None  # type: ignore[method-assign]
+    engine._evaluate_entry_risk_latch = lambda _account, **_kwargs: None  # type: ignore[method-assign]
 
     class _Frozen(datetime):
         @classmethod

@@ -1393,6 +1393,11 @@ class EngineManager:
         key, secret = self.get_live_credentials() if live else self.get_paper_credentials()
         if not key or not secret or (live and not self._live_display_allowed()):
             return None
+        # The in-memory key stays in the log scrub set after a rotation on disk.
+        from parayabuck.monitoring.operational_event import register_secret_text
+
+        register_secret_text(key)
+        register_secret_text(secret)
         try:
             from parayabuck.execution.alpaca import AlpacaBroker
 

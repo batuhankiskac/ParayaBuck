@@ -130,6 +130,19 @@ def _scrub(text: str, secrets_: tuple[str, ...]) -> str:
     return scrubbed
 
 
+def _scrub_error(text: str, settings: Any, env: Mapping[str, str] | None) -> str:
+    """An SMTP error text without the login or the routing addresses.
+
+    A refusal names the recipients and the sender (``SMTPRecipientsRefused``), and
+    that text reaches the journal and the diagnostic bundle, so the addresses are
+    scrubbed with the credentials.
+    """
+    username, password = _smtp_credentials(env)
+    addresses = [str(address) for address in getattr(settings, "to_addresses", ()) or ()]
+    addresses.append(str(getattr(settings, "from_address", "") or ""))
+    return _scrub(text, (password, username, *addresses))
+
+
 def _render_value(value: object) -> str:
     """Plain text for a field value: lists and dicts as ``a, b`` / ``k=v``, not Python reprs."""
     if isinstance(value, Mapping):
@@ -307,7 +320,13 @@ class EmailAlertSink:
             return False
         now = self._clock()
         window = max(0.0, float(self.settings.min_interval_minutes)) * 60.0
+        item = _Outgoing(kind, str(message), dict(fields), datetime.now(UTC), throttle_key=throttle_key)
+        # The enqueue happens under the same lock as close(): an item either lands
+        # before the close marker (and is delivered) or is refused here. Nothing
+        # can be stranded in the queue after the worker has exited.
         with self._lock:
+            if self._closed:
+                return False
             last = self._last_sent.get(throttle_key)
             if last is not None and window > 0 and now - last < window:
                 return False
@@ -321,6 +340,7 @@ class EmailAlertSink:
             limit = int(self.settings.max_per_hour)
             if not _is_critical(kind, fields):
                 limit -= _critical_reserve(limit)
+            queue_full = False
             if len(self._sent_times) >= limit:
                 self.dropped += 1
                 rate_limited = True
@@ -328,16 +348,16 @@ class EmailAlertSink:
                 rate_limited = False
                 self._sent_times.append(now)
                 self._pending[throttle_key] = now
+                try:
+                    self._queue.put_nowait(item)
+                except queue.Full:
+                    self.dropped += 1
+                    self._pending.pop(throttle_key, None)
+                    queue_full = True
         if rate_limited:
             _record_delivery_failure(kind, "rate_limited", f"more than {limit} e-mails this hour")
             return False
-        item = _Outgoing(kind, str(message), dict(fields), datetime.now(UTC), throttle_key=throttle_key)
-        try:
-            self._queue.put_nowait(item)
-        except queue.Full:
-            with self._lock:
-                self.dropped += 1
-                self._pending.pop(throttle_key, None)
+        if queue_full:
             _record_delivery_failure(kind, "queue_full", "e-mail queue is full")
             return False
         return True
@@ -403,8 +423,7 @@ class EmailAlertSink:
             except Exception as exc:
                 with self._lock:
                     self.failed += 1
-                username, password = _smtp_credentials(self._env)
-                detail = _scrub(f"{type(exc).__name__}: {exc}", (password, username))
+                detail = _scrub_error(f"{type(exc).__name__}: {exc}", self.settings, self._env)
                 log.warning("Alert e-mail for kind=%s not delivered: %s", item.kind, detail)
                 _record_delivery_failure(item.kind, type(exc).__name__, detail)
         finally:
@@ -423,7 +442,8 @@ class EmailAlertSink:
                 log.exception("E-mail alert worker iteration failed")
 
     def close(self) -> None:
-        self._closed = True
+        with self._lock:
+            self._closed = True
         try:
             self._queue.put_nowait(None)
         except queue.Full:
@@ -495,9 +515,8 @@ def configure_email_alerts(settings: Any | None, *, mode: str = "") -> EmailAler
             if problems:
                 log.warning("E-mail alerts are enabled but not deliverable yet: %s", "; ".join(problems))
             else:
-                log.info(
-                    "E-mail alerts enabled: %d recipient(s) via %s", len(settings.to_addresses), settings.smtp_host
-                )
+                # The SMTP host is operator-private routing (redacted like the addresses): not logged.
+                log.info("E-mail alerts enabled: %d recipient(s)", len(settings.to_addresses))
             return _sink
     except Exception:  # pragma: no cover - never raise
         log.exception("E-mail alert configuration ignored")
@@ -546,8 +565,7 @@ def send_test_email(settings: Any, *, mode: str = "", env: Mapping[str, str] | N
     try:
         send_email_message(settings, msg, env=env)
     except Exception as exc:
-        username, password = _smtp_credentials(env)
-        raise RuntimeError(_scrub(f"{type(exc).__name__}: {exc}", (password, username))) from None
+        raise RuntimeError(_scrub_error(f"{type(exc).__name__}: {exc}", settings, env)) from None
 
 
 def reset_for_tests() -> None:

@@ -506,6 +506,13 @@ class EngineRuntime:
         self._portfolio_repository = PortfolioStateRepository(database_path, store=self.store)
         # Derive runtime state dir from decision DB parent to avoid split state (peak vs sqlite).
         runtime_state_dir = str(Path(database_path).parent)
+        # The running engine's in-memory keys join the log scrub set, so a rotation on
+        # disk does not leave the live key unscrubbed in tracebacks and log lines.
+        from parayabuck.monitoring.operational_event import register_secret_text
+
+        register_secret_text(api_key)
+        register_secret_text(secret_key)
+        alerts.set_alert_context(mode=self.mode.value)
         self.broker = AlpacaBroker(
             api_key,
             secret_key,
@@ -2072,6 +2079,14 @@ class EngineRuntime:
                 previous_state=previous_state,
                 circuit_breaker_reason=breaker_at_stop,
             )
+        # Close the e-mail sink after the last stop alert: intake stops, and the
+        # mails already queued are still delivered by its worker.
+        try:
+            from parayabuck.monitoring.email_alerts import configure_email_alerts
+
+            configure_email_alerts(None)
+        except Exception:
+            log.warning("E-mail alert sink close failed", exc_info=True)
         session_id = getattr(self, "_runtime_session_id", None)
         ledger = getattr(self, "ledger", None)
         if session_id is not None and ledger is not None:
@@ -2474,7 +2489,12 @@ class EngineRuntime:
             error=str(exc),
         )
 
-    def _evaluate_entry_risk_latch(self, account: AccountSnapshot) -> None:
+    def _evaluate_entry_risk_latch(
+        self,
+        account: AccountSnapshot,
+        *,
+        defer_alerts: list[tuple[str, str, dict[str, object]]] | None = None,
+    ) -> None:
         """Re-evaluate the entry-risk latch from the latest account state.
 
         Daily loss and drawdown breach limits latch entries (SELL-only
@@ -2515,26 +2535,40 @@ class EngineRuntime:
         # per market so a future market-specific latch stays correct.
         transitioned = any(new_latch.get(market) != previous.get(market) for market in new_latch)
         self._entry_risk_latch = new_latch
+        # With ``defer_alerts`` the caller emits after it leaves _risk_state_lock, so a
+        # stalled journal write cannot hold the risk state (and the account loop).
+        pending: list[tuple[str, str, dict[str, object]]] = [] if defer_alerts is None else defer_alerts
         if transitioned:
             if breach == "daily_loss_limit":
                 runtime_metrics_store.record_event("risk_incident")
-                alerts.emit(
-                    "risk_incident",
-                    message="Daily loss limit breached; entries latched",
-                    reason="daily_loss_limit",
-                    daily_loss_pct=daily_loss,
-                    limit_pct=self.app_config.risk.daily_loss_limit_pct,
-                    equity=equity,
+                pending.append(
+                    (
+                        "risk_incident",
+                        "Daily loss limit breached; entries latched",
+                        {
+                            "reason": "daily_loss_limit",
+                            "daily_loss_pct": daily_loss,
+                            "limit_pct": self.app_config.risk.daily_loss_limit_pct,
+                            "equity": equity,
+                        },
+                    )
                 )
             elif breach == "portfolio_drawdown_halt":
                 runtime_metrics_store.record_event("drawdown_halt")
-                alerts.emit(
-                    "drawdown_halt",
-                    message="Drawdown limit breached; entries halted until risk-epoch reset",
-                    drawdown_pct=account.drawdown_pct,
-                    limit_pct=self.app_config.risk.max_drawdown_pct,
-                    equity=equity,
+                pending.append(
+                    (
+                        "drawdown_halt",
+                        "Drawdown limit breached; entries halted until risk-epoch reset",
+                        {
+                            "drawdown_pct": account.drawdown_pct,
+                            "limit_pct": self.app_config.risk.max_drawdown_pct,
+                            "equity": equity,
+                        },
+                    )
                 )
+        if defer_alerts is None:
+            for kind, message, fields in pending:
+                alerts.emit(kind, message=message, **fields)
 
     def _halt_for_ownership_drift(self) -> None:
         """Fail closed on ownership drift from the account-polling loop.
@@ -3227,7 +3261,10 @@ class EngineRuntime:
             # rejection is not silent.
             if update.event == "rejected":
                 runtime_metrics_store.record_event("order_rejected")
-                alerts.emit(
+                # The journal write is synchronous: run it off the event loop so a slow
+                # disk cannot stall the trade-update stream.
+                await asyncio.to_thread(
+                    alerts.emit,
                     "order_rejected",
                     message=f"Portfolio order rejected: {update.client_order_id}",
                     client_order_id=update.client_order_id,
@@ -3243,7 +3280,8 @@ class EngineRuntime:
                 if side == "sell":
                     from parayabuck.portfolio.runtime_service import emit_exit_sell_rejected_safe
 
-                    emit_exit_sell_rejected_safe(
+                    await asyncio.to_thread(
+                        emit_exit_sell_rejected_safe,
                         client_order_id=update.client_order_id,
                         symbol=update.symbol,
                         market=Market.EQUITY.value,
@@ -3304,7 +3342,8 @@ class EngineRuntime:
                     update.client_order_id,
                     exc,
                 )
-                alerts.emit(
+                await asyncio.to_thread(
+                    alerts.emit,
                     "data_provider_unavailable",
                     message="Post-fill account refresh failed; fill booked, runtime not halted",
                     client_order_id=update.client_order_id,
@@ -5451,32 +5490,40 @@ class EngineRuntime:
         # _account_loop, the trade-update path and the operator resets call
         # this concurrently; the latch evaluation and the incident/risk-state
         # writes must not interleave.
-        with getattr(self, "_risk_state_lock", threading.Lock()):
-            account_id = self.broker.account_id or "unknown"
-            today = datetime.now(UTC).astimezone(NEW_YORK).date()
-            self._evaluate_entry_risk_latch(account)
-            reason = self._circuit_breaker_reason
-            # The circuit_breaker_reason in the session row is kept for
-            # backward compatibility; the incident table is authoritative for
-            # restore, so every halt reason in force is recorded there (R9-3).
-            with getattr(self, "_state_lock", threading.RLock()):
-                active_halts = self._active_halt_reasons()
-            for halt in active_halts:
-                self.ledger.save_safety_incident(account_id, halt)
-            self.ledger.save_risk_state(
-                RiskState(
-                    account_id=account_id,
-                    session_date=today,
-                    day_start_equity=float(account.equity - account.daily_pnl),
-                    peak_equity=float(account.peak_equity),
-                    realized_pnl=float(account.realized_pnl),
-                    unrealized_pnl=float(account.unrealized_pnl),
-                    fees=self._fee_total_for_snapshot(account, account_id),
-                    circuit_breaker_reason=reason,
-                    updated_at=datetime.now(UTC),
-                    peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
+        pending_alerts: list[tuple[str, str, dict[str, object]]] = []
+        try:
+            with getattr(self, "_risk_state_lock", threading.Lock()):
+                account_id = self.broker.account_id or "unknown"
+                if self.broker.account_id:
+                    alerts.set_alert_context(account_id=self.broker.account_id)
+                today = datetime.now(UTC).astimezone(NEW_YORK).date()
+                self._evaluate_entry_risk_latch(account, defer_alerts=pending_alerts)
+                reason = self._circuit_breaker_reason
+                # The circuit_breaker_reason in the session row is kept for
+                # backward compatibility; the incident table is authoritative for
+                # restore, so every halt reason in force is recorded there (R9-3).
+                with getattr(self, "_state_lock", threading.RLock()):
+                    active_halts = self._active_halt_reasons()
+                for halt in active_halts:
+                    self.ledger.save_safety_incident(account_id, halt)
+                self.ledger.save_risk_state(
+                    RiskState(
+                        account_id=account_id,
+                        session_date=today,
+                        day_start_equity=float(account.equity - account.daily_pnl),
+                        peak_equity=float(account.peak_equity),
+                        realized_pnl=float(account.realized_pnl),
+                        unrealized_pnl=float(account.unrealized_pnl),
+                        fees=self._fee_total_for_snapshot(account, account_id),
+                        circuit_breaker_reason=reason,
+                        updated_at=datetime.now(UTC),
+                        peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
+                    )
                 )
-            )
+        finally:
+            # Emitted after the lock (and also when the save raised, as before the move).
+            for kind, message, fields in pending_alerts:
+                alerts.emit(kind, message=message, **fields)
 
     def _fee_total_for_snapshot(self, account: AccountSnapshot, account_id: str) -> float:
         """Fee total for risk-state persistence.

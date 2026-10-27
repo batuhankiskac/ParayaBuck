@@ -617,6 +617,7 @@ class AccountService:
         if peak_lock is None:
             peak_lock = threading.Lock()
             broker._peak_lock = peak_lock
+        sidecar_failed = False
         with peak_lock:
             broker._ensure_peak_reconciled(broker._account_id or "unknown")
             old_peak = broker._peak_equity
@@ -636,12 +637,16 @@ class AccountService:
                     # even if the peak does not move again.
                     self._peak_save_pending = True
                     log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
-                    emit_execution_alert(
-                        "paper_incident",
-                        message="Peak sidecar write failed; snapshot kept, retry next poll",
-                        category="peak_sidecar_write_failed",
-                        incident_id="peak_sidecar_write_failed",
-                    )
+                    sidecar_failed = True
+        # Alert after the peak lock is released: the journal write must not hold
+        # the lock that every peak read and reset waits on.
+        if sidecar_failed:
+            emit_execution_alert(
+                "paper_incident",
+                message="Peak sidecar write failed; snapshot kept, retry next poll",
+                category="peak_sidecar_write_failed",
+                incident_id="peak_sidecar_write_failed",
+            )
         daily_pnl = equity - previous_equity - cash_flows
         snapshot = AccountSnapshot(
             cash=cash,

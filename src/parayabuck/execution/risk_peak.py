@@ -9,6 +9,7 @@ from typing import Any
 from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import RiskStatePersistenceError  # noqa: E402
 from parayabuck.logger import get_logger
+from parayabuck.monitoring.operational_event import mask_account_number
 from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.execution.alpaca")
@@ -378,7 +379,9 @@ class RiskPeakService:
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception:
-                log.warning("Failed to reconcile peak sidecar to account %s", account_id, exc_info=True)
+                log.warning(
+                    "Failed to reconcile peak sidecar to account %s", mask_account_number(account_id), exc_info=True
+                )
 
     def save_peak_equity(self, account_id: str | None = None) -> None:
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:

@@ -71,7 +71,9 @@ class _OkSMTP:
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> Any:
     alerts.reset_for_tests()
     email_alerts.reset_for_tests()
-    monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: None)
+    # The stub reports the row as journaled: a throttle key is recorded only after a
+    # successful journal write (C2-3-7), so a stub returning None would never throttle.
+    monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: True)
     yield
     email_alerts.reset_for_tests()
     alerts.reset_for_tests()

@@ -14,7 +14,7 @@ from parayabuck.logger import setup_logging
 from parayabuck.trading_host import trading_host_authorized
 
 # Bound on draining open connections (websockets stay open indefinitely)
-# at shutdown. It must stay below the unit's TimeoutStopSec (120 s) so systemd
+# at shutdown. It must stay well below the unit's TimeoutStopSec (180 s) so systemd
 # never SIGKILLs a process that is still persisting its journal.
 _GRACEFUL_SHUTDOWN_SECONDS = 30
 

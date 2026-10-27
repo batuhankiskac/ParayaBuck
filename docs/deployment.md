@@ -21,7 +21,7 @@ console, settings and backtests work and the engine refuses to start — see
 | Bind | `127.0.0.1:8000` (`app.host/port`); reach it through an SSH tunnel: `ssh -L 8000:127.0.0.1:8000 <vm>` |
 | Working directory | Must be the repo root: `CONFIG_PATH=./config/settings.yaml` and every `data/runtime/...` path are cwd-relative |
 | Preflight | `ExecStartPre=parayabuck doctor --strict --configured-mode --offline` — validates the mode `runtime.mode` names. PAPER gets exactly the old `--paper` set: the unit refuses to start on a bad config, live enabled, a dollar cap, `PARAYABUCK_ENABLE_LIVE`, missing PAPER credentials, unwritable config dir, failed SQLite `integrity_check` or a tracked `.env`. LIVE gets the LIVE set (see "LIVE runbook") |
-| Stop | `SIGTERM` stops the engine gracefully (worker joins, ledger close, socket release); `TimeoutStopSec=120` covers the worst-case join sequence |
+| Stop | `SIGTERM` stops the engine gracefully (worker joins, ledger close, socket release); `TimeoutStopSec=180` covers the 30 s HTTP drain, the 30 s in-flight start wait and the worst-case join sequence |
 | Liveness / readiness | `GET /healthz` (always 200 while the process serves) / `GET /readyz` (200 ready, 503 not; see `docs/operations.md`) |
 | Backups | `parayabuck-backup.timer` runs `parayabuck backup` every 6 h (10 min after boot) |
 | Alerts | Always local: the log (`journalctl -u parayabuck`) and the event journal (`parayabuck ops events`). Off-host delivery is opt-in e-mail only (`alerting.email`, disabled in the shipped config; see "E-mail alerts") |
@@ -30,7 +30,7 @@ console, settings and backtests work and the engine refuses to start — see
 
 | File | Purpose |
 |---|---|
-| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=120`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below |
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=180`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below |
 | `parayabuck-backup.service` | Oneshot `parayabuck backup`, the sandbox below and its own narrow env file `.env.backup` (see "Backup environment file"); `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
 | `parayabuck-deadman.service` | Oneshot `python -m parayabuck.monitoring.deadman`: pings the external heartbeat (see the dead-man section); `LoadCredential=` for the URL, no writes |

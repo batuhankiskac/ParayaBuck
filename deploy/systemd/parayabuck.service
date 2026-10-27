@@ -34,8 +34,9 @@ ExecStart=/opt/parayabuck/.venv/bin/parayabuck web
 Restart=on-failure
 RestartSec=10
 # A graceful stop joins the stream, account, decision and journal workers in
-# sequence; 120 s covers the worst case so systemd never SIGKILLs mid-persist.
-TimeoutStopSec=120
+# sequence after a 30 s HTTP drain and a 30 s wait on an in-flight start;
+# 180 s covers that worst case so systemd never SIGKILLs mid-persist.
+TimeoutStopSec=180
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

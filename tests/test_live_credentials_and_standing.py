@@ -410,6 +410,9 @@ def test_valid_standing_authorization_allows_the_unattended_live_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     manager = _live_manager(tmp_path, monkeypatch)
+    # The shipped test config has e-mail alerts off, which doctor's LIVE gate
+    # refuses; the start-gate tests in test_audit_fix_w09 cover that gate.
+    monkeypatch.setattr(manager, "_live_doctor_refusal", lambda *_args: None)
     _write_standing(load_config(str(manager.config_path)))
     assert manager.should_auto_start() is True
     assert _delivered("live_rearm_required") == 0
@@ -438,6 +441,7 @@ def test_valid_standing_authorization_allows_the_unattended_live_start(
 
 def test_manual_live_start_still_requires_the_interactive_arm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     manager = _live_manager(tmp_path, monkeypatch)
+    monkeypatch.setattr(manager, "_live_doctor_refusal", lambda *_args: None)  # see the standing test above
     _write_standing(load_config(str(manager.config_path)))
     monkeypatch.setattr("parayabuck.runtime.EngineRuntime", lambda **kwargs: pytest.fail("must not start"))
     with pytest.raises(ValueError, match="fresh confirmation"):

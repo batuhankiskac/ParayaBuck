@@ -84,7 +84,8 @@ def test_corrupt_config_selects_paper_display_broker(tmp_path: Path, monkeypatch
     manager = _manager(tmp_path)
     manager.config_path.write_text("runtime: [unclosed\n", encoding="utf-8")
     seen = _capture_broker(monkeypatch)
-    manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    # The refresh reads the mode once and takes that mode's pair directly.
+    manager.get_paper_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
 
     manager._refresh_account_snapshot()
 
@@ -96,7 +97,7 @@ def test_non_mapping_config_selects_paper_display_broker(tmp_path: Path, monkeyp
     manager = _manager(tmp_path)
     manager.config_path.write_text("- just\n- a list\n", encoding="utf-8")
     seen = _capture_broker(monkeypatch)
-    manager.get_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
+    manager.get_paper_credentials = lambda: ("key", "secret")  # type: ignore[method-assign]
 
     manager._refresh_account_snapshot()
 

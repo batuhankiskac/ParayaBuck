@@ -18,6 +18,7 @@ functions or via typing.TYPE_CHECKING.
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,11 @@ if TYPE_CHECKING:
     pass
 
 log = get_logger("parayabuck.web.lifespan")
+
+# Longest the shutdown waits for an in-flight start attempt before it stops the
+# engine anyway. The attempt has been told to cancel, so it stops before its
+# order-producing steps; this only bounds how long the unit can take to exit.
+_SHUTDOWN_START_WAIT_SECONDS = 30.0
 
 
 def _watchdog_gate(manager: Any) -> Any:
@@ -47,7 +53,35 @@ async def _auto_start_paper_engine(manager: Any) -> None:
     try:
         await manager.auto_start_engine()
     except Exception as exc:  # pragma: no cover - exercised via manager stubs
-        log.error("Automatic paper engine start failed: %s", exc)
+        redact = getattr(manager, "redact_secrets", None)
+        text = redact(str(exc)) if callable(redact) else str(exc)
+        log.error("Automatic paper engine start failed: %s", text)
+
+
+async def _await_startup_attempt(task: asyncio.Task[None], manager: Any) -> None:
+    """Wait for the auto-start task for a bounded time while retry sleeps are cancelled.
+
+    Past the bound the task is left to finish on its own: the stop that follows
+    marks the attempt interrupted, and the attempt then stops its runtime itself.
+    """
+    deadline = time.monotonic() + _SHUTDOWN_START_WAIT_SECONDS
+    cancel = getattr(manager, "_cancel_pending_retry", None)
+    while not task.done():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            log.error(
+                "Startup attempt still running %.0fs into shutdown; stopping the engine without waiting for it",
+                _SHUTDOWN_START_WAIT_SECONDS,
+            )
+            return
+        if callable(cancel):
+            try:
+                cancel()
+            except Exception:
+                pass
+        await asyncio.wait({task}, timeout=min(0.05, remaining))
+    with suppress(asyncio.CancelledError):
+        await task
 
 
 def create_lifespan(state_provider: Any) -> Any:
@@ -111,22 +145,19 @@ def create_lifespan(state_provider: Any) -> Any:
         try:
             yield
         finally:
+            if manager is not None:
+                # Refuse a start that has not begun and cancel the in-flight one
+                # BEFORE waiting on it: otherwise its resume/catch-up steps can
+                # submit orders during the shutdown wait.
+                request_shutdown = getattr(manager, "request_shutdown", None)
+                if callable(request_shutdown):
+                    try:
+                        request_shutdown()
+                    except Exception as exc:  # pragma: no cover - defensive
+                        log.warning("Startup cancellation during shutdown failed: %s", exc)
             if auto_start_task is not None and manager is not None:
-                # Cancel a pending backoff sleep promptly; in-flight start
-                # still finishes. An in-flight attempt that then fails
-                # transiently schedules a fresh backoff sleep, so keep
-                # cancelling until the task ends, or shutdown would wait on
-                # retries for as long as the network stays down.
-                cancel = getattr(manager, "_cancel_pending_retry", None)
-                with suppress(asyncio.CancelledError):
-                    while not auto_start_task.done():
-                        if callable(cancel):
-                            try:
-                                cancel()
-                            except Exception:
-                                pass
-                        await asyncio.wait({auto_start_task}, timeout=0.05)
-                    await auto_start_task
+                await _await_startup_attempt(auto_start_task, manager)
+            engine_stop_failed = False
             # Uvicorn shutdown must release sockets. Use to_thread so the
             # event loop is not blocked while the runtime joins workers.
             if manager is not None:
@@ -135,7 +166,17 @@ def create_lifespan(state_provider: Any) -> Any:
                     try:
                         await asyncio.to_thread(stop)
                     except Exception as exc:  # pragma: no cover
+                        # Workers may still be running: the process must exit
+                        # non-zero so systemd records the failure.
+                        engine_stop_failed = True
                         log.warning("Engine stop during lifespan shutdown failed: %s", exc)
+                if getattr(manager, "engine_state", None) == "stop_failed":
+                    engine_stop_failed = True
+            if engine_stop_failed and _app is not None:
+                # Read by app.main() after uvicorn returns: a stop that left workers
+                # running must not exit as a clean shutdown.
+                with suppress(AttributeError):
+                    _app.state.engine_stop_failed = True
             # Stopped last: the unit keeps its watchdog while the engine stops.
             await asyncio.to_thread(watchdog.stop)
 

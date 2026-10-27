@@ -13,6 +13,11 @@ import yaml
 from parayabuck.logger import setup_logging
 from parayabuck.trading_host import trading_host_authorized
 
+# Bound on draining open connections (websockets stay open indefinitely)
+# at shutdown. It must stay below the unit's TimeoutStopSec (120 s) so systemd
+# never SIGKILLs a process that is still persisting its journal.
+_GRACEFUL_SHUTDOWN_SECONDS = 30
+
 
 def _probe_web_bind(host: str, port: int) -> None:
     """Fail fast when the operator Web port cannot be bound.
@@ -114,7 +119,11 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
 
     from parayabuck.web.server import app
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info", timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS)
+    if getattr(getattr(app, "state", None), "engine_stop_failed", False):
+        # The engine's workers did not stop. Exit non-zero: a clean exit would
+        # hide the still-running workers from systemd and the operator.
+        raise SystemExit("ParayaBuck stopped with engine workers still running; restart the process before trading.")
 
 
 if __name__ == "__main__":

@@ -25,8 +25,8 @@ from dotenv import dotenv_values
 from parayabuck.config import (
     DEFAULT_DECISION_DB_PATH,
     credential_file_mode_warning,
-    credential_from_directory,
     load_config,
+    read_credential,
 )
 from parayabuck.live_safety import (
     LIVE_API_KEY_ENV,
@@ -63,6 +63,23 @@ _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS = 120.0
 _WATCHDOG_STARTUP_GRACE_SECONDS = 600.0
 _AUTO_START_RETRY_ALERT_AFTER = 3
 _AUTO_START_RETRY_ALERT_REPEAT = 10
+# A failed account refresh is not retried for this long; polls get the last
+# snapshot (or "unavailable") meanwhile instead of queueing on the broker.
+_ACCOUNT_FAILURE_BACKOFF_SECONDS = 5.0
+# A decision worker that has not beaten this long is wedged (same bound as the
+# account loop); the watchdog then stops pinging.
+_WATCHDOG_DECISION_LOOP_MAX_AGE_SECONDS = 120.0
+# Operator approval files are small JSON documents; larger files are refused
+# before they are read.
+_APPROVAL_FILE_MAX_BYTES = 64 * 1024
+
+
+class _ApprovalFileError(ValueError):
+    """A refused approval file. Its message is ours, so it is safe to show."""
+
+
+# Shorter secrets are not scrubbed from error text (a short value would mangle it).
+_SECRET_REDACTION_MIN_LENGTH = 8
 
 
 def _retry_alert_due(attempts: int) -> bool:
@@ -149,6 +166,15 @@ class EngineManager:
         self._last_account_monotonic = 0.0
         self._account_cache_ttl_seconds = 5.0
         self._account_lock = threading.Lock()
+        # Single-flight broker refresh. Taken without blocking by account polls
+        # and with blocking by stop_engine, which closes the runtime's ledger
+        # under it, so no poll reads a closing handle. Never held while the
+        # account-cache lock is held.
+        self._account_refresh_lock = threading.Lock()
+        self._account_failed_monotonic: float | None = None
+        # Serializes reset-safety-lock / risk-epoch against stop_engine, which
+        # would otherwise close the runtime those calls are using.
+        self._runtime_ops_lock = threading.Lock()
         self._state_lock = threading.RLock()
         if backtest_manager is None:
             try:
@@ -179,6 +205,13 @@ class EngineManager:
         # Set by stop_engine while a start attempt is still in flight, so the
         # running startup sequence stops before its order-producing steps.
         self._start_cancel = threading.Event()
+        # Set once at application shutdown: no new start may begin after it.
+        self._shutdown_requested = threading.Event()
+        # True while a settings save stops, writes and restarts the engine; a
+        # manual or auto start in that window would read a half-written config.
+        self._settings_write_open = False
+        # time.monotonic() when the current start attempt began (None between attempts).
+        self._start_attempt_monotonic: float | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -277,10 +310,76 @@ class EngineManager:
         values = dotenv_values(self.env_path) if self.env_path.exists() else {}
         if values:
             self._warn_loose_credential_file()
-        # systemd credential files ($CREDENTIALS_DIRECTORY/<name>) win first.
-        key = credential_from_directory(key_name) or values.get(key_name) or os.getenv(key_name)
-        secret = credential_from_directory(secret_name) or values.get(secret_name) or os.getenv(secret_name)
+        # Stripped like config.read_credential: a stray newline or space in a
+        # quoted .env value otherwise reaches the HTTP header and the error text.
+        # Order: systemd credential files, then the .env file, then the process
+        # environment (file entries shadow inherited ones).
+        source = {**os.environ, **{name: value for name, value in values.items() if value is not None}}
+        key = read_credential(key_name, source) or None
+        secret = read_credential(secret_name, source) or None
         return key, secret
+
+    def _live_env_enabled(self) -> bool:
+        """PARAYABUCK_ENABLE_LIVE=YES from the current .env, re-read per call.
+
+        Once the .env file exists it is the authority: a value inherited into the
+        process environment (systemd EnvironmentFile loaded at boot) must not keep
+        LIVE armed after the line is removed. Without a .env file the process
+        environment decides, as before.
+        """
+        if self.env_path.exists():
+            try:
+                return dotenv_values(self.env_path).get("PARAYABUCK_ENABLE_LIVE") == "YES"
+            except OSError:
+                return False
+        return os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
+
+    def redact_secrets(self, text: str) -> str:
+        """``text`` with every configured Alpaca key/secret (both modes) replaced. Never raises."""
+        try:
+            pairs = (self.get_paper_credentials(), self.get_live_credentials())
+        except Exception:
+            return text
+        for pair in pairs:
+            for value in pair:
+                if value is None or len(value) < _SECRET_REDACTION_MIN_LENGTH:
+                    continue
+                # repr() covers a value whose control characters were escaped in the error text.
+                for needle in {value, repr(value)[1:-1]}:
+                    text = text.replace(needle, "[redacted]")
+        return text
+
+    def request_shutdown(self) -> None:
+        """Application shutdown: refuse new starts and cancel the one in flight.
+
+        Called before the lifespan waits for the auto-start task, so a start that
+        has not begun is refused and a running one stops before its order-producing
+        steps (resume, catch-up) instead of submitting during shutdown.
+        """
+        self._shutdown_requested.set()
+        self._start_cancel.set()
+        self._cancel_pending_retry()
+
+    def begin_settings_write(self) -> None:
+        """Hold starts out while a settings save stops, writes and restarts the engine."""
+        with self._state_lock:
+            self._settings_write_open = True
+
+    def end_settings_write(self) -> None:
+        with self._state_lock:
+            self._settings_write_open = False
+
+    def write_mode_if_idle(self, paper: bool, write: Callable[[Path, bool], None]) -> None:
+        """Run the runtime-mode file write only while no engine is active.
+
+        The idle check and the write share ``_state_lock``, which a start takes to
+        leave 'stopped', so a start either sees the old mode before the toggle or
+        the new one after it, never a config mid-toggle with a stale check.
+        """
+        with self._state_lock:
+            if self.runtime is not None or self.engine_state in _ACTIVE_ENGINE_STATES:
+                raise ValueError("Cannot toggle trading mode while engine is running. Stop the bot first.")
+            write(self.config_path, paper)
 
     def configure_alert_delivery(self) -> None:
         """Install the opt-in e-mail alert sink from the current settings. Never raises."""
@@ -343,7 +442,10 @@ class EngineManager:
         """
         halt_refusal = self._operator_halt_refusal()
         if halt_refusal is not None:
+            # The engine stays down after a reboot until an operator resumes it;
+            # say so in the alert channel, not only in the log.
             log.error("%s", halt_refusal)
+            _alert_start_failure(reason="operator_halt", message=halt_refusal, auto_start=True)
             return False
         if not trading_host_authorized():
             log.warning("%s", TRADING_HOST_REFUSAL)
@@ -382,7 +484,7 @@ class EngineManager:
             key, secret = self.get_live_credentials()
             if self.security_warning:
                 reason = "the tracked-secret security check is blocking engine starts"
-            elif os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+            elif not self._live_env_enabled():
                 reason = "PARAYABUCK_ENABLE_LIVE is not YES"
             elif not key or not secret:
                 reason = f"{LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV} are not set"
@@ -452,15 +554,31 @@ class EngineManager:
         """
         runtime = self.runtime
         if runtime is None or not getattr(runtime, "_running", False):
-            return True
+            # A start attempt that has not published its runtime yet (runtime.start()
+            # hung) must finish within the startup grace. Between retries nothing is
+            # in flight, so the gate stays open.
+            attempt = getattr(self, "_start_attempt_monotonic", None)
+            return attempt is None or time.monotonic() - attempt <= _WATCHDOG_STARTUP_GRACE_SECONDS
         moment = now if now is not None else datetime.now(UTC)
         last = getattr(runtime, "last_account_loop_pass_at", None)
         if isinstance(last, datetime):
-            return (moment - last).total_seconds() <= _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS
-        started = getattr(runtime, "_watchdog_started_at", None)
-        if isinstance(started, datetime):
-            return (moment - started).total_seconds() <= _WATCHDOG_STARTUP_GRACE_SECONDS
-        return False
+            account_fresh = (moment - last).total_seconds() <= _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS
+        else:
+            started = getattr(runtime, "_watchdog_started_at", None)
+            if not isinstance(started, datetime):
+                return False
+            account_fresh = (moment - started).total_seconds() <= _WATCHDOG_STARTUP_GRACE_SECONDS
+        if not account_fresh:
+            return False
+        # The decision worker is what places orders; a wedged one with a live
+        # account loop must still stop the pings. Absent worker records (fakes,
+        # or a runtime that has not spawned its workers) are not counted.
+        workers = getattr(runtime, "_workers", None)
+        decision = workers.get("pb-decisions") if isinstance(workers, dict) else None
+        beat = getattr(decision, "last_heartbeat", None)
+        if isinstance(beat, datetime):
+            return (moment - beat).total_seconds() <= _WATCHDOG_DECISION_LOOP_MAX_AGE_SECONDS
+        return True
 
     def has_active_runtime(self) -> bool:
         with self._state_lock:
@@ -481,7 +599,9 @@ class EngineManager:
         fields_set = payload.model_fields_set
 
         # Determine current paper mode before mutation for entering_live detection and digest.
-        current_paper = self.is_paper_mode()
+        # An unknown mode (config missing or unreadable) counts as the mode that
+        # needs the LIVE-entry gates: a LIVE save must never skip them.
+        current_paper = self._read_paper_mode() is not False
         # paper_mode is explicit in payload; otherwise derive from live_trading_enabled if provided.
         if "paper_mode" in fields_set and "live_trading_enabled" in fields_set:
             if payload.paper_mode == payload.live_trading_enabled:
@@ -686,6 +806,10 @@ class EngineManager:
                     "A Web backtest is still running; wait for it to finish before starting the trading engine"
                 )
             with self._state_lock:
+                if self._shutdown_requested.is_set():
+                    raise ValueError("Engine start refused: the application is shutting down")
+                if self._settings_write_open:
+                    raise ValueError("Engine start refused: a settings save is in progress; retry when it finishes")
                 if self.runtime is not None or self.engine_state in _START_ENGINE_BLOCKING_STATES:
                     raise ValueError(f"Engine is already {self.engine_state}")
                 # The auto-start retry loop re-enters while its own failed
@@ -702,7 +826,14 @@ class EngineManager:
                 # Fresh cancel event per attempt: a stop request may only
                 # cancel the startup that is in flight now.
                 self._start_cancel.clear()
+                self._start_attempt_monotonic = time.monotonic()
+        try:
+            self._run_start_attempt(auto_start=auto_start)
+        finally:
+            self._start_attempt_monotonic = None
 
+    def _run_start_attempt(self, *, auto_start: bool) -> None:
+        """One start attempt after the state change; see start_engine."""
         key, secret = self.get_credentials()
         if not key or not secret:
             message = "Alpaca API key/secret missing. Configure settings first."
@@ -738,7 +869,7 @@ class EngineManager:
                 raise ValueError(warning)
             cfg = load_config(str(self.config_path))
             live_mode = cfg.runtime.mode.value == "live"
-            if live_mode and os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+            if live_mode and not self._live_env_enabled():
                 raise ValueError(
                     "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES before starting the application."
                 )
@@ -750,6 +881,10 @@ class EngineManager:
                     raise ValueError(
                         f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are not configured"
                     )
+                # The LIVE gates doctor enforces; manual and retry starts used to skip them.
+                refusal = self._live_doctor_refusal(cfg, live_key, live_secret)
+                if refusal is not None:
+                    raise ValueError(refusal)
                 key, secret = live_key, live_secret
             if live_mode and auto_start:
                 # Unattended (reboot/deploy) LIVE start: only a valid standing
@@ -813,33 +948,36 @@ class EngineManager:
             # auto-start loop retries with bounded backoff while the state
             # stays 'starting'; a manual start surfaces the message and the
             # operator retries explicitly.
-            if runtime is not None:
-                try:
-                    runtime.stop()
-                except Exception:
-                    log.exception("Cleanup after transient engine start failure")
+            message = self.redact_secrets(str(exc))
+            released = self._release_failed_start(runtime)
             failed = False
-            attempts = 0
+            retrying = False
+            attempts = self._retry_attempt + 1
             with self._state_lock:
-                if interrupted or self.engine_state == "stopping":
+                if not released:
+                    # Workers may still be inside a broker call: no retry, no
+                    # second start, until the process restarts.
+                    self._keep_unstopped_runtime(runtime, f"transient: {message}; runtime workers did not stop")
+                    failed = True
+                elif interrupted or self.engine_state == "stopping":
                     self.engine_state = "stopped"
                     self.last_engine_error = None
                 else:
                     self.engine_state = "starting" if auto_start else "error"
-                    self.last_engine_error = f"transient: {exc}"
+                    self.last_engine_error = f"transient: {message}"
                     # The retry loop records its counter after the attempt
                     # that failed, so the attempt number is the next one.
                     failed = True
-                    attempts = self._retry_attempt + 1
+                    retrying = auto_start
             self.invalidate_live_arming()
             # A retrying auto-start keeps the state at 'starting' and the
             # failure is expected to clear; alert only once the retries are
             # visibly not clearing it. A manual transient failure ends in
             # 'error' with no retry behind it, so it always alerts.
-            if failed and (not auto_start or _retry_alert_due(attempts)):
+            if failed and (not retrying or _retry_alert_due(attempts)):
                 _alert_start_failure(
-                    reason="transient_retrying" if auto_start else "transient_no_retry",
-                    message=f"Transient engine start failure: {exc}",
+                    reason="transient_retrying" if retrying else "transient_no_retry",
+                    message=f"Transient engine start failure: {message}",
                     auto_start=auto_start,
                     attempts=attempts,
                 )
@@ -848,28 +986,37 @@ class EngineManager:
             # An operator stop arrived while the startup sequence was still
             # running: it aborted before any order submission, so the engine
             # ends up stopped — the outcome the operator asked for.
+            released = self._release_failed_start(runtime)
             with self._state_lock:
                 self._reset_retry_state()
-                self.engine_state = "stopped"
-                self.last_engine_error = None
+                if released:
+                    self.engine_state = "stopped"
+                    self.last_engine_error = None
+                else:
+                    self._keep_unstopped_runtime(
+                        runtime, f"startup cancelled; runtime workers did not stop: {self.redact_secrets(str(exc))}"
+                    )
             self.invalidate_live_arming()
             raise RuntimeError(str(exc)) from exc
 
         except Exception as exc:
-            if runtime is not None:
-                try:
-                    runtime.stop()
-                except Exception:
-                    log.exception("Cleanup after failed engine start")
+            message = self.redact_secrets(str(exc))
+            released = self._release_failed_start(runtime)
             failed = False
             with self._state_lock:
                 self._reset_retry_state()
-                if interrupted:
+                if not released:
+                    # Never report 'error' while the runtime's workers may still run.
+                    self._keep_unstopped_runtime(
+                        runtime, f"Engine start failed and its workers did not stop: {message}"
+                    )
+                    failed = True
+                elif interrupted:
                     self.engine_state = "stopped"
                     self.last_engine_error = None
                 else:
                     self.engine_state = "error"
-                    self.last_engine_error = str(exc)
+                    self.last_engine_error = message
                     failed = True
                     # A failed runtime closes its ledger during cleanup. Never
                     # expose that stopped runtime (or its broker) to account/status
@@ -887,10 +1034,71 @@ class EngineManager:
             if failed:
                 _alert_start_failure(
                     reason="startup_rejected" if isinstance(exc, ValueError) else "startup_error",
-                    message=f"Engine start failed: {exc}",
+                    message=f"Engine start failed: {message}",
                     auto_start=auto_start,
                 )
             raise
+
+    def _release_failed_start(self, runtime: Any) -> bool:
+        """Stop the runtime of a failed or interrupted start; True when its workers are down.
+
+        A stop that reports False, or raises, can leave workers blocked in a broker
+        call. The caller then keeps the runtime reference and reports stop_failed
+        instead of stopped/error, so no second start, mode change or save can run
+        beside them.
+        """
+        if runtime is None:
+            return True
+        try:
+            stopped = runtime.stop()
+        except Exception:
+            log.exception("Cleanup after failed engine start")
+            return False
+        return stopped is not False
+
+    def _keep_unstopped_runtime(self, runtime: Any, message: str) -> None:
+        """Hold a runtime whose workers may still run (caller holds the state lock)."""
+        self.runtime = runtime
+        self.broker = getattr(runtime, "broker", None)
+        self.engine_state = "stop_failed"
+        self.last_engine_error = message
+        log.error("%s", message)
+
+    def _live_doctor_refusal(self, cfg: Any, live_key: str, live_secret: str) -> str | None:
+        """The LIVE invariants ``doctor --configured-mode`` checks, applied to every LIVE start.
+
+        Doctor runs only as the unit's ExecStartPre, so a manual or retried start
+        skipped these. Returns the refusal text, or None when every gate holds.
+        """
+        from parayabuck.monitoring.email_alerts import validate_email_setup
+
+        live = cfg.live
+        if not live.enabled:
+            return "LIVE start refused: live.enabled is false"
+        if not float(live.hard_dollar_cap) > 0:
+            return "LIVE start refused: live.hard_dollar_cap must be greater than 0"
+        if not live.operator_approval_path:
+            return "LIVE start refused: live.operator_approval_path is not set"
+        if len(os.getenv(live.operator_approval_key_env, "")) < 32:
+            return (
+                f"LIVE start refused: approval key {live.operator_approval_key_env} "
+                "is missing or shorter than 32 characters"
+            )
+        paper_key, paper_secret = self.get_paper_credentials()
+        if (paper_key and live_key == paper_key) or (paper_secret and live_secret == paper_secret):
+            return "LIVE start refused: LIVE and PAPER share a key"
+        if os.path.normpath(cfg.runtime.decision_db_path) == os.path.normpath(DEFAULT_DECISION_DB_PATH):
+            return "LIVE start refused: the LIVE ledger must not use the PAPER decision database"
+        email = cfg.alerting.email
+        if not email.enabled:
+            return "LIVE start refused: alerting.email.enabled is false; LIVE needs off-host alerts"
+        problems = validate_email_setup(email)
+        if problems:
+            return "LIVE start refused: " + "; ".join(problems)
+        warning = credential_file_mode_warning(self.env_path) if self.env_path.exists() else None
+        if warning is not None:
+            return f"LIVE start refused: {warning}"
+        return None
 
     def stop_engine(self) -> None:
         with self._state_lock:
@@ -912,9 +1120,10 @@ class EngineManager:
                 return
             self.engine_state = "stopping"
             runtime = self.runtime
-        # Account polling uses the runtime broker and ledger. Serialize it with
-        # shutdown so no request can enter while those SQLite handles close.
-        with self._account_lock:
+        # Shutdown holds the ops and refresh locks, but never the account-cache
+        # lock across runtime.stop(): a poll then gets the last snapshot instead of
+        # waiting for the joins, and no refresh reads the ledger while it closes.
+        with self._runtime_ops_lock, self._account_refresh_lock:
             if runtime is not None:
                 try:
                     stopped = runtime.stop()
@@ -922,19 +1131,20 @@ class EngineManager:
                     with self._state_lock:
                         self.engine_state = "stop_failed"
                     self.invalidate_live_arming()
-                    raise RuntimeError(f"Engine could not stop cleanly: {exc}") from exc
+                    raise RuntimeError(f"Engine could not stop cleanly: {self.redact_secrets(str(exc))}") from exc
                 if stopped is False:
                     with self._state_lock:
                         self.engine_state = "stop_failed"
                     self.invalidate_live_arming()
                     raise RuntimeError("Runtime workers did not stop; process restart required")
-            with self._state_lock:
-                self.engine_state = "stopped"
-                self.last_engine_error = None
-                self.runtime = None
-                broker = self.broker
-                self.broker = None
-                self.last_account = None
+            with self._account_lock:
+                with self._state_lock:
+                    self.engine_state = "stopped"
+                    self.last_engine_error = None
+                    self.runtime = None
+                    broker = self.broker
+                    self.broker = None
+                    self.last_account = None
         # runtime.stop() closed the runtime's own broker; a lazily created
         # account broker must be closed here or its HTTP pool leaks.
         if broker is not None and broker is not getattr(runtime, "broker", None):
@@ -1016,11 +1226,12 @@ class EngineManager:
                         self._retry_next_at = time.monotonic() + delay
                         self._retry_task = asyncio.current_task()
                         self._retry_task_loop = asyncio.get_running_loop()
-                        self.last_engine_error = f"transient: {exc}; retry in {delay}s"
+                        message = self.redact_secrets(str(exc))
+                        self.last_engine_error = f"transient: {message}; retry in {delay}s"
                     log.warning(
                         "Automatic engine start attempt %d failed transiently (%s); retrying in %ds",
                         attempt,
-                        exc,
+                        message,
                         delay,
                     )
                     await asyncio.sleep(delay)
@@ -1030,55 +1241,143 @@ class EngineManager:
         except asyncio.CancelledError:
             with self._state_lock:
                 self._reset_retry_state()
-                if self.runtime is None and self.engine_state in {"starting", "stopping"}:
+                # An attempt still running on its worker thread settles the state
+                # itself: it sees 'stopping' and stops whatever it started. Resetting
+                # it here would let that thread publish a runtime nothing stops.
+                attempt_in_flight = getattr(self, "_start_attempt_monotonic", None) is not None
+                if self.runtime is None and not attempt_in_flight and self.engine_state in {"starting", "stopping"}:
                     self.engine_state = "stopped"
                     self.last_engine_error = None
             raise
 
     def reset_safety_lock(self) -> None:
-        with self._state_lock:
-            runtime = self.runtime
-            state = self.current_engine_state()
-        if runtime is None or state not in {"halted", "degraded"}:
-            raise ValueError("A halted runtime is required to reset the safety lock")
-        runtime.reset_safety_lock()
+        # The ops lock keeps stop_engine from closing the runtime mid-call.
+        with self._runtime_ops_lock:
+            with self._state_lock:
+                runtime = self.runtime
+                state = self.current_engine_state()
+            if runtime is None or state not in {"halted", "degraded"}:
+                raise ValueError("A halted runtime is required to reset the safety lock")
+            runtime.reset_safety_lock()
 
     def start_new_risk_epoch(self) -> dict[str, object]:
         """Operator-verified drawdown-baseline reset (explicit recovery for
         the portfolio_drawdown_halt operational incident)."""
-        with self._state_lock:
-            runtime = self.runtime
-        if runtime is None:
-            raise ValueError("The trading engine is not running; start it before resetting the risk epoch")
-        baseline = runtime.start_new_risk_epoch()
+        with self._runtime_ops_lock:
+            with self._state_lock:
+                runtime = self.runtime
+            if runtime is None:
+                raise ValueError("The trading engine is not running; start it before resetting the risk epoch")
+            baseline = runtime.start_new_risk_epoch()
         return {"baseline_equity": baseline}
 
     def fetch_account_snapshot(self) -> dict[str, Any]:
         with self._account_lock:
-            now = time.monotonic()
-            if self.last_account is not None and now - self._last_account_monotonic < self._account_cache_ttl_seconds:
-                return {
-                    **self.last_account,
-                    "age_seconds": max(0.0, now - self._last_account_monotonic),
-                    "stale": False,
-                    "source": "cache",
-                }
+            fresh = self._fresh_cached_snapshot(time.monotonic())
+            if fresh is not None:
+                return fresh
+            if self._account_refresh_backing_off():
+                return self._stale_or_unavailable_snapshot()
+        # Single flight, never a queue: while another refresh (or a stop closing
+        # the ledger) holds the refresh lock, a poll answers from the last
+        # snapshot instead of pinning a worker thread behind broker REST calls.
+        if not self._account_refresh_lock.acquire(blocking=False):
+            with self._account_lock:
+                return self._stale_or_unavailable_snapshot()
+        try:
+            with self._account_lock:
+                fresh = self._fresh_cached_snapshot(time.monotonic())
+                if fresh is not None:
+                    return fresh
             return self._refresh_account_snapshot()
+        finally:
+            self._account_refresh_lock.release()
+
+    def _fresh_cached_snapshot(self, now: float) -> dict[str, Any] | None:
+        """The cached snapshot while it is within its TTL (caller holds _account_lock)."""
+        if self.last_account is not None and now - self._last_account_monotonic < self._account_cache_ttl_seconds:
+            return {
+                **self.last_account,
+                "age_seconds": max(0.0, now - self._last_account_monotonic),
+                "stale": False,
+                "source": "cache",
+            }
+        return None
+
+    def _account_refresh_backing_off(self) -> bool:
+        """True within the short negative-cache window after a failed refresh (caller holds _account_lock)."""
+        failed = self._account_failed_monotonic
+        return failed is not None and time.monotonic() - failed < _ACCOUNT_FAILURE_BACKOFF_SECONDS
+
+    def _live_display_allowed(self) -> bool:
+        """Whether a read-only poll may build a LIVE-endpoint client.
+
+        The poll sends LIVE credentials, so it needs the same host and
+        environment gates a LIVE start has; the account pin is checked on the
+        result (see _refresh_account_snapshot).
+        """
+        return trading_host_authorized() and self._live_env_enabled()
+
+    def _account_broker_for_refresh(self, *, live: bool) -> Any:
+        """The broker a refresh polls: the held one, or a new one for the given mode.
+
+        The caller reads the mode once, so the credentials and the endpoint always
+        come from the same configuration read (a config edit between two reads
+        could otherwise pair PAPER keys with the LIVE endpoint).
+        """
+        with self._account_lock:
+            if self.broker is not None:
+                return self.broker
+        key, secret = self.get_live_credentials() if live else self.get_paper_credentials()
+        if not key or not secret or (live and not self._live_display_allowed()):
+            return None
+        try:
+            from parayabuck.execution.alpaca import AlpacaBroker
+
+            broker = AlpacaBroker(key, secret, paper=not live)
+        except Exception as e:
+            log.warning("Could not connect broker: %s", e)
+            return None
+        with self._account_lock:
+            current = self.broker
+            if current is None:
+                self.broker = broker
+                current = broker
+        if current is not broker:
+            # A start or reset installed a broker meanwhile; keep theirs.
+            broker.close()
+        return current
+
+    def _verify_live_display_account(self, broker: Any, key: str) -> None:
+        """Refuse a LIVE display snapshot whose account is not the pinned one. Raises on mismatch."""
+        from parayabuck.live_safety import LiveApprovalError, verify_account_environment
+
+        try:
+            expected = load_config(str(self.config_path)).broker.expected_account_id
+            verify_account_environment(
+                live=True,
+                account_number=str(getattr(broker, "account_number", "") or ""),
+                api_key=key,
+                expected_account_id=expected,
+                account_id=str(getattr(broker, "account_id", "") or ""),
+            )
+        except LiveApprovalError as exc:
+            raise ValueError(str(exc)) from exc
 
     def _refresh_account_snapshot(self) -> dict[str, Any]:
-        if self.broker is None:
-            key, secret = self.get_credentials()
-            if key and secret:
-                try:
-                    from parayabuck.execution.alpaca import AlpacaBroker
+        """Poll the broker once; runs under _account_refresh_lock, never _account_lock across REST."""
+        live_display = self._read_paper_mode() is False
+        broker = self._account_broker_for_refresh(live=live_display)
+        if broker is None:
+            with self._account_lock:
+                self._account_failed_monotonic = time.monotonic()
+                return self._stale_or_unavailable_snapshot()
 
-                    self.broker = AlpacaBroker(key, secret, paper=self.display_broker_paper())
-                except Exception as e:
-                    log.warning("Could not connect broker: %s", e)
-
-        if self.broker is not None:
+        if broker is not None:
             try:
-                acct = self.broker.account()
+                acct = broker.account()
+                if live_display:
+                    self._verify_live_display_account(broker, self.get_live_credentials()[0] or "")
                 positions_list = []
                 for p in acct.positions:
                     if not p.is_flat:
@@ -1109,18 +1408,27 @@ class EngineManager:
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
                     "gross_exposure": sum(position.market_value for position in acct.positions if not position.is_flat),
                     "positions": positions_list,
-                    "account_suffix": getattr(self.broker, "account_suffix", ""),
+                    "account_suffix": getattr(broker, "account_suffix", ""),
                     "snapshot_at": datetime.now(UTC).isoformat(),
                     "age_seconds": 0.0,
                     "stale": False,
                     "source": "broker",
                 }
-                self.last_account = snapshot
-                self._last_account_monotonic = time.monotonic()
+                with self._account_lock:
+                    self.last_account = snapshot
+                    self._last_account_monotonic = time.monotonic()
+                    self._account_failed_monotonic = None
                 return snapshot
             except Exception as e:
                 log.warning("Error fetching account snapshot: %s", e)
+                with self._account_lock:
+                    self._account_failed_monotonic = time.monotonic()
 
+        with self._account_lock:
+            return self._stale_or_unavailable_snapshot()
+
+    def _stale_or_unavailable_snapshot(self) -> dict[str, Any]:
+        """The last good snapshot marked stale, else an 'unavailable' placeholder (caller holds _account_lock)."""
         if self.last_account:
             age = max(0.0, time.monotonic() - self._last_account_monotonic)
             return {
@@ -1148,7 +1456,7 @@ class EngineManager:
     def request_live_arming(self) -> str:
         if self.has_active_runtime():
             raise ValueError("Stop the engine before requesting live mode")
-        if os.getenv("PARAYABUCK_ENABLE_LIVE") != "YES":
+        if not self._live_env_enabled():
             raise ValueError("PARAYABUCK_ENABLE_LIVE=YES is required for live mode")
         key, secret = self.get_live_credentials()
         if not key or not secret:
@@ -1201,7 +1509,8 @@ class EngineManager:
             or datetime.now(UTC) >= pending.expires_at
             or pending.credential_fingerprint != self._credential_fingerprint(key, secret)
             or pending.config_digest != self._config_digest(paper=False)
-            or not secrets.compare_digest(phrase.strip(), f"LIVE {pending.account_suffix}")
+            # Bytes: compare_digest raises TypeError on non-ASCII str (a 500, not a refusal).
+            or not secrets.compare_digest(phrase.strip().encode("utf-8"), f"LIVE {pending.account_suffix}".encode())
         ):
             self.invalidate_live_arming()
             raise ValueError("Live confirmation phrase does not match the verified account")
@@ -1258,7 +1567,7 @@ class EngineManager:
         # The probe authenticates against the LIVE endpoint, so PAPER keys
         # must never reach it while the live gates are closed (settings-drawer
         # refreshes would otherwise send them on every open).
-        if bool(live_cfg.get("enabled", False)) and os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES":
+        if bool(live_cfg.get("enabled", False)) and self._live_env_enabled():
             account_id, account_probe_error = self._probe_live_account(key, secret)
         else:
             account_id, account_probe_error = None, _LIVE_PROBE_SKIPPED_REASON
@@ -1313,7 +1622,7 @@ class EngineManager:
             cap_ok,
             f"live.hard_dollar_cap must be greater than 0 (currently {cap:g})" if not cap_ok else None,
         )
-        env_ok = os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
+        env_ok = self._live_env_enabled()
         item(
             "enable_live_env",
             "PARAYABUCK_ENABLE_LIVE=YES",
@@ -1329,7 +1638,9 @@ class EngineManager:
         approval_path = str(live_cfg.get("operator_approval_path") or "")
         key_env_name = str(live_cfg.get("operator_approval_key_env") or "PARAYABUCK_OPERATOR_APPROVAL_KEY")
         hmac_key = os.getenv(key_env_name, "")
-        file_ok = bool(approval_path) and Path(approval_path).exists()
+        # A regular file only: a FIFO or device would block the settings drawer
+        # or the start forever on read.
+        file_ok = bool(approval_path) and Path(approval_path).is_file()
         item(
             "approval_file",
             "Operator approval file present",
@@ -1353,7 +1664,11 @@ class EngineManager:
         approval_error: str | None = None
         if file_ok and key_ok:
             try:
+                if Path(approval_path).stat().st_size > _APPROVAL_FILE_MAX_BYTES:
+                    raise _ApprovalFileError(f"larger than {_APPROVAL_FILE_MAX_BYTES} bytes")
                 parsed = json.loads(Path(approval_path).read_text(encoding="utf-8"))
+                if not isinstance(parsed, dict):
+                    raise _ApprovalFileError("not a JSON object")
                 approval = LiveOperatorApproval(
                     operator_id=str(parsed.get("operator_id", "")),
                     account_id=str(parsed.get("account_id", "")),
@@ -1372,8 +1687,12 @@ class EngineManager:
                     approval_error = "approval file is not yet valid"
                 elif approval.expires_at <= current:
                     approval_error = "approval file has expired"
+            except _ApprovalFileError as exc:
+                approval_error = f"approval file is {exc}"
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                approval_error = f"approval file is unreadable or invalid: {exc}"
+                # The exception type only: parse errors echo the file's own values,
+                # and this text reaches the dashboard.
+                approval_error = f"approval file is unreadable or invalid ({type(exc).__name__})"
         signature_ok = approval is not None and approval_error is None
         if not signature_ok and approval_error is None:
             approval_error = "approval file or operator approval HMAC key is missing (see checks above)"
@@ -1398,8 +1717,10 @@ class EngineManager:
             finally:
                 live_broker.close()
         except Exception as exc:
+            # The text stays in the log only: the endpoint is read by the dashboard
+            # and the SDK error may carry request details.
             log.warning("Live account probe failed during preflight: %s", exc)
-            return None, str(exc)
+            return None, "live account probe failed; see the application log"
 
     def _resolve_live_configuration_digests(
         self,
@@ -1641,7 +1962,9 @@ def _scan_tracked_secrets(root: Path) -> str | None:
 
 def _quote_dotenv_value(value: str) -> str:
     quote = '"'
-    escaped = value.replace(quote, "\\" + quote)
+    # python-dotenv decodes backslash escapes inside double quotes, so a literal
+    # backslash must be doubled first, or "\" followed by a quote reads back wrong.
+    escaped = value.replace("\\", "\\\\").replace(quote, "\\" + quote)
     return f'"{escaped}"'
 
 

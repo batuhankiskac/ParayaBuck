@@ -156,8 +156,14 @@ def build_protect_middleware(
         if not is_trusted_host(request.headers.get("host") or ""):
             return JSONResponse(status_code=403, content={"detail": "Untrusted Host header"})
         declared_length = request.headers.get("content-length") or ""
-        if declared_length.isdigit() and int(declared_length) > _MAX_REQUEST_BODY_BYTES:
+        # ASCII digits only: str.isdigit() also accepts "²", and int() on that raises before the token check.
+        if declared_length and not (declared_length.isascii() and declared_length.isdigit()):
+            return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"})
+        if declared_length and int(declared_length) > _MAX_REQUEST_BODY_BYTES:
             return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        if request.headers.get("transfer-encoding"):
+            # A chunked body declares no length, so the cap above cannot bound it.
+            return JSONResponse(status_code=411, content={"detail": "Length Required: send Content-Length"})
         mutating = request.method not in {"GET", "HEAD", "OPTIONS"}
         if (mutating or request.url.path in _PEER_GATED_GET_PATHS) and not is_trusted_client(
             request.client.host if request.client is not None else None

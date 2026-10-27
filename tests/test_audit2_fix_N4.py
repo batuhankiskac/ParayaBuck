@@ -78,15 +78,17 @@ def test_backtest_period_is_none_before_any_run(tmp_path: Path) -> None:
     assert _manager(tmp_path).status()["period"] is None
 
 
-def test_backtest_period_is_cleared_when_a_new_start_is_refused(tmp_path: Path) -> None:
+def test_a_refused_start_keeps_the_previous_runs_period(tmp_path: Path) -> None:
     manager = _manager(tmp_path)
     manager.start({"market": "equity", "days": 90})
+    previous = manager.status()["period"]
     manager._thread = None
     manager.state = "idle"
     with pytest.raises(ValueError):
         manager.start({"market": "equity", "days": 90, "parameters": {"bad name": 1}})
-    # A refused start never publishes a period for a run that did not begin.
-    assert manager.status()["period"] is None
+    # A refused start publishes nothing: the shown period stays the previous
+    # run's, alongside its status (S2-6-4).
+    assert manager.status()["period"] == previous
 
 
 def test_summary_renders_the_period_before_the_figures() -> None:

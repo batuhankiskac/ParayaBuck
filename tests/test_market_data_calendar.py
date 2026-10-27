@@ -551,6 +551,7 @@ def test_cache_served_verification_is_not_a_success(monkeypatch: pytest.MonkeyPa
     )
     engine._symbols_by_market = {Market.EQUITY: {"AAA"}}
     engine._portfolio_runtimes = (equity,)
+
     # The outage path: the client answers from its local warmup cache and
     # says so, which is exactly what must NOT count as verified.
     def _served_from_cache(*_args, outcome, **_kwargs):

@@ -527,7 +527,9 @@ class _DeadWebSocket:
     """
 
     def __init__(self, engine_manager: Any) -> None:
-        self.headers: dict[str, str] = {}
+        # A loopback caller, as the routes require (Host and peer are checked).
+        self.headers: dict[str, str] = {"host": "testserver"}
+        self.client = SimpleNamespace(host="testclient")
         self.query_params: dict[str, str] = {}
         self.sent: list[Any] = []
         web_state = WebState(engine_manager=engine_manager, backtest_manager=None)

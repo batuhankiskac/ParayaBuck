@@ -236,13 +236,15 @@ def _stopped_backtest() -> BacktestManager:
     return BacktestManager(engine_state_provider=lambda: "stopped")
 
 
-def test_backtest_invalid_parameter_terminalizes_before_launch() -> None:
+def test_backtest_invalid_parameter_is_refused_without_publishing_a_status() -> None:
+    # S2-6-4: validation runs before any published status changes, so a rejected
+    # request leaves the previous status (here none) intact and launches nothing.
     manager = _stopped_backtest()
     with pytest.raises(ValueError, match="Invalid parameter name"):
         manager.start({"parameters": {"bad-name": 1}})
-    assert manager.state == "error"
+    assert manager.state == "idle"
     assert manager._thread is None
-    assert manager.finished_at is not None
+    assert manager.finished_at is None
 
 
 def test_backtest_thread_start_failure_terminalizes() -> None:

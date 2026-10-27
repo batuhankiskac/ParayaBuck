@@ -31,7 +31,7 @@ console, settings and backtests work and the engine refuses to start — see
 
 | File | Purpose |
 |---|---|
-| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=180`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below. `data/backups/` is still writable by the engine (blocked item, see "Open items from the 2026-10-27 audit") |
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=180`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below. `data/backups/` is `ReadOnlyPaths=-`, so the engine cannot rewrite or delete restore points (S2-10-5); only `parayabuck-backup.service` writes them |
 | `parayabuck-backup.service` | Oneshot `parayabuck backup`, the sandbox below and its own narrow env file `.env.backup` (see "Backup environment file"); `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `vm-dropin/*.conf` | Examples for the VM's home-dir layout and the trading-host designation. Drop-ins under `/etc/systemd/system/<unit>.service.d/`, never edits of the template copies (see "VM drop-ins and steps") |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
@@ -71,11 +71,12 @@ otherwise remove the drop-in and record the failure in `docs/OPERATIONS_LOG.md`.
 
 ### Open items from the 2026-10-27 audit (deployment side)
 
-- **Restore points are writable by the engine (blocked).** `ReadOnlyPaths=` on
-  `data/backups` is the fix, but the engine's ExecStartPre doctor writes a probe file
-  into the backup path ("backup path writable" is a blocker), and systemd applies the
-  read-only path to ExecStartPre too, so the engine would never start. The line comes
-  back once that probe uses a read-only check (`os.access`) in `cli.py`.
+- **Restore points are read-only for the engine.** `ReadOnlyPaths=-/opt/parayabuck/data/backups`
+  is in the template (VM: `vm-dropin/vm-paths.conf`). The doctor's "backup path writable"
+  probe no longer writes a file: it uses `os.access`, and a read-only but readable backup
+  path is a WARN row, not a blocker, so ExecStartPre still passes. The VM needs the drop-in
+  installed and a restart; confirm the mount with `systemctl show parayabuck -p ReadOnlyPaths`
+  and a start that reaches READY.
 - **Web backtests share the engine's cgroup (not changed).** A backtest run from the
   console can exhaust memory for the engine and console together. A `MemoryHigh=` on
   the unit would throttle the engine as well, so it needs a separate backtest worker
@@ -190,9 +191,8 @@ systemd-analyze verify /etc/systemd/system/parayabuck.service   # reports unit e
 Restart the engine only after the checks above print the expected values and the
 owner has approved the restart (`sudo systemctl restart parayabuck`). Then confirm
 `/readyz` and run `parayabuck doctor --strict --configured-mode --offline`. The
-engine's unit does not make `data/backups` read-only yet (see "Open items from the
-2026-10-27 audit"), so a restore point can still be removed by the
-trading process; that is the open item, not a VM check.
+engine's unit makes `data/backups` read-only (S2-10-5), so the trading process cannot
+remove a restore point; the VM drop-in must be installed for that to hold on the VM.
 
 ### Environment file
 

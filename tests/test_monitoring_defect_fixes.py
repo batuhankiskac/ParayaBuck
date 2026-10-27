@@ -209,11 +209,12 @@ def test_decision_reconstruction_finds_receipt_by_identity_field(tmp_path: Path)
 def test_decision_reconstruction_falls_back_for_legacy_receipt(tmp_path: Path) -> None:
     db = tmp_path / "empty.sqlite3"
     db.touch()
-    _write_receipt(_receipt_dir(), "v1.json", {"strategy_name": "dec-1 equity"})
+    # S2-6-6: a V1 receipt matches only a whole, full-length decision id.
+    _write_receipt(_receipt_dir(), "v1.json", {"strategy_name": "dec-legacy-0001 equity"})
 
-    recon = decision_reconstruction(str(db), "dec-1")
+    recon = decision_reconstruction(str(db), "dec-legacy-0001")
 
-    assert recon["receipt"]["strategy_name"] == "dec-1 equity"
+    assert recon["receipt"]["strategy_name"] == "dec-legacy-0001 equity"
 
 
 def test_decision_reconstruction_uses_the_filename_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

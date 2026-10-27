@@ -59,6 +59,16 @@ def _same_path(first: str, second: str) -> bool:
     return os.path.normpath(str(first)) == os.path.normpath(str(second))
 
 
+def _require_bool(value: object, name: str) -> None:
+    """Refuse a non-boolean ``enabled`` flag.
+
+    YAML ``enabled: "false"`` is a truthy string, so a loose truth test would
+    read a disabled block as enabled. Only a real YAML boolean is accepted.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean (true or false), not {value!r}")
+
+
 @dataclass(frozen=True)
 class MarketStrategyConfig:
     enabled: bool
@@ -72,6 +82,7 @@ class MarketStrategyConfig:
     parameters: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        _require_bool(self.enabled, "strategy.equity.enabled")
         if not self.name.strip():
             raise ValueError("strategy name must not be empty")
         if self.timeframe is not None and self.timeframe not in TIMEFRAME_MINUTES:
@@ -125,6 +136,7 @@ class LiveConfig:
     buy_gap_margin_pct: float = 0.03
 
     def __post_init__(self) -> None:
+        _require_bool(self.enabled, "live.enabled")
         if not math.isfinite(self.hard_dollar_cap) or self.hard_dollar_cap < 0:
             raise ValueError("live.hard_dollar_cap must be non-negative")
         if not math.isfinite(self.buy_gap_margin_pct) or not 0 <= self.buy_gap_margin_pct < 0.5:
@@ -171,6 +183,7 @@ class EmailAlertConfig:
     timeout_seconds: float = 10.0
 
     def __post_init__(self) -> None:
+        _require_bool(self.enabled, "alerting.email.enabled")
         raw_to = self.to_addresses
         if isinstance(raw_to, str):
             raw_to = (raw_to,)
@@ -660,6 +673,7 @@ class EquityUniverseConfig:
     def __post_init__(self) -> None:
         from parayabuck.markets.symbols import canonical_symbol
 
+        _require_bool(self.enabled, "universe.equity.enabled")
         symbols = tuple(canonical_symbol(item, Market.EQUITY) for item in self.symbols)
         if len(set(symbols)) != len(symbols):
             raise ValueError("universe.equity.symbols must be unique")
@@ -749,6 +763,7 @@ class IntentWatchdogConfig:
     evaluation_interval_seconds: float = 60.0
 
     def __post_init__(self) -> None:
+        _require_bool(self.enabled, "intent_watchdog.enabled")
         for name in ("equity_decision_grace_minutes", "equity_fill_grace_minutes"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
@@ -788,6 +803,7 @@ class SignalCrossCheckConfig:
     close_divergence_bps: float = 50.0
 
     def __post_init__(self) -> None:
+        _require_bool(self.enabled, "signal_cross_check.enabled")
         for name in ("sip_embargo_minutes", "retry_window_minutes", "close_divergence_bps"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
@@ -1087,6 +1103,44 @@ def _reject_removed_alerting_settings(raw: dict[str, Any]) -> None:
         raise ValueError(f"{_WEBHOOK_REMOVED}; remove these settings: {', '.join(found)}")
 
 
+_KNOWN_TOP_LEVEL_SETTINGS = frozenset(
+    {
+        "app",
+        "runtime",
+        "alpaca",
+        "broker",
+        "data",
+        "universe",
+        "symbols",
+        "strategy",
+        "risk",
+        "backtest",
+        "live",
+        "engine",
+        "execution",
+        "backup",
+        "alerting",
+        "observability",
+        "intent_watchdog",
+        "signal_cross_check",
+    }
+)
+
+
+def _reject_unknown_top_level_settings(raw: Any) -> None:
+    """Fail loudly on a misspelled top-level block such as ``alertng:``.
+
+    Such a block is never read, so its defaults would apply silently (for
+    example e-mail alerts stay off while the operator believes they are on).
+    ``symbols`` is the legacy universe list and stays accepted.
+    """
+    if not isinstance(raw, dict):
+        return
+    unknown = sorted(str(key) for key in raw if key not in _KNOWN_TOP_LEVEL_SETTINGS)
+    if unknown:
+        raise ValueError("Unknown top-level settings would be ignored (check the spelling): " + ", ".join(unknown))
+
+
 def load_config(config_path: str | None = None) -> Config:
     load_env_file()
     path = Path(config_path or os.getenv("CONFIG_PATH") or "config/settings.yaml")
@@ -1095,6 +1149,7 @@ def load_config(config_path: str | None = None) -> Config:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     _reject_removed_crypto_settings(raw)
     _reject_removed_alerting_settings(raw)
+    _reject_unknown_top_level_settings(raw)
     runtime_raw = _block(raw.get("runtime"))
     for _removed_runtime_key in ("execution_timeframe", "market_state_timeframe", "risk_monitor_timeframe"):
         if _removed_runtime_key in runtime_raw:
@@ -1204,7 +1259,8 @@ def load_config(config_path: str | None = None) -> Config:
     # loading is strict for an enabled market.
     if equity.enabled:
         _eq_block = strategy_raw.get("equity")
-        _eq_enabled = True if not isinstance(_eq_block, dict) else bool(_eq_block.get("enabled", True))
+        _eq_enabled = True if not isinstance(_eq_block, dict) else _eq_block.get("enabled", True)
+        _require_bool(_eq_enabled, "strategy.equity.enabled")
         if _eq_enabled:
             if not isinstance(_eq_block, dict) or not str(_eq_block.get("name", "")).strip():
                 raise ValueError("strategy.equity block with name is required when universe.equity.enabled is true")

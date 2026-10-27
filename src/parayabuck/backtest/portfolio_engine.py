@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
+from parayabuck.config import BacktestConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
@@ -134,6 +135,10 @@ class RebalanceRecord:
     # ``PortfolioExecutionPolicy.december_deferral_sessions``): the second
     # user-visible reason a target weight was not traded down.
     december_deferral_holds: tuple[DecemberDeferralHold, ...] = ()
+    # True for a decision on the last processed bar. No later bar can fill it,
+    # so it stays observable as a decision but is not counted as a rebalance and
+    # carries no unfilled or rejected notional.
+    terminal: bool = False
 
 
 @dataclass(frozen=True)
@@ -261,6 +266,15 @@ def _prepare_corporate_actions(actions: list[CorporateAction] | None) -> list[Co
     prepared: list[CorporateAction] = []
     seen: set[tuple[str, datetime, CorporateActionType, float]] = set()
     for action in actions or []:
+        if action.action_type == CorporateActionType.SPLIT:
+            # The engine rescales held quantities and cost basis but not the
+            # price and volume history a strategy reads, so a split on raw bars
+            # would leave the signals on the pre-split price scale. Product runs
+            # use split-adjusted bars and reject splits for the same reason.
+            raise ValueError(
+                f"PortfolioBacktestEngine refuses SPLIT corporate actions ({action.symbol}): supply "
+                "split-adjusted bars and dividend actions only."
+            )
         key = (
             canonical_symbol(action.symbol, Market.EQUITY),
             action.timestamp,
@@ -272,6 +286,11 @@ def _prepare_corporate_actions(actions: list[CorporateAction] | None) -> list[Co
         seen.add(key)
         prepared.append(action)
     return sorted(prepared, key=lambda item: item.timestamp)
+
+
+# Fee defaults come from the shipped backtest configuration, so a directly
+# constructed engine charges the same fees as a configured product run.
+_FEE_DEFAULTS = BacktestConfig()
 
 
 class PortfolioBacktestEngine:
@@ -304,12 +323,12 @@ class PortfolioBacktestEngine:
         starting_equity: float = 100_000.0,
         slippage_bps: float = 2.0,
         spread_bps: float = 2.0,
-        commission: float = 0.0,
-        equity_taf_per_share: float = 0.0,
-        equity_taf_cap: float = 0.0,
-        equity_cat_per_share: float = 0.0,
-        equity_sec_fee_rate: float = 0.0,
-        equity_use_effective_dated_fees: bool = False,
+        commission: float = _FEE_DEFAULTS.commission,
+        equity_taf_per_share: float = _FEE_DEFAULTS.equity_taf_per_share,
+        equity_taf_cap: float = _FEE_DEFAULTS.equity_taf_cap,
+        equity_cat_per_share: float = _FEE_DEFAULTS.equity_cat_per_share,
+        equity_sec_fee_rate: float = _FEE_DEFAULTS.equity_sec_fee_rate,
+        equity_use_effective_dated_fees: bool = _FEE_DEFAULTS.equity_use_effective_dated_fees,
         equity_regulatory_fee_multiplier: float = 1.0,
         benchmark_symbol: str = "SPY",
         max_participation_pct: float = 0.10,
@@ -573,6 +592,18 @@ class PortfolioBacktestEngine:
             self._ingest(bar)
             self._ingest_execution(bar)
         action_queue = _prepare_corporate_actions(corporate_actions)
+        if self._initial_positions:
+            pre_start = [action for action in action_queue if action.timestamp < ordered[0].timestamp]
+            if pre_start:
+                # The holdings were already held before these actions, so the
+                # run would credit them with cash that belongs to an earlier
+                # holder. Refuse rather than book it silently.
+                symbols = sorted({action.symbol for action in pre_start})
+                raise ValueError(
+                    f"{len(pre_start)} corporate action(s) for {', '.join(symbols)} fall before the first bar "
+                    f"{ordered[0].timestamp.isoformat()} while initial_positions are set; start the run at or "
+                    "after them or drop them."
+                )
         action_index = 0
         decision_index = 0
         curve: list[float] = []
@@ -608,7 +639,9 @@ class PortfolioBacktestEngine:
             for bar in cycle:
                 _last_price[bar.symbol] = bar.close
             _update_risk(ts)
-            _decide(ts)
+            # A decision on the last processed bar has no later bar to fill
+            # it, unless the research same-bar pass fills it at this close.
+            _decide(ts, terminal=j >= n and not self.allow_same_bar_close)
             if self.allow_same_bar_close:
                 # Research-only: orders decided on this bar fill at its close.
                 self._fill_cycle(cycle, same_bar=True)
@@ -679,7 +712,8 @@ class PortfolioBacktestEngine:
 
         No order is created: the holdings carry the supplied unit cost as their
         average price and a single FIFO lot, pay no fee or slippage, and are
-        valued at the open of each symbol's first bar in ``ordered``. Their
+        valued at the close of each symbol's first bar in ``ordered``, the same
+        mark as the first equity point and the buy-and-hold benchmark. Their
         acquisition timestamp sits one microsecond before the first bar so they
         are active from the first snapshot. With no initial positions and no
         initial cash this is a no-op, so the flat-cash default is unchanged.
@@ -688,16 +722,16 @@ class PortfolioBacktestEngine:
             return
         if not ordered:
             raise ValueError("initial_positions require at least one processed bar")
-        first_opens: dict[str, float] = {}
+        first_closes: dict[str, float] = {}
         for bar in ordered:
-            if bar.symbol in self._initial_positions and bar.symbol not in first_opens:
-                first_opens[bar.symbol] = bar.open
-                if len(first_opens) == len(self._initial_positions):
+            if bar.symbol in self._initial_positions and bar.symbol not in first_closes:
+                first_closes[bar.symbol] = bar.close
+                if len(first_closes) == len(self._initial_positions):
                     break
-        missing = sorted(set(self._initial_positions) - set(first_opens))
+        missing = sorted(set(self._initial_positions) - set(first_closes))
         if missing:
             raise ValueError(f"initial positions have no bars to value them: {missing}")
-        value = sum(quantity * first_opens[symbol] for symbol, (quantity, _) in self._initial_positions.items())
+        value = sum(quantity * first_closes[symbol] for symbol, (quantity, _) in self._initial_positions.items())
         if self._initial_cash_input is None:
             cash = self.starting_equity - value
             equity = self.starting_equity
@@ -717,7 +751,7 @@ class PortfolioBacktestEngine:
                 opened_at,
                 lots=[[quantity, unit_cost]],
             )
-            self._last_price[symbol] = first_opens[symbol]
+            self._last_price[symbol] = first_closes[symbol]
         self._cash = cash
         self._run_start_equity = equity
         self._peak_equity = equity
@@ -1113,10 +1147,14 @@ class PortfolioBacktestEngine:
             fee = self.commission + self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
-                if notional + fee > self._cash:
-                    # A gap-up open made the decided quantity unaffordable.
-                    # Fill what the cash above the configured buffer buys and
-                    # report the rest as rejected instead of skipping silently.
+                # The configured cash buffer applies to every BUY, not only to
+                # a trimmed one: a full fill must leave at least the buffer, or
+                # a larger order could end with less cash than a smaller one.
+                if notional + fee > self._cash - self.minimum_cash * self._equity():
+                    # The decided quantity would spend into the buffer (a gap-up
+                    # open, or a large target). Fill what the cash above the
+                    # configured buffer buys and report the rest as rejected
+                    # instead of skipping silently.
                     affordable = self._affordable_buy_quantity(fill_price, bar.timestamp.date())
                     shortfall = (order.qty - affordable) * reference
                     self._cash_shortfall_notional[order.decision_timestamp] = (
@@ -1221,7 +1259,7 @@ class PortfolioBacktestEngine:
                 )
         self._pending = remaining
 
-    def _decide(self, timestamp: datetime) -> None:
+    def _decide(self, timestamp: datetime, *, terminal: bool = False) -> None:
         previous = self._previous_timestamp
         self._previous_timestamp = timestamp
         scheduled = self.rebalance_policy.is_period_start(previous, timestamp)
@@ -1364,7 +1402,7 @@ class PortfolioBacktestEngine:
             target = risk.target
         self._rebalance_number += 1
         self._apply_target(target)
-        self._record_rebalance(target)
+        self._record_rebalance(target, terminal=terminal)
 
     def _update_risk_state(self, timestamp: datetime) -> None:
         """Advance the daily-loss/high-water lifecycle for one processed bar.
@@ -1561,7 +1599,9 @@ class PortfolioBacktestEngine:
                 and symbol not in risk_reduced
                 and not deferral_case
             )
-            if gap < self.turnover_band and not gain_band_case:
+            # A full exit is never held inside the band (T7-2); the planner applies the same exemption.
+            full_exit = target_weight == 0.0 and current_qty > 0.0
+            if gap < self.turnover_band and not gain_band_case and not full_exit:
                 continue
             target_qty = target_weight * equity / price
             delta = target_qty - current_qty
@@ -1625,7 +1665,7 @@ class PortfolioBacktestEngine:
             )
         self.state.pending_target = dict(symbol_targets)
 
-    def _record_rebalance(self, target: TargetPortfolio) -> None:
+    def _record_rebalance(self, target: TargetPortfolio, *, terminal: bool = False) -> None:
         decision = target.decision_timestamp
         target_map = {canonical_symbol(weight.symbol, self.strategy.market): weight.weight for weight in target.weights}
         signed = tuple(
@@ -1664,8 +1704,10 @@ class PortfolioBacktestEngine:
                 risk_overlay_reasons=overlay_reasons,
                 gain_band_holds=tuple(self._gain_band_holds),
                 december_deferral_holds=tuple(self._december_deferral_holds),
+                terminal=terminal,
             )
         )
+
         self._weight_history.append((decision, {weight.symbol: weight.weight for weight in target.weights}))
         symbols = self._universe_symbols(decision)
         if symbols is not None:
@@ -2003,7 +2045,7 @@ class PortfolioBacktestEngine:
             turnover=turnover,
             average_holdings_count=(sum(holdings_counts) / len(holdings_counts) if holdings_counts else 0.0),
             average_cash_ratio=avg_cash_ratio,
-            rebalance_count=len(self._rebalances),
+            rebalance_count=sum(1 for record in self._rebalances if not record.terminal),
             closed_positions=len(self._closed_position_events),
             per_symbol=per_symbol,
             maximum_concentration=max(concentration, default=0.0),
@@ -2069,7 +2111,7 @@ class PortfolioBacktestEngine:
                 sorted(((symbol, value / equity) for symbol, value in executed.items() if equity > 0))
             )
             realized_turnover = sum(abs(value) for _, value in executed_weights)
-            unfilled = max(0.0, expected_notional - realized_notional)
+            unfilled = 0.0 if record.terminal else max(0.0, expected_notional - realized_notional)
             enriched.append(
                 RebalanceRecord(
                     decision_timestamp=record.decision_timestamp,
@@ -2081,7 +2123,9 @@ class PortfolioBacktestEngine:
                     post_fill_actual_weights=tuple(sorted(actual_weights.items())),
                     target_vs_actual_drift=drift,
                     unfilled_notional=unfilled,
-                    rejected_notional=rejected_by_decision.get(record.decision_timestamp, 0.0),
+                    rejected_notional=0.0
+                    if record.terminal
+                    else rejected_by_decision.get(record.decision_timestamp, 0.0),
                     expected_turnover=record.expected_turnover,
                     realized_turnover=realized_turnover,
                     cost=cost,
@@ -2094,6 +2138,7 @@ class PortfolioBacktestEngine:
                     risk_overlay_reasons=record.risk_overlay_reasons,
                     gain_band_holds=record.gain_band_holds,
                     december_deferral_holds=record.december_deferral_holds,
+                    terminal=record.terminal,
                 )
             )
         return tuple(enriched)

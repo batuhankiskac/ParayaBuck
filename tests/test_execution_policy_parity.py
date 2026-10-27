@@ -509,3 +509,19 @@ def test_live_authorization_digest_includes_execution_policy() -> None:
     with_notional = {"runtime": {"mode": "live"}, "execution": {"minimum_order_notional": 25}}
     digests = {EngineManager._digest_config(raw, paper=False) for raw in (base, with_band, with_notional)}
     assert len(digests) == 3
+
+
+def test_full_exit_below_the_band_sells_on_both_sides() -> None:
+    """T7-2: a zero target on a held position is a full exit, so a residual
+    inside the rebalance band is still sold by the planner and the backtest."""
+    policy = PortfolioExecutionPolicy(rebalance_band_pct=0.005, minimum_order_notional=10.0)
+    # 2 shares at 100 on 100,000 equity: a 0.2% residual, inside the 0.5% band.
+    planned = _planned_verdict(policy, {"SPY": 0.0}, qty=2.0)
+    backtest = _backtest_verdict(policy, {"SPY": 0.0}, qty=2.0)
+    assert planned["SPY"].value == "sell"
+    assert backtest["SPY"].value == "sell"
+    _assert_parity(policy, {"SPY": 0.0}, qty=2.0)
+    # Control: a non-zero target inside the band still produces no order on either side.
+    _assert_parity(policy, {"SPY": 0.003}, qty=2.0)
+    assert _planned_verdict(policy, {"SPY": 0.003}, qty=2.0) == {}
+    assert _backtest_verdict(policy, {"SPY": 0.003}, qty=2.0) == {}

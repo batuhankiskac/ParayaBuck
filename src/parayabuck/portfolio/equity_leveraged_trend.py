@@ -47,6 +47,7 @@ idempotency keys distinguish them: 1.2.0 with the early path, else 1.0.0/1.1.0.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from statistics import median, stdev
 
 from parayabuck.core.models import Market
@@ -105,6 +106,22 @@ _R2_REPLAY_BARS = 126
 # gates the decision on this bound; on a shorter history the early path is
 # unavailable and the state stays ``downtrend``.
 _R2_MIN_HISTORY_BARS = _R2_VOL_WINDOW + _R2_VOL_MEDIAN_BARS - 1 + _R2_REPLAY_BARS
+
+
+# The replay re-derives the same windows on every decision: consecutive
+# decisions share all but one 20-close volatility window, and all but one of the
+# 252-value medians. The caches are keyed on the window CONTENT (never on the
+# index, because the history is a sliding window), and both functions are pure,
+# so a hit returns exactly the value a recomputation would.
+@lru_cache(maxsize=8192)
+def _window_volatility(closes: tuple[float, ...]) -> float:
+    returns = [closes[offset] / closes[offset - 1] - 1.0 for offset in range(1, len(closes))]
+    return stdev(returns) * math.sqrt(252.0)
+
+
+@lru_cache(maxsize=4096)
+def _median_of_volatilities(volatilities: tuple[float, ...]) -> float:
+    return median(volatilities)
 
 
 class EquityLeveragedTrendV1(PortfolioStrategy):
@@ -327,8 +344,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         # the whole window's volatility is undefined (no entry, not a crash).
         if any(value <= 0 for value in values):
             return None
-        returns = [values[offset] / values[offset - 1] - 1.0 for offset in range(1, len(values))]
-        return stdev(returns) * math.sqrt(252.0)
+        return _window_volatility(tuple(values))
 
     def early_reentry_state(self, context: PortfolioContext) -> tuple[bool, dict[str, object]]:
         """(early re-entry path active at the decision, its detail).
@@ -366,7 +382,7 @@ class EquityLeveragedTrendV1(PortfolioStrategy):
         for index in range(first, last + 1):
             window = [value for value in volumes[index - _R2_VOL_MEDIAN_BARS + 1 : index + 1] if value is not None]
             # One undefined vol20 makes the whole window's median undefined.
-            medians[index] = median(window) if len(window) == _R2_VOL_MEDIAN_BARS else None
+            medians[index] = _median_of_volatilities(tuple(window)) if len(window) == _R2_VOL_MEDIAN_BARS else None
         active = False
         sma50_sum = sum(closes[first - _R2_SMA_BARS + 1 : first + 1])
         for index in range(first, last + 1):

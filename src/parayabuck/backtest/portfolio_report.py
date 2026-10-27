@@ -68,8 +68,8 @@ class PortfolioReport:
             ],
             "monthly_returns": {str(year): months for year, months in self.monthly_returns.items()},
             "yearly_returns": [
-                {"year": year, "return_pct": return_pct, "benchmark_pct": benchmark_pct}
-                for year, return_pct, benchmark_pct in self.yearly_returns
+                {"year": year, "return_fraction": return_fraction, "benchmark_fraction": benchmark_fraction}
+                for year, return_fraction, benchmark_fraction in self.yearly_returns
             ],
             "regime_performance": self.regime_performance,
             "rolling_beta": list(self.rolling_beta),
@@ -269,6 +269,18 @@ def build_portfolio_report(
         # Price-only buy-and-hold total return per decision symbol (not SPY),
         # close-to-close over the same curve window as the strategy.
         "benchmarks": dict(sorted(result.benchmarks.items())),
+        # Labels for the ratios and cash flows: turnover counts buys and sells
+        # together; Sharpe and Sortino take a zero risk-free rate.
+        "turnover_basis": "two-sided: total traded notional (buys plus sells) divided by average equity",
+        "sharpe_basis": "risk-free rate 0; idle cash interest, when modelled, is not deducted from the return series",
+        "dividend_treatment": {
+            "total": result.dividend_total,
+            "basis": "gross cash dividend per share credited to held shares; no withholding tax is applied",
+            "attribution": (
+                "cash income credited to cash; excluded from realized PnL, win rate, profit factor and "
+                "per-symbol contributions"
+            ),
+        },
     }
     fills: list[dict[str, object]] = [
         {

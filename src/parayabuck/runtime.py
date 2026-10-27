@@ -6330,6 +6330,10 @@ class EngineRuntime:
             self._last_reconciliation_at = datetime.now(UTC)
             with getattr(self, "_risk_state_lock", threading.Lock()):
                 self._clear_reconciliation_incidents()
+        # Captured before the account read: a reset that moves the epoch while
+        # that read runs makes this one a no-op (see reset_peak_equity), not a
+        # second rebase on top of the concurrent one (Q2-3-3).
+        expected_epoch = peak_service.peak_epoch if peak_service is not None else None
         account = self.broker.account()  # fresh authoritative snapshot
         # A halt raised while the reconcile and the account read ran (a trade-update
         # failure, a worker crash) must stop the rebase: the operator verified the
@@ -6340,9 +6344,6 @@ class EngineRuntime:
                     "Cannot reset the risk epoch while a circuit breaker is active "
                     f"({self._circuit_breaker_reason}); resolve that incident first"
                 )
-        # The epoch this snapshot was taken against: when a concurrent reset
-        # already moved past it, this reset is a no-op (see reset_peak_equity).
-        expected_epoch = peak_service.peak_epoch if peak_service is not None else None
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
         if new_baseline <= 0:

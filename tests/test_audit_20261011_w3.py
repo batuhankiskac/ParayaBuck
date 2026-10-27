@@ -166,6 +166,7 @@ def test_w3_latched_decision_path_withholds_persisted_deferred_buy(tmp_path: Pat
         _bars(("AAPL", "MSFT"), next_day), entry_latch="portfolio_drawdown_halt", force_scheduled=True
     )
     # The stale BUY is never submitted; the latched decision only reduces risk.
+    assert len(broker.submitted) == 1  # only the earlier SELL (Q2-1-6: exact count restored)
     assert not [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
     state = runtime.repository.current_rebalance_execution(runtime.account_id, Market.EQUITY)
     assert state is not None

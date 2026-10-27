@@ -1,0 +1,68 @@
+{
+ "study": "hrp_sleeve_v1",
+ "new_market_data_downloaded": false,
+ "note": "No new download. A FRED gold request returned an HTML bot challenge (not data) and was discarded; the Bundesbank gold file ends 1998-12-30 and cannot bridge 1999-2000, so GLD* uses the gold-futures proxy. The engine calendar stops at 2026-09-29; the sealed-window rule is respected.",
+ "inputs": {
+  "data/historical/stress_robustness_v1_daily.csv": {
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "bytes": 2671225,
+   "content": "QQQ/SPY/QLD daily bars with dividends (Yahoo chart API, 1999-03-10 on); engine calendar and K QLD legs",
+   "source": "earlier study download, restored from archive/research/slow-vol-blend-v1-2026-10"
+  },
+  "data/historical/stress_robustness_v1_dtb3.csv": {
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "bytes": 301157,
+   "content": "FRED DTB3 daily 3-month T-bill; BIL* accrual",
+   "source": "FRED, earlier study download"
+  },
+  "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "bytes": 172726,
+   "content": "USD-TRY (CBRT); Turkish tax engine FX",
+   "source": "CBRT, earlier study download"
+  },
+  "data/historical/after_tax_tr_v1_yiufe.csv": {
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "bytes": 17845,
+   "content": "Turkish Yi-UFE index (TCMB); tax indexation",
+   "source": "TCMB, earlier study download"
+  },
+  "data/historical/riskoff_rotation_v2_gs10.csv": {
+   "sha256": "40323f225e613a19a4eec7eef20523dec10764de21c70cd1416a7379fb7f13b6",
+   "bytes": 14206,
+   "content": "FRED GS10 monthly from 1953-04-01; IEF* pre-2002 proxy",
+   "source": "FRED via riskoff_rotation_v2 (archive/research/riskoff-rotation-v4-2026-10)"
+  },
+  "data/historical/batch_screen_v1_ief.csv": {
+   "sha256": "4d0726302e7d518ff42b63ab9501fc9fc89e9cb930cb25f807f1fd4d6c83a18f",
+   "bytes": 210814,
+   "content": "IEF daily adjusted close from 2002-07-30; IEF* real leg",
+   "source": "Yahoo chart API, downloaded 2026-10-16 by batch_screen_v1 (archive/research/closeout-2026-10)"
+  },
+  "data/historical/batch_screen_v1_gld.csv": {
+   "sha256": "dab5c79cfafdf86a23017082d83ad64b02f9859ea2c4fe26b70a7cba9f73dfce",
+   "bytes": 189669,
+   "content": "GLD daily adjusted close from 2004-11-18; GLD* real leg",
+   "source": "Yahoo chart API, downloaded 2026-10-16 by batch_screen_v1 (archive/research/closeout-2026-10)"
+  },
+  "data/historical/riskoff_rotation_v2_gcf.csv": {
+   "sha256": "8cf5ebb7056fadf9180804d8e5f029e0095fa845dfc8d9053721d9c276092629",
+   "bytes": 164992,
+   "content": "gold continuous futures adjusted close 2000-08-30 to 2024-12-31; GLD* pre-2004 proxy",
+   "source": "riskoff_rotation_v2 study download (archive/research/riskoff-rotation-v4-2026-10)"
+  },
+  "research/band_h2_combo_v1/RESULTS.json": {
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "bytes": 260050,
+   "content": "K anchors: pre-tax and after-tax values at 2000/2010/2017 windows",
+   "source": "archive/research/band-h2-combo-v1-2026-10"
+  }
+ },
+ "code": {
+  "research/hrp_sleeve_v1/sleeve_data.py": "4b8aefe83d29c786309186ed0b326d6bbedcbf174434ac80bd915463094b0940",
+  "research/hrp_sleeve_v1/alloc.py": "d23ce2642f5b46b5e26d3c0c886e18b11eda1f1ce0095c9c471cbfac95da8296",
+  "research/hrp_sleeve_v1/hs_sim.py": "e4e081f5391131d9e294792d494ad501654492eefcdc7d1f595083c7b27a2919",
+  "research/hrp_sleeve_v1/screen.py": "2448e88a4af217d3358c0bf5dafe7edb5157406cb553c699cd6bc1457094617c",
+  "research/hrp_sleeve_v1/PREREGISTRATION.md": "9af63595d17a385a94ec6e6cba10f14dcb38e960a07aef2c62402c7e60e90776"
+ }
+}

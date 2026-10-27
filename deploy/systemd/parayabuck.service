@@ -5,10 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=notify
-# READY=1 is sent when the runtime finishes startup; WATCHDOG=1 comes from the
-# account loop after each successful pass. A hung process is killed after
-# 300 s and Restart=on-failure brings it back. NotifyAccess=main accepts
-# notifications from the main process only.
+# READY=1 is sent by the web app once it serves, whether or not the engine
+# runs. A 30 s pinger sends WATCHDOG=1 while no engine runs, or while the
+# engine's account loop has completed a pass within 120 s (600 s grace after
+# start). A hung loop is killed after 300 s and Restart=on-failure brings it
+# back. NotifyAccess=main accepts notifications from the main process only.
 NotifyAccess=main
 WatchdogSec=300
 User=parayabuck

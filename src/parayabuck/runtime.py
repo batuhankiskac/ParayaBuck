@@ -5384,6 +5384,10 @@ class EngineRuntime:
         incidents (ownership drift, protection failure, ...) or the circuit
         breaker: those keep their own recovery flows.
 
+        A failed reset leaves the peak and the halt as they were, so a retry
+        starts from the same epoch. A reset whose epoch is already active
+        returns the active baseline without re-baselining.
+
         Returns the new baseline equity.
         """
         if not self._running:
@@ -5393,6 +5397,8 @@ class EngineRuntime:
                 "Cannot reset the risk epoch while a circuit breaker is active "
                 f"({self._circuit_breaker_reason}); resolve that incident first"
             )
+        get_peak_service = getattr(self.broker, "_get_peak_service", None)
+        peak_service = get_peak_service() if callable(get_peak_service) else None
         # Serialize against pb-reconcile and reset_safety_lock: the broker's
         # reconcile holds no lock of its own, and two interleaved runs would
         # race stop restores, order cancels and ledger writes.
@@ -5414,24 +5420,66 @@ class EngineRuntime:
             self._last_reconciliation_at = datetime.now(UTC)
             self._clear_reconciliation_incidents()
         account = self.broker.account()  # fresh authoritative snapshot
+        # The epoch this snapshot was taken against: when a concurrent reset
+        # already moved past it, this reset is a no-op (see reset_peak_equity).
+        expected_epoch = peak_service.peak_epoch if peak_service is not None else None
         account_id = self.broker.account_id or "unknown"
         new_baseline = float(account.equity)
         if new_baseline <= 0:
             raise ValueError("Cannot reset the risk epoch with non-positive account equity")
-        self.broker.reset_peak_equity(new_baseline)
+        # Recorded on every epoch reset (log and journal) so the drawdown that
+        # the operator re-baselined past stays on the record.
+        pre_peak = float(account.peak_equity)
+        pre_drawdown = float(account.drawdown_pct)
         repository = getattr(self, "_portfolio_repository", None)
-        if repository is not None:
-            repository.reset_high_water(account_id, new_baseline)
-        self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
-        # Re-fetch the account AFTER the rebase: a pre-rebase snapshot would
-        # re-evaluate the latch against the old monotonic peak and instantly
-        # re-trigger the breach we just cleared.
-        rebased = self.broker.account()
-        self._persist_risk_state(rebased)
+        # Commit order: the peak sidecar first, then the incident clear, then the
+        # DB high-water. A failure after the sidecar commit restores the peak
+        # (memory and sidecar), so the halt stays latched and a retry starts from
+        # the same epoch. The peak lock keeps the account loop from re-raising the
+        # peak against the old baseline while this is in progress.
+        peak_lock = getattr(self.broker, "_peak_lock", None) or threading.Lock()
+        with peak_lock:
+            prior = None
+            if peak_service is None:
+                self.broker.reset_peak_equity(new_baseline)
+            else:
+                prior = (
+                    peak_service.peak_equity,
+                    peak_service.peak_epoch,
+                    peak_service.peak_account_id,
+                    peak_service.peak_reconciled,
+                )
+                if not peak_service.reset_peak_equity(new_baseline, expected_epoch=expected_epoch):
+                    log.info("Risk epoch already active; the operator reset is a no-op")
+                    return float(peak_service.peak_equity)
+            try:
+                self.ledger.clear_safety_incident(account_id, "portfolio_drawdown_halt")
+                if repository is not None:
+                    repository.reset_high_water(account_id, new_baseline)
+            except Exception:
+                # Roll back: the peak returns to its pre-reset epoch and the
+                # drawdown halt the operator still sees stays on record.
+                if prior is not None:
+                    peak_service.restore_peak_state(prior)
+                if self._entry_risk_latch.get(Market.EQUITY) == "portfolio_drawdown_halt":
+                    self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
+                raise
+        # The epoch is committed. A failed post-reset persist is retried by the
+        # next account pass; raising here would invite a retry that re-baselines.
+        try:
+            # Re-fetch the account AFTER the rebase: a pre-rebase snapshot would
+            # re-evaluate the latch against the old monotonic peak and instantly
+            # re-trigger the breach we just cleared.
+            rebased = self.broker.account()
+            self._persist_risk_state(rebased)
+        except Exception:
+            log.error("New risk epoch committed but the post-reset risk state was not persisted", exc_info=True)
         log.warning(
-            "New risk epoch started: drawdown baseline rebased to %.2f (account=%s)",
+            "New risk epoch started: drawdown baseline rebased to %.2f (account=%s); pre-reset peak %.2f, drawdown %.2f%%",
             new_baseline,
             account_id,
+            pre_peak,
+            pre_drawdown * 100.0,
         )
         runtime_metrics_store.record_event("risk_epoch_reset")
         alerts.emit(
@@ -5439,6 +5487,8 @@ class EngineRuntime:
             message="New risk epoch started; drawdown baseline rebased",
             baseline_equity=new_baseline,
             account_id=account_id,
+            previous_peak_equity=pre_peak,
+            previous_drawdown_pct=pre_drawdown,
         )
         return new_baseline
 

@@ -47,6 +47,7 @@ from parayabuck.execution.alpaca_reconciliation import (
 from parayabuck.execution.alpaca_updates import AlpacaTradingUpdateStream, TradeUpdate
 from parayabuck.execution.ledger import ExecutionLedger
 from parayabuck.execution.portfolio import (
+    PortfolioOrderSide,
     portfolio_execution_policy_from_config,
     portfolio_risk_limits_from_config,
 )
@@ -94,6 +95,8 @@ from parayabuck.portfolio.runtime_service import (
     PortfolioRuntime,
     PortfolioStateRepository,
     configuration_digest,
+    exit_sell_retry_client_order_id,
+    is_exit_sell_retry,
     is_terminal_order_status,
 )
 from parayabuck.portfolio.signal_cross_check import (
@@ -292,6 +295,14 @@ class TradingState(Enum):
 # sparse blips over weeks cannot add up to the restart-limit halt. A crash
 # loop never runs this long and still hits the limit.
 _SHARED_WORKER_HEALTHY_RESET_SECONDS = 600.0
+# A market stream worker past its restart limit keeps retrying (auto-recovery)
+# but backs off to minutes: a persistent failure at a 16 s cadence churned
+# roughly 5,400 websocket handshakes a day. The first retry past the limit
+# waits 60 s, doubling to this cap, so an operator reset is never more than
+# this long away. While it keeps failing, one "still failing" alert repeats
+# every _STREAM_STILL_FAILING_ALERT_SECONDS.
+_STREAM_LIMITED_RETRY_MAX_SECONDS = 300.0
+_STREAM_STILL_FAILING_ALERT_SECONDS = 3600.0
 # Alpaca does not replay trade updates. Open orders with no update for this
 # long during the regular session may hide a missed fill: the runtime then
 # latches new entries and reconciles (see _maybe_check_trade_feed_freshness).
@@ -744,9 +755,9 @@ class EngineRuntime:
         account = admission.account
         broker_orders = self.broker.working_orders()
         local_orders = self._portfolio_repository.open_orders(self.broker.account_id or "unknown")
-        # risk_overlay belongs to the portfolio runtime; read it under its lock.
-        with self._portfolio_lock:
-            limits = runtimes[0].risk_overlay.limits
+        # The limits are assigned once in the portfolio runtime's constructor and
+        # never rebound, so this read needs no lock (C8-3).
+        limits = runtimes[0].risk_overlay.limits
         claims: dict[tuple[Market, str], set[str]] = {}
         for position in account.positions:
             if not position.is_flat:
@@ -1001,20 +1012,25 @@ class EngineRuntime:
         retry under a deterministic client id, so this never loops. Never
         raises; a submit failure schedules a reconciliation.
         """
-        if not getattr(self, "_running", False) or not getattr(self, "_startup_committed", False):
-            return
-        if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
-            return
-        if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
+        if self._exit_sell_retry_blocked(None):
             return
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
-            if getattr(self, "_market_entry_halts", {}).get(portfolio_runtime.market) is not None:
+            if self._exit_sell_retry_blocked(portfolio_runtime.market):
                 continue
             retry = getattr(portfolio_runtime, "retry_rejected_exit_sells", None)
             if not callable(retry):
                 continue
+            # Most passes have no rejected SELL awaiting its retry: decide that
+            # from the repository without taking the portfolio lock, so the
+            # account loop never queues behind a decision or rebalance.
+            if not self._exit_sell_retry_candidate(portfolio_runtime):
+                continue
             try:
                 with self._portfolio_lock:
+                    # The gates above were read before the lock. A halt raised
+                    # while this thread waited must still stop the SELL.
+                    if self._exit_sell_retry_blocked(portfolio_runtime.market):
+                        continue
                     submitted = retry(account)
                 if submitted:
                     self._invalidate_account_snapshot_after_execution()
@@ -1031,6 +1047,43 @@ class EngineRuntime:
                     self._schedule_reconcile()
                 except Exception:
                     log.warning("Reconcile after a failed SELL retry could not be scheduled", exc_info=True)
+
+    def _exit_sell_retry_blocked(self, market: Market | None) -> bool:
+        """True when a rejected-SELL retry must not be submitted now.
+
+        Reads flags only (no lock, no broker I/O), so it is safe both before
+        and under ``_portfolio_lock``. ``market`` adds that market's entry halt.
+        """
+        if not getattr(self, "_running", False) or not getattr(self, "_startup_committed", False):
+            return True
+        if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
+            return True
+        if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
+            return True
+        return market is not None and getattr(self, "_market_entry_halts", {}).get(market) is not None
+
+    def _exit_sell_retry_candidate(self, portfolio_runtime: Any) -> bool:
+        """Cheap, lock-free check for a rejected SELL still owed its one retry.
+
+        Mirrors the row filter of ``PortfolioRuntime.retry_rejected_exit_sells``
+        so the portfolio lock is taken only when that method has work to do.
+        A runtime without a repository (test doubles) keeps the locked path.
+        """
+        repository = getattr(portfolio_runtime, "repository", None)
+        if repository is None:
+            return True
+        decision_id = repository.latest_decision_id(portfolio_runtime.account_id, portfolio_runtime.market)
+        if decision_id is None:
+            return False
+        for row in repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value):
+            client_order_id = str(row["client_order_id"])
+            if (
+                str(row["status"]) == "rejected"
+                and not is_exit_sell_retry(client_order_id)
+                and not repository.has_order(exit_sell_retry_client_order_id(client_order_id))
+            ):
+                return True
+        return False
 
     _STANDING_CHECK_INTERVAL_SECONDS = 3600.0
 
@@ -2756,15 +2809,15 @@ class EngineRuntime:
                 continue
             try:
                 with self._portfolio_lock:
-                    advance_kwargs: dict[str, object] = {"submit_deferred_buys": submit_buys}
+                    # The halt, entry-latch and reconcile gates are raised
+                    # without this lock, so the read above can be stale by
+                    # the time the BUY is submitted: re-read the permission
+                    # flags here, under the lock, right before the advance.
+                    submit_now = submit_buys and self.trading_state(market) is TradingState.ACTIVE
+                    advance_kwargs: dict[str, object] = {"submit_deferred_buys": submit_now}
                     if account is not None:
                         advance_kwargs["account"] = account
-                    try:
-                        result = portfolio_runtime.advance_rebalance(**advance_kwargs)
-                    except TypeError:
-                        # Lightweight test doubles may not accept the flag.
-                        advance_kwargs.pop("submit_deferred_buys")
-                        result = portfolio_runtime.advance_rebalance(**advance_kwargs)
+                    result = portfolio_runtime.advance_rebalance(**advance_kwargs)
             except Exception:
                 # The persisted two-phase state stays pending and every later
                 # trade update retries — so the traceback is the only forensic
@@ -2828,16 +2881,18 @@ class EngineRuntime:
 
     async def _apply_trade_update_with_lock_retry(
         self, portfolio_repository: Any, update: TradeUpdate, status: str
-    ) -> None:
+    ) -> bool | None:
         """Book one stream update, retrying a transient SQLite lock boundedly.
 
-        Only ``database is locked``-class ``OperationalError`` is retried; the
-        last attempt's failure (and any other error) propagates to the
-        callback's fail-closed halt.
+        Returns the repository's verdict: False when it refused the fill (the
+        caller must reconcile it from the broker), None for a double that does
+        not report one. Only ``database is locked``-class ``OperationalError``
+        is retried; the last attempt's failure (and any other error) propagates
+        to the callback's fail-closed halt.
         """
         for attempt in range(_TRADE_UPDATE_LOCK_ATTEMPTS):
             try:
-                await asyncio.to_thread(
+                return await asyncio.to_thread(
                     portfolio_repository.apply_trade_update,
                     client_order_id=update.client_order_id,
                     broker_order_id=update.broker_order_id,
@@ -2855,7 +2910,6 @@ class EngineRuntime:
                     received_at=update.received_at,
                     fee_observed=update.fee_observed,
                 )
-                return
             except Exception as exc:
                 if not _is_transient_database_lock(exc) or attempt == _TRADE_UPDATE_LOCK_ATTEMPTS - 1:
                     raise
@@ -2871,7 +2925,11 @@ class EngineRuntime:
         # Freshness stamp for the stale-feed check, before any early return.
         self._last_trade_update_at = datetime.now(UTC)
         portfolio_repository = getattr(self, "_portfolio_repository", None)
-        if portfolio_repository is not None and portfolio_repository.has_order(update.client_order_id):
+        # Repository reads and writes are synchronous SQLite: they run off the
+        # event loop, like the booking below.
+        if portfolio_repository is not None and await asyncio.to_thread(
+            portfolio_repository.has_order, update.client_order_id
+        ):
             status = str(update.event).lower()
             if status == "calculated":
                 status = await asyncio.to_thread(self._calculated_stream_status, portfolio_repository, update)
@@ -2887,12 +2945,29 @@ class EngineRuntime:
                 )
                 self._schedule_reconcile()
                 return
+            # A terminal or partially filled order changes what the cached
+            # account snapshot may claim. Invalidate before the booking as well
+            # as after it (below): a decision must not claim the pre-fill
+            # snapshot in the window in which the fill is being booked (CC-9).
+            if status == "partial_fill" or is_terminal_order_status(status):
+                self._invalidate_account_snapshot_after_execution()
             # Book the fill BEFORE the account snapshot: a SELL fill that
             # brings the broker position below the repository-owned quantity
             # would otherwise trip the fail-closed ownership-drift check
             # against the pre-fill owned quantity, aborting the handler and
             # losing the fill.
-            await self._apply_trade_update_with_lock_retry(portfolio_repository, update, status)
+            applied = await self._apply_trade_update_with_lock_retry(portfolio_repository, update, status)
+            if applied is False:
+                # The repository refused the fill (for example a cumulative
+                # quantity with no average price, BF-1), so nothing was booked.
+                # Nothing to advance or persist from it: reconcile recovers the
+                # fill from the broker, as the unknown-status branch does.
+                log.warning(
+                    "Trade update for %s refused by the portfolio ledger; reconciliation scheduled",
+                    update.client_order_id,
+                )
+                self._schedule_reconcile()
+                return
             # A rejected portfolio order is an operator-visible event: the
             # dependent rebalance replans smaller (or absent) buys, so the
             # rejection is not silent.
@@ -2908,7 +2983,7 @@ class EngineRuntime:
                 # R3: a rejected SELL exits/reduces a held position; escalate
                 # it and let the account loop retry it once.
                 try:
-                    side = portfolio_repository.order_side(update.client_order_id)
+                    side = await asyncio.to_thread(portfolio_repository.order_side, update.client_order_id)
                 except Exception:
                     side = None
                 if side == "sell":
@@ -2986,11 +3061,12 @@ class EngineRuntime:
                 # cache still proves only the pre-event position state. This
                 # also covers a terminal SELL cancellation/rejection: the next
                 # decision must reverify the still-held position before
-                # reusing its account slot.
+                # reusing its account slot. A fetch that was in flight during
+                # the booking is discarded by this bump (CC-9).
                 self._invalidate_account_snapshot_after_execution()
             if account is not None:
                 try:
-                    self._persist_risk_state(account)
+                    await asyncio.to_thread(self._persist_risk_state, account)
                 except Exception:
                     # Non-fatal for the same reason: the account loop
                     # re-persists from its next successful poll.
@@ -3018,6 +3094,8 @@ class EngineRuntime:
         worker = self._workers[name]
         worker.alive = True
         worker.last_heartbeat = datetime.now(UTC)
+        # Monotonic time of the last restart-limit alert for a market worker.
+        still_failing_since = 0.0
         try:
             while self._running:
                 run_started = time.monotonic()
@@ -3082,7 +3160,24 @@ class EngineRuntime:
                                 reason=f"{name}_restart_limit",
                                 market=market.value,
                             )
+                            still_failing_since = time.monotonic()
+                        elif time.monotonic() - still_failing_since >= _STREAM_STILL_FAILING_ALERT_SECONDS:
+                            # Periodic reminder while the worker keeps failing past
+                            # the limit; the threshold alert above fires only once.
+                            log.error("%s stream worker still failing after restart limit", name)
+                            alerts.emit(
+                                "circuit_breaker",
+                                message=(f"{name} stream worker still failing; entries halted"),
+                                reason=f"{name}_restart_limit",
+                                market=market.value,
+                                restart_count=worker.restart_count,
+                            )
+                            still_failing_since = time.monotonic()
                     delay = min(16.0, 2 ** (worker.restart_count - 1))
+                    if market is not None and worker.restart_count > 5:
+                        # Past the limit the market worker retries at minutes, not
+                        # 16 s: 60 s, doubling, capped (see the constants above).
+                        delay = min(_STREAM_LIMITED_RETRY_MAX_SECONDS, 60.0 * 2 ** min(worker.restart_count - 6, 3))
                     log.warning(
                         "%s stream worker failed; retrying in %.1fs: %s",
                         name,
@@ -3819,6 +3914,35 @@ class EngineRuntime:
                             deferred_any = True
                         continue
                     try:
+                        # The breaker, reconcile gates and entry latch above were
+                        # read before the lease fetch and this lock. Re-read them
+                        # here so a halt or latch raised in between cannot size
+                        # a BUY (C9-2).
+                        live_breaker = getattr(self, "_circuit_breaker_reason", None)
+                        if live_breaker is not None and live_breaker not in _RECONCILIATION_INCIDENT_REASONS:
+                            log.warning(
+                                "Portfolio decision dropped: runtime halted (%s) before submit; market=%s",
+                                live_breaker,
+                                portfolio_runtime.market.value,
+                            )
+                            continue
+                        if (
+                            live_breaker is not None
+                            or getattr(self, "_reconcile_failed", False)
+                            or self._reconcile_pending()
+                        ):
+                            live_reason = (
+                                live_breaker
+                                or ("reconciliation_failed" if getattr(self, "_reconcile_failed", False) else None)
+                                or getattr(self, "_reconcile_pending_reason", None)
+                                or "reconcile_pending"
+                            )
+                            if self._defer_portfolio_batch(relevant, portfolio_runtime.market, live_reason):
+                                deferred_any = True
+                            continue
+                        live_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
+                        if live_latch is not None and (entry_latch is None or live_latch not in entry_latch.split("|")):
+                            entry_latch = live_latch if entry_latch is None else f"{entry_latch}|{live_latch}"
                         kwargs: dict[str, Any] = {"entry_latch": entry_latch}
                         if stale_sell_only_account is not None:
                             kwargs["account"] = stale_sell_only_account
@@ -4879,17 +5003,22 @@ class EngineRuntime:
         # inside the loop takes another lock.
         state_lock = getattr(self, "_state_lock", threading.RLock())
         with state_lock:
+            # Copy each history once. Portfolio-lock holders insert and replace
+            # its keys, and iterating the live dict here could raise "dict
+            # changed size during iteration" (CC-10); the copy is taken under
+            # the state lock and is a snapshot for the rest of this pass.
+            histories = [(runtime, dict(runtime.history)) for runtime in runtimes]
             for symbol in required_symbols:
-                relevant = [runtime for runtime in runtimes if symbol in runtime.history]
+                relevant = [(runtime, history) for runtime, history in histories if symbol in history]
                 ready = bool(relevant)
-                for runtime in relevant:
-                    series = runtime.history[symbol]
-                    benchmark_series = runtime.history.get("SPY", ())
+                for runtime, history in relevant:
+                    series = history[symbol]
+                    benchmark_series = history.get("SPY", ())
                     expected_latest = (
                         benchmark_series[-1].timestamp
                         if benchmark_series
                         else max(
-                            (candidate[-1].timestamp for candidate in runtime.history.values() if candidate),
+                            (candidate[-1].timestamp for candidate in history.values() if candidate),
                             default=None,
                         )
                     )
@@ -4903,15 +5032,16 @@ class EngineRuntime:
                 else:
                     self._not_ready_symbols.add(symbol)
             pending = frozenset(self._not_ready_symbols)
-        attempt = getattr(self, "_warmup_retry_attempt", 0)
-        # The counter describes the pending SET, not the process: it resets on
-        # ANY membership change — the set emptying, a member recovering, or a
-        # newly unready symbol that was never retried — so a chronically
-        # lagging symbol cannot push a brand-new one out to the ceiling.
-        # Only an unchanged set keeps doubling toward the cap.
-        if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
-            attempt = 0
-            self._warmup_retry_attempt = 0
+            # The counter describes the pending SET, not the process: it resets on
+            # ANY membership change — the set emptying, a member recovering, or a
+            # newly unready symbol that was never retried — so a chronically
+            # lagging symbol cannot push a brand-new one out to the ceiling.
+            # Only an unchanged set keeps doubling toward the cap. Every write to
+            # the backoff fields happens under the state lock (C9-5).
+            attempt = getattr(self, "_warmup_retry_attempt", 0)
+            if not pending or pending != getattr(self, "_warmup_retry_symbols", frozenset()):
+                attempt = 0
+                self._warmup_retry_attempt = 0
         retry_delay = min(_WARMUP_RETRY_MAX_SECONDS, _WARMUP_RETRY_SECONDS * 2 ** min(attempt, 8))
         if (
             self._running
@@ -4941,11 +5071,12 @@ class EngineRuntime:
             current = getattr(self, "_warmup_retry_thread", None)
             if current is not None and current.is_alive():
                 return
-            self._last_warmup_retry_at = time.monotonic()
-            self._warmup_retry_attempt += 1
-            # Same lock _refresh_readiness takes: a resize racing this copy
-            # would raise out of the spawn lock.
+            # The backoff fields are written only under the state lock, the
+            # same lock _refresh_readiness uses for its reset (C9-5). The copy
+            # of the not-ready set cannot race a resize under that lock either.
             with getattr(self, "_state_lock", threading.RLock()):
+                self._last_warmup_retry_at = time.monotonic()
+                self._warmup_retry_attempt += 1
                 self._warmup_retry_symbols = frozenset(self._not_ready_symbols)
             thread = threading.Thread(
                 target=self._retry_incomplete_warmup,
@@ -4997,12 +5128,25 @@ class EngineRuntime:
                     peak_equity=float(account.peak_equity),
                     realized_pnl=float(account.realized_pnl),
                     unrealized_pnl=float(account.unrealized_pnl),
-                    fees=self.ledger.total_fees_for_account(account_id),
+                    fees=self._fee_total_for_snapshot(account, account_id),
                     circuit_breaker_reason=reason,
                     updated_at=datetime.now(UTC),
                     peak_epoch=int(getattr(self.broker, "_peak_epoch", 0) or 0),
                 )
             )
+
+    def _fee_total_for_snapshot(self, account: AccountSnapshot, account_id: str) -> float:
+        """Fee total for risk-state persistence.
+
+        The snapshot's broker read already computed the account's fee total
+        (alpaca_account.account), so reuse it instead of a second aggregate
+        over the execution events on every pass. Only an account object without
+        the field (a test double) falls back to the ledger.
+        """
+        fees = getattr(account, "fees", None)
+        if fees is None:
+            return self.ledger.total_fees_for_account(account_id)
+        return float(fees)
 
     def _note_transient_reconcile_failure(self, exc: BaseException, message: str) -> bool:
         """Count one network-class reconciliation failure.

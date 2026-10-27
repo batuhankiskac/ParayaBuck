@@ -189,6 +189,7 @@ def test_resolved_crashed_submission_keeps_the_broker_order_id(tmp_path: Path) -
     runtime = PortfolioRuntime.__new__(PortfolioRuntime)
     runtime.broker = _broker(tmp_path, repo, _dead_partial("pb-buy", "buy"))
     runtime.repository = repo
+    runtime.market = Market.EQUITY
 
     rows = runtime._resolve_stuck_submission_rows(decision_id, repo.orders_for_decision(decision_id, side="buy"), "buy")
 

@@ -7,7 +7,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapshot
-from parayabuck.execution.portfolio import AssetTradingRules, PortfolioOrderRequest, PortfolioOrderSide
+from parayabuck.execution.portfolio import (
+    AssetTradingRules,
+    PortfolioOrderRequest,
+    PortfolioOrderSide,
+    PortfolioRiskLimits,
+)
 from parayabuck.monitoring import alerts
 from parayabuck.portfolio.base import PortfolioContext
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
@@ -25,6 +30,19 @@ from parayabuck.portfolio.runtime_service import (
 
 _DAY = datetime(2025, 1, 1, tzinfo=UTC)
 _TARGETS = {"AAPL": 0.15, "MSFT": 0.20}
+
+
+# The pre-VT35 limits these fixtures were sized for (0.10 per-asset cap); the
+# PortfolioRiskLimits code defaults now follow the shipped RiskLimits (D9-1).
+_PRE_VT35_LIMITS = PortfolioRiskLimits(
+    daily_loss_limit=0.005,
+    drawdown_halt=0.05,
+    maximum_gross=0.60,
+    maximum_equity=0.50,
+    maximum_equity_asset=0.10,
+    minimum_cash=0.40,
+    maximum_positions=6,
+)
 
 
 class _Strategy:
@@ -128,6 +146,7 @@ def _blocked_rebalance(tmp_path):
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     first = runtime.process_closed_bars(_bars(_DAY))
     assert first.status == "sell_phase_submitted"
@@ -159,7 +178,7 @@ def test_settled_blocked_rebalance_closes_without_its_deferred_buys(tmp_path, ra
     runtime, repository, broker, decision_id, sell = _blocked_rebalance(tmp_path)
     # Reconciliation proves the SELL filled.
     _settle(repository, sell, "sell-recovered")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
 
     result = runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
@@ -224,11 +243,12 @@ def test_stuck_deferred_buy_alerts_once_after_threshold_without_phase_change(tmp
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     first = runtime.process_closed_bars(_bars(_DAY))
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _settle(repository, sell, "sell-fill")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed.status == "buy_phase_submitted"
@@ -273,11 +293,12 @@ def test_deferred_buy_phase_records_admission_evidence(tmp_path, monkeypatch) ->
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     first = runtime.process_closed_bars(_bars(_DAY))
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _settle(repository, sell, "sell-fill")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
 
     resumed = runtime.advance_rebalance()
@@ -306,11 +327,12 @@ def test_rebalance_completing_over_an_ambiguous_buy_alerts_once(tmp_path, raised
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     first = runtime.process_closed_bars(_bars(_DAY))
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _settle(repository, sell, "sell-fill")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     submit = broker.submit_portfolio_order
 
@@ -364,13 +386,14 @@ def test_failed_deferred_buy_does_not_strand_its_unsubmitted_sibling(tmp_path) -
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     bars = [Bar(_DAY, symbol, "1d", 100.0, 100.0, 100.0, 100.0, 1_000_000, Market.EQUITY) for symbol in targets]
     first = runtime.process_closed_bars(bars)
     assert first.status == "sell_phase_submitted"
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _settle(repository, sell, "sell-fill")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     submit = broker.submit_portfolio_order
 
@@ -410,11 +433,12 @@ def test_buy_ready_resolves_a_crashed_submitting_buy_before_replanning(tmp_path)
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     first = runtime.process_closed_bars(_bars(_DAY))
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _settle(repository, sell, "sell-fill")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     submit = broker.submit_portfolio_order
 
@@ -439,15 +463,19 @@ def test_buy_ready_resolves_a_crashed_submitting_buy_before_replanning(tmp_path)
     assert runtime.advance_rebalance() is None
     assert _phase(repository, first.decision_id)[0] == "buy_ready"
 
-    # The broker proves the order never arrived: the row becomes terminal.
+    # The broker proves the order never arrived: the row becomes terminal. The
+    # re-plan then sends the BUY again under a fresh ``-replan1`` id (R-4): the
+    # canceled row keeps its planned id, so the insert cannot be ignored.
     broker.resolve_portfolio_submission = lambda client_order_id, broker_order_id="": "canceled"  # type: ignore[attr-defined]
     runtime.advance_rebalance()
     runtime.advance_rebalance()
 
     assert lookups == [row["client_order_id"]]
-    assert [item["status"] for item in repository.orders_for_decision(first.decision_id, side="buy")] == ["canceled"]
-    assert _phase(repository, first.decision_id)[0] == REBALANCE_PHASE_COMPLETE
-    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    buy_rows = repository.orders_for_decision(first.decision_id, side="buy")
+    assert [item["status"] for item in buy_rows] == ["canceled", "submitted"]
+    assert buy_rows[1]["client_order_id"] == f"{row['client_order_id']}-replan1"
+    assert _phase(repository, first.decision_id)[0] == "buy_pending"
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.BUY]
 
 
 def _stranded_direct_buy(tmp_path):
@@ -464,6 +492,7 @@ def _stranded_direct_buy(tmp_path):
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     submit = broker.submit_portfolio_order
 
@@ -542,6 +571,7 @@ def test_failed_direct_submit_cancels_the_untried_rest_of_its_batch(tmp_path) ->
         mode="paper",
         maximum_allocation=0.50,
         account_id="acct",
+        risk_limits=_PRE_VT35_LIMITS,
     )
     submit = broker.submit_portfolio_order
 

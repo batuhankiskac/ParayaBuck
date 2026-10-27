@@ -236,10 +236,11 @@ def test_deferred_replacement_requires_fresh_free_slot(tmp_path, sell_status: st
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None
-    if remaining_aapl and sell_status == "canceled" and sell.quantity - remaining_aapl > 0:
-        # Behaviour change (2026-10-27): a partially filled, then canceled SELL
-        # leaves a residual that is sold first under ``-residual1``; no BUY is
-        # sent while it works, so the BUY waits on the residual, not on a slot.
+    if remaining_aapl and sell_status == "canceled":
+        # Behaviour change (2026-10-27): a canceled SELL, partially filled or
+        # not, leaves its unfilled quantity as a residual sold first under
+        # ``-residual1``; no BUY is sent while it works, so the BUY waits on
+        # the residual, not on a slot.
         assert resumed.status == "residual_sell_submitted"
         assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.SELL]
         assert broker.submitted[-1].client_order_id == f"{sell.client_order_id}-residual1"
@@ -274,18 +275,23 @@ def test_sell_exists_buy_exists_no_buy_submission_before_sell_terminal(tmp_path)
     # The SELL fills: the BUY phase resumes with a fresh account snapshot.
     sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     # The decision that owned the BUY predates the session the bars moved to:
     # its deferred BUY is discarded at that session (P9-1), never resumed.
     assert runtime.advance_rebalance() is None
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
-    # The next scheduled session plans a fresh decision. Its exit goes first
-    # and its BUY waits behind that new sell (sells before buys).
+    # The next scheduled session plans a fresh decision. AAPL already sits at
+    # its target after the fill, so there is no exit to wait on and the fresh
+    # decision's own BUY goes out; the superseded BUY never does.
     later = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_day + timedelta(days=40)))
-    assert later.status == "sell_phase_submitted"
+    assert later.status == "submitted"
     assert later.decision_id != result.decision_id
-    assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
+    assert [(order.side, order.symbol) for order in broker.submitted] == [
+        (PortfolioOrderSide.SELL, "AAPL"),
+        (PortfolioOrderSide.BUY, "MSFT"),
+    ]
+    assert broker.submitted[-1].decision_id == later.decision_id
 
 
 def test_partial_sell_keeps_buy_deferred(tmp_path) -> None:
@@ -314,6 +320,8 @@ def test_partial_sell_keeps_buy_deferred(tmp_path) -> None:
     assert residual.side == PortfolioOrderSide.SELL and 0 < residual.quantity <= sell.quantity / 2
     assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
     _fill(repository, residual)
+    # The account now shows the sold position at the decision target (400 - 300).
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
@@ -375,7 +383,7 @@ def test_restart_during_sell_phase_recovers_exactly_once(tmp_path) -> None:
     # The SELL filled while the process was down (persisted via trade updates
     # or broker reconciliation).
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     recovered = runtime_b.advance_rebalance()
     assert recovered is not None and recovered.status == "buy_phase_submitted"
@@ -416,18 +424,28 @@ def test_crash_before_broker_ack_never_submitted_recovers_autonomously(tmp_path)
         account_id="acct",
     )
     recovered = runtime_b.advance_rebalance()
-    assert recovered is not None and recovered.status == "buy_phase_submitted"
-    assert [order.side for order in broker.submitted] == [
-        PortfolioOrderSide.SELL,
-        PortfolioOrderSide.BUY,
-    ]
+    # The SELL never reached the broker, so its exit is still owed: the
+    # canceled, zero-fill row is re-sent as a residual and no BUY goes out.
+    assert recovered is not None and recovered.status == "residual_sell_submitted"
+    residual = broker.submitted[-1]
+    assert residual.side == PortfolioOrderSide.SELL
+    assert residual.client_order_id == f"{sell.client_order_id}-residual1"
+    assert residual.quantity == sell.quantity
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
     rows = repository.orders_for_decision(result.decision_id, side="sell")
-    assert [str(row["status"]) for row in rows] == ["canceled"]
+    assert [str(row["status"]) for row in rows] == ["canceled", "submitted"]
+    # The residual fills; the BUY is then re-planned against the settled account.
+    _fill(repository, residual)
+    broker.positions = [_position("AAPL", 100)]
+    broker.open_symbols.discard("AAPL")
+    buy_phase = runtime_b.advance_rebalance()
+    assert buy_phase is not None and buy_phase.status == "buy_phase_submitted"
+    assert [order.symbol for order in broker.submitted if order.side == PortfolioOrderSide.BUY] == ["MSFT"]
     # The rebalance completes normally afterwards.
-    for order in recovered.orders:
+    for order in buy_phase.orders:
         _fill(repository, order)
-    broker.positions = [_position("AAPL", 400), _position("MSFT", 200)]
-    broker.open_symbols.discard(order.symbol)
+    broker.positions = [_position("AAPL", 100), _position("MSFT", 100)]
+    broker.open_symbols.discard("MSFT")
     completed = runtime_b.advance_rebalance()
     assert completed is not None and completed.status == "rebalance_complete"
 
@@ -472,7 +490,7 @@ def test_crash_before_ack_but_broker_filled_recovers_real_fill(tmp_path) -> None
     # down (no stream event was persisted) ----
     repository.update_order(sell.client_order_id, "submitting")
     broker.open_symbols.discard("AAPL")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.order_resolution[sell.client_order_id] = "filled"
 
     def _recover_fill(
@@ -532,7 +550,7 @@ def test_duplicate_trade_update_no_duplicate_buy(tmp_path) -> None:
     # The same terminal fill arrives twice (stream replay).
     _fill(repository, sell, activity_id="a1")
     _fill(repository, sell, activity_id="a2")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
@@ -598,7 +616,7 @@ def test_max_gross_exposure_transient_never_exceeds_limit(tmp_path) -> None:
     # No BUY at the broker while the SELL is open: gross stays at 0.35.
     assert all(order.side == PortfolioOrderSide.SELL for order in broker.submitted)
     sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
-    _fill(repository, sell, cumulative=0.0, status="expired")
+    _fill(repository, sell, cumulative=0.0, status="rejected")
     broker.open_symbols.discard("AAPL")
     resumed = runtime.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
@@ -741,7 +759,7 @@ def test_local_nonterminal_order_suppresses_deferred_planner_when_broker_is_empt
         "submitted",
     )
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
 
     resumed = runtime.advance_rebalance()
@@ -768,17 +786,19 @@ def test_process_closed_bars_exposes_deferred_buys_advanced_in_same_cycle(tmp_pa
     assert first.status == "sell_phase_submitted"
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
 
     # A scheduled session (a month later) so the fresh decision plans its BUY.
     next_session = sell.decision_timestamp + timedelta(days=40)
     resumed = runtime.process_closed_bars(_bars(("AAPL", "MSFT"), day=next_session))
 
-    assert resumed.status == "sell_phase_submitted"
+    # AAPL sits at its target after the fill, so the fresh decision has no
+    # exit and its MSFT BUY is submitted (and visible) in this same cycle.
+    assert resumed.status == "submitted"
     assert resumed.decision_id != sell.decision_id
     assert [order.symbol for order in resumed.orders if order.side == PortfolioOrderSide.BUY] == ["MSFT"]
-    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.SELL]
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.BUY]
 
 
 def test_process_closed_bars_returns_after_rebalance_completion_without_new_decision(tmp_path) -> None:
@@ -795,7 +815,7 @@ def test_process_closed_bars_returns_after_rebalance_completion_without_new_deci
     assert first.status == "sell_phase_submitted"
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell, activity_id="sell-terminal")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
 
     resumed = runtime.advance_rebalance()

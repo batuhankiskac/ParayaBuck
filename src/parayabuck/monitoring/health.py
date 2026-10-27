@@ -341,7 +341,13 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
 def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
         return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="no runtime health")
-    last = health_snapshot.get("last_reconciliation_at")
+    # Freshness is judged on the last CLEAN reconcile: a drift result refreshes
+    # last_reconciliation_at while the drift halt persists (R9-4). Snapshots
+    # written before the clean stamp existed fall back to the old field.
+    if "last_clean_reconciliation_at" in health_snapshot:
+        last = health_snapshot.get("last_clean_reconciliation_at")
+    else:
+        last = health_snapshot.get("last_reconciliation_at")
     if not isinstance(last, str) or not last:
         return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="no reconciliation timestamp")
     age = _age_seconds(last, now)

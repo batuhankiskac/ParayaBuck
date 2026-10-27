@@ -235,32 +235,36 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
 
 
 @pytest.mark.parametrize("reason", ["ownership_drift", "portfolio_runtime_failure", "decision_worker_crashed"])
-def test_hard_halt_is_not_requeued_as_a_recoverable_gate(
+def test_hard_halt_requeues_the_close_batch_for_the_retry_window(
     monkeypatch: pytest.MonkeyPatch, _capture_alerts: list[tuple[str, dict[str, object]]], reason: str
 ) -> None:
-    """A halt only an operator reset can clear gets no 40-minute retry and no
-    misleading "deferred by a recoverable gate" alert."""
+    """R9-2 / B-1: a hard halt re-queues the session-close batch inside the retry
+    window, so an operator reset before the window closes still decides it.
+    The first deferral alerts once, with the halt as its reason."""
     engine = _engine((_portfolio_runtime(),))
     engine._circuit_breaker_reason = reason
     clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
     clock.install(monkeypatch)
 
-    assert engine._process_portfolio_timestamp(_bars()) is True
+    assert engine._process_portfolio_timestamp(_bars()) is False
 
-    assert engine._deferred_portfolio_batches == {}
-    assert _capture_alerts == []
+    assert list(engine._deferred_portfolio_batches) == [(Market.EQUITY, SESSION_LABEL)]
+    assert [kind for kind, _ in _capture_alerts] == ["decision_deferred"]
+    assert _capture_alerts[0][1]["reason"] == reason
 
 
-def test_warmup_batches_are_not_decisions_and_are_not_requeued(
+def test_warmup_batches_are_requeued_not_dropped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """R8-7: a session-close batch that arrives during warmup is re-queued for
+    the retry window instead of being dropped."""
     engine = _engine((_portfolio_runtime(),))
     engine._warming_up = True
     clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
     clock.install(monkeypatch)
 
-    assert engine._process_portfolio_timestamp(_bars()) is True
-    assert engine._deferred_portfolio_batches == {}
+    assert engine._process_portfolio_timestamp(_bars()) is False
+    assert list(engine._deferred_portfolio_batches) == [(Market.EQUITY, SESSION_LABEL)]
 
 
 def test_early_close_retry_deadline_is_the_actual_close_not_16_et(

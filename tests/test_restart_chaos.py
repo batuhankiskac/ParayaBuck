@@ -1077,7 +1077,9 @@ def test_sparse_trade_update_blips_never_accumulate_into_the_restart_limit(monke
     assert runtime._state == "running"
     assert worker.restart_count == 1
     assert delays == [1.0] * 10
-    assert emitted == []
+    # The first blip latches the reconcile-pending gate and alerts once (D7-5);
+    # later blips under the same latch stay silent.
+    assert emitted == ["reconciliation_failure"]
 
 
 @pytest.mark.parametrize("run_seconds", [0.0, 599.0])
@@ -1099,4 +1101,5 @@ def test_trade_update_crash_loop_still_hits_the_restart_limit(monkeypatch: Any, 
     assert worker.restart_count == 6
     assert runtime._circuit_breaker_reason == "pb-trade-updates_restart_limit"
     assert runtime._state == "halted"
-    assert emitted == ["circuit_breaker"]
+    # The reconcile-pending latch of the first failure alerts (D7-5), then the halt.
+    assert emitted == ["reconciliation_failure", "circuit_breaker"]

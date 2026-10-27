@@ -311,6 +311,27 @@ _TRADE_FEED_STALE_SECONDS = 300.0
 _ACCOUNT_FETCH_FAILURE_LIMIT = 5
 _ACCOUNT_FETCH_HALT_REASON = "account_fetch_failures"
 _RECONCILIATION_INCIDENT_REASONS = frozenset({"reconciliation_failed", "reconciliation_bug_suspected"})
+# Operator halt marker seen by a RUNNING engine (Q-8). Checked from the decision
+# loop at this interval; the marker is otherwise checked only at start.
+_OPERATOR_HALT_REASON = "operator_halt"
+_OPERATOR_HALT_CHECK_SECONDS = 10.0
+# Halt reasons written to the incident table the moment they are raised (R-1)
+# and restored at the next start until an operator-verified reset clears them.
+# Kept in step with ``reset_safety_lock``'s recoverable set.
+_PERSISTENT_HALT_REASONS = frozenset(
+    {
+        "ambiguous_order_state",
+        "protection_failure",
+        "final_market_event_queue_overflow",
+        "ownership_drift",
+        "reconciliation_failed",
+        "reconciliation_bug_suspected",
+        "portfolio_runtime_failure",
+        "decision_worker_crashed",
+        "trade_update_callback_failure",
+        _OPERATOR_HALT_REASON,
+    }
+)
 # Halt reasons a fresh process cannot still be in: they describe in-process
 # worker or queue state (a crashed decision worker, a trade-update callback
 # that raised, an event queue that overflowed) and this start re-arms all
@@ -576,6 +597,18 @@ class EngineRuntime:
         self._account_snapshot_active_leases: set[int] = set()
         self._account_snapshot_invalidation_pending = False
         self._last_reconciliation_at: datetime | None = None
+        # Last reconcile that came back clean (R9-4): a drift result refreshes
+        # _last_reconciliation_at but never this, so health cannot read a drift
+        # halt as a fresh reconciliation.
+        self._last_clean_reconciliation_at: datetime | None = None
+        # Every active halt reason, in raise order. _circuit_breaker_reason is
+        # the strongest one and is what callers read; this list keeps the rest
+        # so a reset cannot lift a halt that is still in force (R9-3).
+        self._halt_reasons: list[str] = []
+        # Edge-trigger state for the alerts that fire once per latch transition.
+        self._signal_basis_latched = False
+        self._event_queue_stale_latched = False
+        self._next_operator_halt_check = 0.0
         # Observability snapshot writer — isolated, bounded, never blocks trading
         self._snapshot_writer = None
         try:
@@ -942,6 +975,7 @@ class EngineRuntime:
         market_health: dict[str, dict[str, object]],
     ) -> RuntimeHealth:
         last_reconciliation = getattr(self, "_last_reconciliation_at", None)
+        last_clean_reconciliation = getattr(self, "_last_clean_reconciliation_at", None)
         return RuntimeHealth(
             state=state,
             healthy=healthy,
@@ -965,6 +999,9 @@ class EngineRuntime:
                 for strategy, _symbols, maximum_allocation in getattr(self, "_strategy_specs", ())
             ),
             last_reconciliation_at=(last_reconciliation.isoformat() if last_reconciliation is not None else None),
+            last_clean_reconciliation_at=(
+                last_clean_reconciliation.isoformat() if last_clean_reconciliation is not None else None
+            ),
             entry_risk_latch={
                 market.value: reason for market, reason in getattr(self, "_entry_risk_latch", {}).items()
             },
@@ -1409,6 +1446,7 @@ class EngineRuntime:
                     f"Startup reconciliation found drift: {reconciliation.drift_categories}"
                 )
             self._last_reconciliation_at = datetime.now(UTC)
+            self._last_clean_reconciliation_at = self._last_reconciliation_at
             self._clear_reconciliation_incidents()
             try:
                 if _observe is not None:
@@ -1869,8 +1907,11 @@ class EngineRuntime:
         previous_state = getattr(self, "_state", None)
         breaker_at_stop = getattr(self, "_circuit_breaker_reason", None)
         if getattr(self, "_running", False):
-            self._state = "stopping"
-            self._running = False
+            # Under the state lock: a stream worker restoring "running" after
+            # its backoff checks _running under the same lock (CC-11).
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._state = "stopping"
+                self._running = False
             self._stop_event.set()
         try:
             session_id = getattr(self, "_runtime_session_id", None)
@@ -1926,26 +1967,29 @@ class EngineRuntime:
         # once no worker can still be mid-write.
         # getattr defaults: partially constructed runtimes (tests use
         # EngineRuntime.__new__) may stop before start() created the workers.
-        # The spawn locks are held across the read-join so a decision-loop
-        # pass or an in-flight trade-update callback cannot spawn a new
-        # pb-reconcile / pb-warmup-retry AFTER the join and run broker +
-        # ledger I/O after the pools below are closed.
+        # The spawn locks are held only to take this snapshot. Every spawn site
+        # checks _running under its lock and _running was cleared above, so no
+        # pb-reconcile / pb-warmup-retry can appear after the snapshot and run
+        # broker + ledger I/O after the pools below are closed. The joins run
+        # OUTSIDE the locks (CC-5): a reconcile thread that re-enters a spawn
+        # site would otherwise block on a lock stop() still holds until the
+        # join timed out and stop() reported stop_failed.
         with self._reconcile_spawn_lock, self._warmup_retry_spawn_lock:
             with getattr(self, "_threads_lock", threading.Lock()):
                 threads_snapshot = tuple(getattr(self, "_threads", ()))
-            for thread in threads_snapshot:
-                thread.join(timeout=5)
-            alive = [thread.name for thread in threads_snapshot if thread.is_alive()]
             reconcile_thread = getattr(self, "_reconcile_thread", None)
-            if reconcile_thread is not None:
-                reconcile_thread.join(timeout=30)
-                if reconcile_thread.is_alive():
-                    alive.append(reconcile_thread.name)
             warmup_thread = getattr(self, "_warmup_retry_thread", None)
-            if warmup_thread is not None:
-                warmup_thread.join(timeout=30)
-                if warmup_thread.is_alive():
-                    alive.append(warmup_thread.name)
+        for thread in threads_snapshot:
+            thread.join(timeout=5)
+        alive = [thread.name for thread in threads_snapshot if thread.is_alive()]
+        if reconcile_thread is not None:
+            reconcile_thread.join(timeout=30)
+            if reconcile_thread.is_alive():
+                alive.append(reconcile_thread.name)
+        if warmup_thread is not None:
+            warmup_thread.join(timeout=30)
+            if warmup_thread.is_alive():
+                alive.append(warmup_thread.name)
         # The signal-adjustment monitor MUST be joined before the historical
         # data client below is closed: a late verification pass would otherwise
         # hit a dead HTTP session mid-request.
@@ -2617,6 +2661,7 @@ class EngineRuntime:
         its incident row still demands operator-verified recovery.
         """
         with getattr(self, "_state_lock", threading.RLock()):
+            self._note_halt_reason(reason)
             current = getattr(self, "_circuit_breaker_reason", None)
             if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
                 self._circuit_breaker_reason = reason
@@ -2629,32 +2674,158 @@ class EngineRuntime:
         the same rule as ``_raise_reconciliation_breaker``: overwriting
         ownership_drift or protection_failure would hand the operator a reset
         for the wrong incident while the stronger one's row stays persisted.
+        The reason is kept in ``_halt_reasons`` either way (R9-3), and a
+        persistent reason is written to the incident table before returning
+        (R-1), so a crash before the next account pass cannot lose it.
         """
         with getattr(self, "_state_lock", threading.RLock()):
+            self._note_halt_reason(reason)
             current = getattr(self, "_circuit_breaker_reason", None)
             if current is None or current in _RECONCILIATION_INCIDENT_REASONS:
                 self._circuit_breaker_reason = reason
             self._state = "halted"
+        if reason in _PERSISTENT_HALT_REASONS:
+            self._save_halt_incident_best_effort(reason)
+
+    def _note_halt_reason(self, reason: str) -> None:
+        """Record ``reason`` as active. Caller holds the state lock."""
+        halts = list(getattr(self, "_halt_reasons", []))
+        if reason not in halts:
+            halts.append(reason)
+        self._halt_reasons = halts
+
+    def _active_halt_reasons(self) -> tuple[str, ...]:
+        """Every halt reason in force, the breaker reason first (R9-3)."""
+        primary = getattr(self, "_circuit_breaker_reason", None)
+        reasons = [] if primary is None else [primary]
+        for item in getattr(self, "_halt_reasons", ()):
+            if item not in reasons:
+                reasons.append(item)
+        return tuple(reasons)
+
+    def _release_halt_reason(self, reason: str) -> None:
+        """Lift one halt reason. Caller holds the state lock.
+
+        The breaker moves to the next reason still in force, a non-
+        reconciliation one first (as the restore picks it), so a reset of one
+        halt leaves the others in force instead of reopening the runtime.
+        """
+        remaining = [item for item in getattr(self, "_halt_reasons", []) if item != reason]
+        self._halt_reasons = remaining
+        if getattr(self, "_circuit_breaker_reason", None) == reason:
+            ordered = sorted(remaining, key=lambda item: item in _RECONCILIATION_INCIDENT_REASONS)
+            self._circuit_breaker_reason = ordered[0] if ordered else None
+
+    def _save_halt_incident_best_effort(self, reason: str) -> None:
+        """Write one halt row now. A failure is logged, never raised: the halt
+        is already in force in memory, and the next successful account pass
+        re-saves every active reason."""
+        account_id = getattr(getattr(self, "broker", None), "account_id", None) or "unknown"
+        save = getattr(getattr(self, "ledger", None), "save_safety_incident", None)
+        if not callable(save):
+            return
+        try:
+            save(account_id, reason)
+        except Exception:
+            log.critical(
+                "Halt %s could not be persisted when raised; it stays in memory until a later save succeeds",
+                reason,
+                exc_info=True,
+            )
+
+    def _operator_halt_marker_active(self) -> bool:
+        """True while the operator halt marker of this runtime's data dir exists."""
+        decision_db_path = getattr(
+            getattr(getattr(self, "app_config", None), "runtime", None), "decision_db_path", None
+        )
+        if not decision_db_path:
+            return False
+        return operator_halt_active(operator_halt_marker_path(Path(decision_db_path).parent))
+
+    def _maybe_check_operator_halt(self) -> None:
+        """Halt a RUNNING engine when the operator halt marker appears (Q-8).
+
+        ``parayabuck halt`` used to be honoured only at start. Polled every
+        ``_OPERATOR_HALT_CHECK_SECONDS`` from the decision loop; the halt is
+        persisted and clears only through ``reset_safety_lock`` once the marker
+        has been removed (``parayabuck resume``) and reconciliation passes.
+        """
+        now = time.monotonic()
+        if now < float(getattr(self, "_next_operator_halt_check", 0.0)):
+            return
+        self._next_operator_halt_check = now + _OPERATOR_HALT_CHECK_SECONDS
+        try:
+            if not self._operator_halt_marker_active():
+                return
+        except Exception:
+            log.warning("Operator halt marker could not be read", exc_info=True)
+            return
+        with getattr(self, "_state_lock", threading.RLock()):
+            if _OPERATOR_HALT_REASON in self._active_halt_reasons():
+                return
+        log.critical("Operator halt marker found while the engine runs; halting new decisions")
+        self._raise_halt(_OPERATOR_HALT_REASON)
+        runtime_metrics_store.record_event("circuit_breaker")
+        alerts.emit(
+            "circuit_breaker",
+            message="Operator halt marker found while the engine runs; runtime halted",
+            reason=_OPERATOR_HALT_REASON,
+        )
+
+    def _respawn_decision_worker(self) -> bool:
+        """Start a fresh pb-decisions thread if the previous one exited (R9-9).
+
+        Called by the operator reset after its verification, so a crashed
+        decision loop no longer needs a process restart to come back. Returns
+        True when a thread was started.
+        """
+        if not getattr(self, "_running", False):
+            return False
+        worker = dict(getattr(self, "_workers", {})).get("pb-decisions")
+        if worker is None or worker.alive:
+            return False
+        worker.last_error = None
+        with getattr(self, "_threads_lock", threading.Lock()):
+            # Checked under the lock stop() snapshots the threads under.
+            if not getattr(self, "_running", False):
+                return False
+            thread = threading.Thread(target=self._decision_loop, name="pb-decisions", daemon=True)
+            self._threads.append(thread)
+            thread.start()
+        log.warning("Decision worker respawned by the operator reset")
+        return True
 
     def _clear_reconciliation_incidents(self) -> None:
-        """Clear only incidents whose documented recovery is clean reconcile."""
+        """Clear only incidents whose documented recovery is clean reconcile.
+
+        Callers that can race ``_persist_risk_state`` hold ``_risk_state_lock``
+        (C9-6); the operator reset calls it there after its own checks (R9-6).
+        """
         account_id = getattr(self.broker, "account_id", None) or "unknown"
         clear = getattr(getattr(self, "ledger", None), "clear_safety_incident", None)
         if callable(clear):
             for reason in sorted(_RECONCILIATION_INCIDENT_REASONS):
                 clear(account_id, reason)
-        # Only a reconciliation-owned reason clears here; every other breaker
+        # Only reconciliation-owned reasons clear here; every other breaker
         # keeps its own verified recovery (reset_safety_lock).
         with getattr(self, "_state_lock", threading.RLock()):
-            if getattr(self, "_circuit_breaker_reason", None) in _RECONCILIATION_INCIDENT_REASONS:
-                self._circuit_breaker_reason = None
+            released = [reason for reason in self._active_halt_reasons() if reason in _RECONCILIATION_INCIDENT_REASONS]
+            for reason in released:
+                self._release_halt_reason(reason)
+            if released and getattr(self, "_circuit_breaker_reason", None) is None:
                 # A trade-update blip while this reason was set left the
                 # runtime "degraded" (its restore never passes a breaker);
                 # nothing else would un-pin it now that the reason is gone.
                 # Same running/warming_up rule as that restore, and only
-                # while the trade-update worker is alive.
+                # while the trade-update worker is alive and the runtime is
+                # still running (a stop() in progress keeps its own state).
                 trade_updates = dict(getattr(self, "_workers", {})).get("pb-trade-updates")
-                if getattr(self, "_state", None) == "degraded" and trade_updates is not None and trade_updates.alive:
+                if (
+                    getattr(self, "_state", None) == "degraded"
+                    and getattr(self, "_running", False)
+                    and trade_updates is not None
+                    and trade_updates.alive
+                ):
                     self._state = "running" if self._has_ready_symbols() else "warming_up"
 
     def _restore_persistent_state(self) -> None:
@@ -2698,17 +2869,7 @@ class EngineRuntime:
         # entry halt of the same name (pb-stocks) is a
         # different mechanism with their own verified recovery; see
         # ``reset_safety_lock``.
-        persistent_reasons = {
-            "ambiguous_order_state",
-            "protection_failure",
-            "final_market_event_queue_overflow",
-            "ownership_drift",
-            "reconciliation_failed",
-            "reconciliation_bug_suspected",
-            "portfolio_runtime_failure",
-            "decision_worker_crashed",
-            "trade_update_callback_failure",
-        }
+        persistent_reasons = _PERSISTENT_HALT_REASONS
         incidents = self.ledger.load_safety_incidents(account_id)
         # A halt row from a previous process whose condition is process-local
         # cannot still be true here: the trade-update and decision workers are
@@ -2739,6 +2900,9 @@ class EngineRuntime:
             if incident.reason in persistent_reasons and incident.reason not in _RESTART_REARMED_REASONS
         ]
         preferred = [reason for reason in restorable if reason not in _RECONCILIATION_INCIDENT_REASONS]
+        # Every persisted halt stays in force, not only the one restored as the
+        # breaker: resetting the first must not lift the others (R9-3).
+        self._halt_reasons = list(dict.fromkeys(restorable))
         if preferred or restorable:
             self._circuit_breaker_reason = (preferred or restorable)[0]
         if any(incident.reason == "portfolio_drawdown_halt" for incident in incidents):
@@ -3200,7 +3364,14 @@ class EngineRuntime:
                     # to the same running/warming_up choice start() makes.
                     recovered = False
                     with getattr(self, "_state_lock", threading.RLock()):
-                        if self._state == "degraded" and getattr(self, "_circuit_breaker_reason", None) is None:
+                        # _running is checked under the lock stop() clears it
+                        # under: a worker that outlives stop() must not set
+                        # the runtime back to running (CC-11).
+                        if (
+                            self._state == "degraded"
+                            and getattr(self, "_circuit_breaker_reason", None) is None
+                            and self._running
+                        ):
                             self._state = "running" if self._has_ready_symbols() else "warming_up"
                             recovered = True
                     # Paired edge-trigger with the degraded emit above: the
@@ -3334,6 +3505,7 @@ class EngineRuntime:
                     portfolio_first_seen.setdefault(portfolio_key, time.monotonic())
                 self._flush_aggregators()
                 self._maybe_run_premarket_probe()
+                self._maybe_check_operator_halt()
                 now_mono = time.monotonic()
                 # RuntimeHealth is expensive to build; build it ONCE per loop
                 # iteration (lazily, only when a batch is actually processed)
@@ -3648,6 +3820,26 @@ class EngineRuntime:
             )
         return True
 
+    def _defer_portfolio_bars(self, bars: list[Bar], reason: str) -> bool:
+        """Re-queue each market's share of a session-close batch.
+
+        True when at least one share was re-queued; False when none was, or
+        every window has already expired (each expiry alerts in
+        ``_defer_portfolio_batch``).
+        """
+        deferred_any = False
+        for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
+            relevant = [
+                bar
+                for bar in bars
+                if bar.market == portfolio_runtime.market
+                and bar.timeframe == portfolio_runtime.strategy.timeframe
+                and bar.symbol in portfolio_runtime.symbols
+            ]
+            if relevant and self._defer_portfolio_batch(relevant, portfolio_runtime.market, reason):
+                deferred_any = True
+        return deferred_any
+
     def _account_at_decision_close(self, account: AccountSnapshot, bars: list[Bar]) -> AccountSnapshot:
         """Re-mark a broker snapshot at the decision-close prices (F36).
 
@@ -3702,20 +3894,26 @@ class EngineRuntime:
         after-hours marks.
         """
         if self._warming_up:
-            # Warmup owns the bars it seeds; no session is due from them.
-            log.debug("Portfolio batch ignored while warming up: bars=%d", len(bars))
-            return True
+            # A session-close batch that arrives during warmup is still a
+            # session: re-queue it for the bounded retry instead of dropping it
+            # (R8-7). The retry runs once warmup has finished and expires with
+            # the same alert as every other deferral.
+            log.debug("Portfolio batch deferred while warming up: bars=%d", len(bars))
+            return not self._defer_portfolio_bars(bars, "warming_up")
         breaker = getattr(self, "_circuit_breaker_reason", None)
         if breaker is not None and breaker not in _RECONCILIATION_INCIDENT_REASONS:
             # A hard halt (ownership drift, portfolio runtime failure, a
-            # crashed worker, ...) needs an operator-verified reset; no
-            # 40-minute retry can clear it, so the batch is not re-queued.
+            # crashed worker, ...) needs an operator-verified reset, which can
+            # arrive at any time before the session's retry window closes. The
+            # batch is re-queued for that window like any gated session, so a
+            # reset inside the window still decides it (R9-2 / B-1); an expired
+            # window alerts through _defer_portfolio_batch.
             log.warning(
-                "Portfolio batch not decided: runtime halted (%s); bars=%d",
+                "Portfolio batch deferred: runtime halted (%s); bars=%d",
                 breaker,
                 len(bars),
             )
-            return True
+            return not self._defer_portfolio_bars(bars, breaker)
         if breaker is not None or getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
             # A reconciliation-owned gate clears on the next clean reconcile:
             # re-queue the session for the bounded retry.
@@ -3724,18 +3922,7 @@ class EngineRuntime:
                 if getattr(self, "_reconcile_failed", False)
                 else getattr(self, "_reconcile_pending_reason", None)
             )
-            deferred_any = False
-            for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
-                relevant = [
-                    bar
-                    for bar in bars
-                    if bar.market == portfolio_runtime.market
-                    and bar.timeframe == portfolio_runtime.strategy.timeframe
-                    and bar.symbol in portfolio_runtime.symbols
-                ]
-                if relevant and self._defer_portfolio_batch(relevant, portfolio_runtime.market, reason):
-                    deferred_any = True
-            return not deferred_any
+            return not self._defer_portfolio_bars(bars, reason)
         # Fail-closed: a pending reconciliation (material drift detected) blocks
         # new portfolio orders until a verified ``reconcile()`` clears it.
         # This is the engine-side complement to the broker's 7-category
@@ -4412,8 +4599,20 @@ class EngineRuntime:
         reasons: list[str] = []
         if self._state in _ENTRY_BLOCKING_STATES:
             reasons.append(f"runtime_state:{self._state}")
-        if health.queue_age_seconds > self.config.maximum_queue_age_seconds:
+        queue_stale = health.queue_age_seconds > self.config.maximum_queue_age_seconds
+        if queue_stale:
             reasons.append("event_queue_stale")
+        if queue_stale != getattr(self, "_event_queue_stale_latched", False):
+            # D7-6: one alert per transition. Before this, only ops status showed
+            # the latch; decisions were held with no operator-facing signal.
+            self._event_queue_stale_latched = queue_stale
+            if queue_stale:
+                alerts.emit(
+                    "risk_incident",
+                    message="Event queue stale: new entries blocked until the queue drains",
+                    reason="event_queue_stale",
+                    queue_age_seconds=round(health.queue_age_seconds, 1),
+                )
         stale = (
             self._last_account_at is None
             or (datetime.now(UTC) - self._last_account_at).total_seconds()
@@ -4943,7 +5142,29 @@ class EngineRuntime:
         symbol. Unverifiable basis FAILS CLOSED for entries; risk-reducing
         exits keep flowing because callers only cap targets at current
         weights.
+
+        Alerts once per transition into the latch (D7-3); the latch itself is
+        re-evaluated on every call.
         """
+        latch = self._equity_signal_basis_check(decision_timestamp)
+        with getattr(self, "_state_lock", threading.RLock()):
+            was_latched = bool(getattr(self, "_signal_basis_latched", False))
+            self._signal_basis_latched = latch is not None
+        if latch is not None and not was_latched:
+            # Not ``signal_adjustment_failure``: that kind is already emitted once
+            # per monitor failure episode, and this latch can enter without one.
+            alerts.emit(
+                "risk_incident",
+                message=(
+                    "Equity entries latched: signal basis unverified; new entries wait, "
+                    "risk-reducing exits keep flowing"
+                ),
+                reason=latch,
+            )
+        return latch
+
+    def _equity_signal_basis_check(self, decision_timestamp: datetime | None = None) -> str | None:
+        """The unlatched evaluation behind ``_equity_signal_basis_latch``."""
         if not getattr(self, "_symbols_by_market", {}).get(Market.EQUITY):
             return None
         try:
@@ -5075,7 +5296,7 @@ class EngineRuntime:
         # itself: keep check-spawn-assign atomic so overlapping
         # callers cannot start duplicate pb-warmup-retry threads and orphan
         # the overwritten reference (never joined by stop). Refuses to spawn
-        # once stopping: stop() holds this same lock across its join.
+        # once stopping: stop() snapshots under this lock after clearing _running.
         with self._warmup_retry_spawn_lock:
             if not getattr(self, "_running", False):
                 return
@@ -5128,9 +5349,11 @@ class EngineRuntime:
             reason = self._circuit_breaker_reason
             # The circuit_breaker_reason in the session row is kept for
             # backward compatibility; the incident table is authoritative for
-            # restore, so any halt reason in effect is also recorded there.
-            if reason is not None:
-                self.ledger.save_safety_incident(account_id, reason)
+            # restore, so every halt reason in force is recorded there (R9-3).
+            with getattr(self, "_state_lock", threading.RLock()):
+                active_halts = self._active_halt_reasons()
+            for halt in active_halts:
+                self.ledger.save_safety_incident(account_id, halt)
             self.ledger.save_risk_state(
                 RiskState(
                     account_id=account_id,
@@ -5222,6 +5445,7 @@ class EngineRuntime:
                     self._transient_reconcile_failures = 0
                     return
                 self._last_reconciliation_at = datetime.now(UTC)
+                self._last_clean_reconciliation_at = self._last_reconciliation_at
                 self._last_account_at = datetime.now(UTC)
                 self._generic_reconcile_failures = 0
                 self._transient_reconcile_failures = 0
@@ -5247,7 +5471,11 @@ class EngineRuntime:
                         self._reconcile_pending_reason = None
                         if cleared_reason is not None:
                             log.info("Reconcile-pending latch cleared after a clean reconciliation: %s", cleared_reason)
-                self._clear_reconciliation_incidents()
+                # C9-6: under the risk-state lock, so a concurrent
+                # _persist_risk_state cannot re-save a row this clean
+                # reconcile has just cleared.
+                with getattr(self, "_risk_state_lock", threading.Lock()):
+                    self._clear_reconciliation_incidents()
             except ReconciliationResultError as exc:
                 if _is_transient_network_error(exc):
                     # F14: a network failure inside the FILL-activity backfill
@@ -5399,8 +5627,18 @@ class EngineRuntime:
         is never taken while the state lock is held.
         """
         with getattr(self, "_state_lock", threading.RLock()):
+            previous = getattr(self, "_reconcile_pending_reason", None)
             self._reconcile_pending_reason = reason
             self._reconcile_pending_seq = int(getattr(self, "_reconcile_pending_seq", 0)) + 1
+        if previous != reason:
+            # D7-5: the latch silently holds entries otherwise. Alerted once per
+            # latch reason; a premarket probe failure that already alerted under
+            # the same reason is coalesced by the alert throttle.
+            alerts.emit(
+                "reconciliation_failure",
+                message="Reconcile-pending latch set: new entries wait for a clean reconciliation",
+                reason=reason,
+            )
         self._schedule_reconcile()
 
     def _maybe_run_premarket_probe(self, now: datetime | None = None) -> None:
@@ -5502,9 +5740,10 @@ class EngineRuntime:
         # loop: the is_alive() check, the assignment and start() must be one
         # atomic step or two callers can spawn duplicate pb-reconcile threads
         # and orphan the overwritten Thread reference (never joined by stop).
-        # Refuses to spawn once the engine is stopping: stop() holds this
-        # same lock across its join, so a spawn racing the join window can
-        # never orphan a thread that runs broker + ledger I/O after close.
+        # Refuses to spawn once the engine is stopping: stop() clears _running
+        # before it takes this same lock to snapshot the threads it joins, so
+        # a spawn that wins the lock is in that snapshot and a later one sees
+        # _running False (CC-5: the join itself runs outside the lock).
         with self._reconcile_spawn_lock:
             if not getattr(self, "_running", False):
                 return
@@ -5672,22 +5911,29 @@ class EngineRuntime:
             "portfolio_runtime_failure",
             "decision_worker_crashed",
             "trade_update_callback_failure",
+            # Q-8: resettable only once the operator marker is gone (checked below).
+            _OPERATOR_HALT_REASON,
         }
         reason = self._circuit_breaker_reason
         if reason not in recoverable:
             raise ValueError(f"Safety lock is not operator-resettable: {reason or 'none'}")
-        # A reset cannot revive a shared worker that exited (e.g. the decision
-        # loop after decision_worker_crashed): clearing the breaker would
-        # report "running" while no decision/account/fill processing runs.
+        if reason == _OPERATOR_HALT_REASON and self._operator_halt_marker_active():
+            raise ValueError("Operator halt marker is still present; run `parayabuck resume` before resetting")
+        # A reset cannot revive a shared worker that exited: clearing the
+        # breaker would report "running" while no decision/account/fill
+        # processing runs. A dead decision loop is respawned after the
+        # verification below (R9-9); the account and trade-update workers
+        # still need a process restart.
         dead_shared = sorted(
             name
             for name, worker in dict(getattr(self, "_workers", {})).items()
             if name in {"pb-decisions", "pb-account", "pb-trade-updates"} and not worker.alive
         )
-        if getattr(self, "_running", False) and dead_shared:
+        dead_unrecoverable = [name for name in dead_shared if name != "pb-decisions"]
+        if getattr(self, "_running", False) and dead_unrecoverable:
             raise ValueError(
                 "Safety lock cannot be reset while shared workers are stopped "
-                f"({','.join(dead_shared)}); restart the process to recover"
+                f"({','.join(dead_unrecoverable)}); restart the process to recover"
             )
         if not self._events.empty():
             raise ValueError("Market event queue must drain before resetting the safety lock")
@@ -5707,23 +5953,26 @@ class EngineRuntime:
                     f"Safety lock remains active while reconciliation reports drift: {report.drift_categories}"
                 )
             self._last_reconciliation_at = datetime.now(UTC)
-            self._clear_reconciliation_incidents()
+            self._last_clean_reconciliation_at = self._last_reconciliation_at
             account_id = self.broker.account_id or "unknown"
             entries = self.ledger.managed_entries_for_account(account_id)
             if any(item.status == "manual_intervention_required" for item in entries):
                 raise ValueError("A managed position still requires manual intervention")
             account = self.broker.account()
             self._publish_account_snapshot(account)
-            # The breaker and its incident row clear together under the risk
+            # The breaker and its incident rows clear together under the risk
             # state lock: the account loop's _persist_risk_state re-saves
-            # whatever breaker reason it read under that lock, so clearing
-            # outside it could resurrect the row the operator just cleared.
+            # whatever halts it read under that lock, so clearing outside it
+            # could resurrect a row the operator just cleared. Clearing waits
+            # for the manual-intervention check and the account fetch above
+            # (R9-6): a refused reset must leave the incidents in place.
             with getattr(self, "_risk_state_lock", threading.Lock()):
+                self._clear_reconciliation_incidents()
                 with getattr(self, "_state_lock", threading.RLock()):
-                    # Clear only the reason being reset: a halt another thread
-                    # raised during the broker calls above set its own reason.
-                    if self._circuit_breaker_reason == reason:
-                        self._circuit_breaker_reason = None
+                    # Lift only the reason being reset (and the rearmed set below):
+                    # a halt another thread raised during the broker calls above
+                    # stays in force, and so does every other active reason (R9-3).
+                    self._release_halt_reason(reason)
                 # The operator verified THIS halt's recovery condition above;
                 # clear exactly its incident, never unrelated incidents (those
                 # need their own per-halt verification). The one exception is
@@ -5731,6 +5980,9 @@ class EngineRuntime:
                 # worker state has no verification left to perform, and
                 # clearing it here keeps a reset from leaving a row that would
                 # halt the next start behind the operator's back.
+                with getattr(self, "_state_lock", threading.RLock()):
+                    for cleared in sorted(_RESTART_REARMED_REASONS):
+                        self._release_halt_reason(cleared)
                 for cleared in sorted({reason} | _RESTART_REARMED_REASONS):
                     self.ledger.clear_safety_incident(account_id, cleared)
             market_halts = getattr(self, "_market_entry_halts", None)
@@ -5744,6 +5996,10 @@ class EngineRuntime:
         # so resume the persisted rebalances here — exactly what the startup
         # resume does, against the same fresh, reconciled snapshot.
         self._resume_startup_rebalances(account=account)
+        # R9-9: a decision loop that exited is restarted now that the reset
+        # has verified the broker; without it the cleared breaker would report
+        # "running" over a dead decision worker.
+        self._respawn_decision_worker()
         with getattr(self, "_state_lock", threading.RLock()):
             # A halt raised by another thread since the breaker was cleared
             # above set a new reason: keep that halt. A trade-update blip while
@@ -5756,6 +6012,9 @@ class EngineRuntime:
             )
             if self._running and restorable and self._circuit_breaker_reason is None:
                 self._state = "running"
+            retained = self._active_halt_reasons()
+        if retained:
+            log.warning("Operator reset safety lock: halts still in force: %s", ", ".join(retained))
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
         # A startup catch-up the halt blocked never re-runs by itself: retry it
         # now, against the same verified snapshot. Its own gates still apply.
@@ -5807,21 +6066,32 @@ class EngineRuntime:
                 # worker and require it to be alive and (when the market is
                 # live) delivering fresh events.
                 if self._restart_stream_worker(market):
-                    with getattr(self, "_state_lock", threading.RLock()):
-                        market_halts[market] = None
+                    self._clear_market_halt_if_unchanged(market_halts, market, halt)
                 else:
                     retained.append(f"{market.value}:{halt}:worker_not_delivering")
                 continue
             if halt == "rebalance_reconciliation_required":
                 if self._rebalance_state_reconciled(market):
-                    with getattr(self, "_state_lock", threading.RLock()):
-                        market_halts[market] = None
+                    self._clear_market_halt_if_unchanged(market_halts, market, halt)
                 else:
                     retained.append(f"{market.value}:{halt}:rebalance_state_unresolved")
                 continue
             retained.append(f"{market.value}:{halt}:no_verification_path")
         if retained:
             log.warning("Market halts retained pending verification: %s", "; ".join(retained))
+
+    def _clear_market_halt_if_unchanged(
+        self, market_halts: dict[Market, str | None], market: Market, verified: str
+    ) -> None:
+        """Clear ``market``'s halt only while it is still the one verified (C9-3).
+
+        The verification ran unlocked; a halt another thread raised meanwhile
+        is a new condition that this verification did not look at, so it must
+        survive to the next reset instead of being erased here.
+        """
+        with getattr(self, "_state_lock", threading.RLock()):
+            if market_halts.get(market) == verified:
+                market_halts[market] = None
 
     def _restart_stream_worker(self, market: Market) -> bool:
         """Re-arm a restart-limited stream worker and verify delivery.

@@ -73,9 +73,11 @@ class OrderService:
         # Local pre-submit guards: nothing reaches the broker, so a refusal is
         # a KNOWN outcome. The runtime books the row ``rejected``, emits
         # ``order_rejected`` and re-plans instead of halting.
+        # Any failure of these pre-send reads (not only a ValueError) is a
+        # known not-sent outcome: the POST has not been made.
         try:
             rules = self.asset_trading_rules(order.symbol, order.market)
-        except ValueError as exc:
+        except Exception as exc:
             raise DefiniteOrderRejection(f"Portfolio order {order.client_order_id} not submitted: {exc}") from exc
         quantity = Decimal(str(order.quantity))
         increment = Decimal(str(rules.quantity_increment))
@@ -88,7 +90,15 @@ class OrderService:
             raise DefiniteOrderRejection(
                 f"Portfolio order {order.client_order_id} not submitted: below minimum notional for {order.symbol}"
             )
-        if self._has_open_order(order.symbol):
+        try:
+            has_open_order = self._has_open_order(order.symbol)
+        except Exception as exc:
+            # The open-order read is a GET before the POST: a failure here
+            # proves nothing was sent, so it must not be booked as ambiguous.
+            raise DefiniteOrderRejection(
+                f"Portfolio order {order.client_order_id} not submitted: open orders could not be read: {exc}"
+            ) from exc
+        if has_open_order:
             raise DefiniteOrderRejection(
                 f"Portfolio order {order.client_order_id} not submitted: an open order already exists for "
                 f"{order.symbol}"

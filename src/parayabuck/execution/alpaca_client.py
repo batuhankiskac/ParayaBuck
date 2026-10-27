@@ -22,6 +22,9 @@ _DEFAULT_TIMEOUT = 15.0
 _MAX_ORDERS_PAGE_SIZE = 500
 # Asset metadata is re-read from Alpaca at least once a day.
 _ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60.0
+# A non-tradable read is re-checked within a minute: a halted or refused symbol
+# that the broker re-enables must not stay blocked (its exit held) for a day.
+_NON_TRADABLE_ASSET_CACHE_TTL_SECONDS = 60.0
 _ORDER_ADAPTER: TypeAdapter[Order] = TypeAdapter(Order)
 # Broker timestamps carry nanoseconds, which ``datetime.fromisoformat`` rejects.
 _FRACTION_BEYOND_MICROSECONDS = re.compile(r"(\.\d{6})\d+")
@@ -264,13 +267,17 @@ class AlpacaClient:
         ``tradable``/``fractionable``/increments can change (a halt, a
         delisting, a fractional-trading change), so an entry is re-read once
         it is a day old instead of being trusted for the life of the process.
+        A non-tradable entry is only trusted for ``_NON_TRADABLE_ASSET_CACHE_TTL_SECONDS``.
         """
         identity = normalize_symbol(symbol)
         cache_key = identity.canonical
         now = self._clock()
         cached = self._asset_cache.get(cache_key)
-        if cached is not None and now - cached[1] < _ASSET_CACHE_TTL_SECONDS:
-            return cached[0]
+        if cached is not None:
+            tradable = bool(getattr(cached[0], "tradable", False))
+            ttl = _ASSET_CACHE_TTL_SECONDS if tradable else _NON_TRADABLE_ASSET_CACHE_TTL_SECONDS
+            if now - cached[1] < ttl:
+                return cached[0]
         asset = self._client.get_asset(identity.asset_lookup_symbol)
         self._asset_cache[cache_key] = (asset, now)
         return asset

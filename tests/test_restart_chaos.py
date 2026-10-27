@@ -307,7 +307,7 @@ def test_restart_with_open_order_gates_submission(tmp_path: Path) -> None:
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
     # The SELL fills: the BUY phase resumes exactly once.
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     resumed = runtime_b.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
@@ -388,7 +388,7 @@ def test_restart_during_sell_phase_resumes_exactly_once(tmp_path: Path) -> None:
     runtime_b, repository = _restarted_runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
     # The SELL filled while the process was down (persisted via trade updates).
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     recovered = runtime_b.advance_rebalance()
     assert recovered is not None and recovered.status == "buy_phase_submitted"
@@ -417,7 +417,7 @@ def test_restart_after_sell_filled_before_buy_phase_submits_buy_once(tmp_path: P
     assert result.status == "sell_phase_submitted"
     sell = next(order for order in result.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell)
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     runtime_a.close()
     # ---- restart: SELL already terminal, BUY phase never started ----
@@ -464,7 +464,7 @@ def test_restart_with_partially_filled_order_stays_non_terminal(tmp_path: Path) 
     assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
     _fill(repository, residual, activity_id="activity-residual")
     broker.open_symbols.discard("AAPL")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     buy_phase = runtime_b.advance_rebalance()
     assert buy_phase is not None and buy_phase.status == "buy_phase_submitted"
     buys = [order for order in broker.submitted if order.side == PortfolioOrderSide.BUY]
@@ -489,7 +489,7 @@ def test_restart_with_duplicate_trade_update_is_idempotent(tmp_path: Path) -> No
     # The same terminal fill arrives twice before the restart (stream replay).
     _fill(repository, sell, activity_id="a1")
     _fill(repository, sell, activity_id="a2")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
     runtime_a.close()
     # ---- restart ----
@@ -531,18 +531,24 @@ def test_restart_crash_after_submitting_never_reached_broker_recovers(
     # ---- restart: the broker has no record of the client id ----
     runtime_b, repository = _restarted_runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
     recovered = runtime_b.advance_rebalance()
-    assert recovered is not None and recovered.status == "buy_phase_submitted"
-    assert [order.side for order in broker.submitted] == [
-        PortfolioOrderSide.SELL,
-        PortfolioOrderSide.BUY,
-    ]
+    # The SELL never reached the broker, so its exit is still owed: the row is
+    # re-sent as a residual and no BUY goes out while it works.
+    assert recovered is not None and recovered.status == "residual_sell_submitted"
+    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
+    residual = broker.submitted[-1]
+    assert residual.client_order_id == f"{sell.client_order_id}-residual1"
     rows = repository.orders_for_decision(result.decision_id, side="sell")
-    assert [str(row["status"]) for row in rows] == ["canceled"]
-    # The rebalance advances to completion afterwards.
-    for order in recovered.orders:
+    assert [str(row["status"]) for row in rows] == ["canceled", "submitted"]
+    # The residual fills; the BUY is then re-planned and the rebalance completes.
+    _fill(repository, residual)
+    broker.positions = [_position("AAPL", 100)]
+    broker.open_symbols.discard("AAPL")
+    buy_phase = runtime_b.advance_rebalance()
+    assert buy_phase is not None and buy_phase.status == "buy_phase_submitted"
+    for order in buy_phase.orders:
         _fill(repository, order)
-    broker.positions = [_position("AAPL", 400), _position("MSFT", 200)]
-    broker.open_symbols.discard(order.symbol)
+    broker.positions = [_position("AAPL", 100), _position("MSFT", 100)]
+    broker.open_symbols.discard("MSFT")
     completed = runtime_b.advance_rebalance()
     assert completed is not None and completed.status == "rebalance_complete"
 
@@ -590,7 +596,7 @@ def test_restart_crash_after_submitting_broker_filled_recovers_real_fill(
     # down (no stream event was persisted) ----
     repository.update_order(sell.client_order_id, "submitting")
     broker.open_symbols.discard("AAPL")
-    broker.positions = [_position("AAPL", 150)]
+    broker.positions = [_position("AAPL", 100)]
     broker.order_resolution[sell.client_order_id] = "filled"
 
     def _recover_fill(

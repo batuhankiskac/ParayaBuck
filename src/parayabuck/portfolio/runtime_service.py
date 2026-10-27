@@ -283,12 +283,18 @@ def exit_sell_retry_client_order_id(client_order_id: str) -> str:
     return f"{client_order_id}{EXIT_SELL_RETRY_SUFFIX}"
 
 
-# A SELL that ends canceled or expired with part of its quantity unfilled leaves
-# a residual on the bot's own ledger. The residual is sent as
-# ``{leg}-residual{n}``; one SELL leg may take at most this many residual rounds.
+# A SELL that ends canceled, expired or done for day leaves its unfilled quantity
+# on the bot's own ledger as a residual, sent as ``{leg}-residual{n}``; one SELL
+# leg may take at most ``RESIDUAL_SELL_MAX_ROUNDS`` residual rounds. A SELL that
+# ended with nothing filled still owes its whole quantity: the exit did not
+# happen, so it is re-sent the same way.
 RESIDUAL_SELL_SUFFIX = "-residual"
 RESIDUAL_SELL_MAX_ROUNDS = 3
-RESIDUAL_SELL_STATUSES = frozenset({"canceled", "cancelled", "expired"})
+RESIDUAL_SELL_STATUSES = frozenset({"canceled", "cancelled", "expired", "done_for_day"})
+# A re-planned order whose planned client id is already the id of a terminal row
+# of its decision is sent under ``{id}-replan{n}``, at most this many times.
+REPLAN_ORDER_SUFFIX = "-replan"
+REPLAN_ORDER_MAX_ATTEMPTS = 3
 
 
 def _sell_leg_root(client_order_id: str) -> str:
@@ -1005,6 +1011,9 @@ class PortfolioRuntime:
         )
         if self._session_decided(timestamp):
             self.startup_catch_up_status = "duplicate_decision"
+            # The decision's rows may still be ``submitting`` from a crash before
+            # the broker call; a verdict now stops them counting as open orders.
+            self._resolve_stale_submitting_rows()
             _emit_no_trade_safe(
                 market=self._market_name(),
                 strategy=getattr(self.strategy, "name", None),
@@ -1903,6 +1912,7 @@ class PortfolioRuntime:
         *,
         account: AccountSnapshot | None = None,
         submit_deferred_buys: bool = True,
+        submit_gate: Callable[[], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Advance a persisted two-phase rebalance by one step.
 
@@ -1910,8 +1920,10 @@ class PortfolioRuntime:
         outcome is ambiguous), the dependent BUY orders stay deferred. When
         every required SELL is terminal, a fresh broker account snapshot is
         taken, the remaining BUY side is re-planned against the safe managed
-        capacity and those BUY orders are submitted exactly once. A
-        rejected/canceled/expired/partially-filled SELL therefore yields the
+        capacity and those BUY orders are submitted exactly once. A re-plan
+        that still needs a SELL submits that SELL first and keeps the BUY side
+        deferred until it settles. A rejected/canceled/expired/partially-filled
+        SELL therefore yields the
         re-planned (smaller) BUY quantities; an ambiguous SELL outcome blocks
         the rebalance with ``reconciliation_required`` and submits nothing.
         A SELL that ends canceled or expired with unfilled quantity leaves a
@@ -1934,6 +1946,10 @@ class PortfolioRuntime:
         phase, promoting a finished sell phase to ``buy_ready`` — but never
         submits the risk-increasing BUY side. The phase stays ``buy_ready``
         and the next un-halted advance submits it exactly once.
+
+        ``submit_gate`` (optional) is consulted right before each broker submit.
+        A non-None reason skips that submit: the order is not booked as sent and
+        stays pending for a later advance. ``None`` (the default) changes nothing.
         """
         current = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
@@ -1947,6 +1963,7 @@ class PortfolioRuntime:
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
+                submit_gate=submit_gate,
             )
         if current.phase == REBALANCE_PHASE_BUY_PENDING:
             buys = self.repository.orders_for_decision(current.decision_id, side="buy")
@@ -1980,6 +1997,7 @@ class PortfolioRuntime:
             return self._submit_deferred_buys(
                 current.decision_id,
                 account=account,
+                submit_gate=submit_gate,
             )
         if any(str(item["status"]) == "submitting" for item in sells):
             # A crash between repository persistence and broker acknowledgement
@@ -2000,7 +2018,7 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_blocked")
         if not is_sell_phase_complete(statuses):
             return None
-        residual = self._residual_sell_result(current.decision_id, tuple(sells))
+        residual = self._residual_sell_result(current.decision_id, tuple(sells), submit_gate=submit_gate)
         if residual is not None:
             return residual
         self.repository.update_rebalance_execution(current.decision_id, REBALANCE_PHASE_BUY_READY)
@@ -2010,31 +2028,42 @@ class PortfolioRuntime:
         return self._submit_deferred_buys(
             current.decision_id,
             account=account,
+            submit_gate=submit_gate,
         )
 
     def _residual_sell_result(
         self,
         decision_id: str,
         sell_rows: tuple[dict[str, object], ...],
+        submit_gate: Callable[[], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Submit the residual SELLs left by partially filled, then canceled or expired, SELLs.
 
         Read only from this decision's order rows, never from an account
         snapshot: a SELL that filled completely leaves no residual, so a stale
         position cannot trigger a second SELL. The latest row of a leg is the
-        one that matters; it leaves a residual only when it ended canceled or
-        expired with unfilled quantity. A leg with a rejected row that has no
+        one that matters; it leaves a residual when it ended canceled, expired
+        or done for day with unfilled quantity, including a leg with nothing
+        filled (a canceled DAY SELL at the close, or one that never reached the
+        broker, still owes its exit). A leg with a rejected row that has no
         retry yet belongs to ``retry_rejected_exit_sells`` and is skipped.
 
+        Each leg is judged on its own. A leg that has used its rounds, or whose
+        residual cannot be sent, is alerted; the other legs' residuals are still
+        sent. The rebalance closes without its BUYs only once no residual is
+        left to send, so the BUY side never runs while an exit is owed.
+
         Returns the submit result when residuals were sent (the rebalance stays
-        ``sell_pending``, so no BUY is sent), the closing result when a leg has
-        used its rounds, or ``None`` when nothing needs selling. Runs even when
-        the engine is halted: a residual SELL only reduces exposure.
+        ``sell_pending``, so no BUY is sent), the closing result when nothing
+        can be sent and a leg is unsettled, or ``None`` when nothing needs
+        selling. Runs even when the engine is halted: a residual SELL only
+        reduces exposure.
         """
         legs: dict[str, list[dict[str, object]]] = {}
         for row in sell_rows:
             legs.setdefault(_sell_leg_root(str(row["client_order_id"])), []).append(row)
         candidates: list[tuple[str, dict[str, object], float, int]] = []
+        exhausted: list[str] = []
         for root, rows in legs.items():
             ids = {str(row["client_order_id"]) for row in rows}
             if any(
@@ -2047,42 +2076,61 @@ class PortfolioRuntime:
                 continue
             filled = float(str(tail.get("cumulative_filled_quantity") or 0.0))
             remaining = float(str(tail["quantity"])) - filled
-            # Only a partial fill leaves a residual. A SELL that ended with nothing
-            # filled left the position as it was and keeps the original handling.
-            if filled <= 1e-12 or remaining <= 1e-12:
+            if remaining <= 1e-12:
                 continue
             rounds = max(_sell_chain_position(str(row["client_order_id"]), root)[0] for row in rows)
             if rounds >= RESIDUAL_SELL_MAX_ROUNDS:
-                return self._close_residual_exhausted(decision_id, root)
+                exhausted.append(root)
+                continue
             candidates.append((root, tail, remaining, rounds + 1))
-        if not candidates:
+        if not candidates and not exhausted:
             return None
-        decision = self.repository.decision_row(decision_id)
-        try:
-            target = TargetPortfolio.from_dict(json.loads(str(decision["target_json"])))
-        except (KeyError, TypeError, ValueError):
-            log.error("Residual SELL skipped: decision %s target unreadable; rebalance blocked", decision_id)
-            self.repository.update_rebalance_execution(
-                decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required"
-            )
-            return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
         residuals: list[PortfolioOrderRequest] = []
-        for root, tail, remaining, round_index in candidates:
-            residual = self._residual_sell_request(decision_id, target, tail, root, round_index, remaining)
-            if residual is not None:
-                residuals.append(residual)
-        if not residuals:
-            return None
-        for residual in residuals:
-            log.warning(
-                "Residual SELL submitted; BUYs held until it settles: market=%s decision=%s client_order_id=%s qty=%s",
-                self._market_name(),
-                decision_id,
-                residual.client_order_id,
-                residual.quantity,
+        dropped: list[str] = []
+        if candidates:
+            decision = self.repository.decision_row(decision_id)
+            try:
+                target = TargetPortfolio.from_dict(json.loads(str(decision["target_json"])))
+            except (KeyError, TypeError, ValueError):
+                log.error("Residual SELL skipped: decision %s target unreadable; rebalance blocked", decision_id)
+                self.repository.update_rebalance_execution(
+                    decision_id, REBALANCE_PHASE_BLOCKED, status="reconciliation_required"
+                )
+                return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_blocked")
+            for root, tail, remaining, round_index in candidates:
+                residual = self._residual_sell_request(decision_id, target, tail, root, round_index, remaining)
+                if residual is None:
+                    dropped.append(root)
+                else:
+                    residuals.append(residual)
+        for root in exhausted:
+            self._raise_operator_alert_once(
+                (root, "residual_sell_exhausted"),
+                message="Residual SELL still unfilled after the round limit; deferred BUYs discarded",
+                category="residual_sell_exhausted",
+                decision_id=decision_id,
+                client_order_id=root,
             )
-        submitted = self._submit_orders(tuple(residuals))
-        return PortfolioRuntimeResult(decision_id, None, None, tuple(residuals), submitted, "residual_sell_submitted")
+        for root in dropped:
+            self._hold_unsettled_sell_leg(decision_id, root, "residual_sell_dropped")
+        if residuals:
+            for residual in residuals:
+                log.warning(
+                    "Residual SELL submitted; BUYs held until it settles: market=%s decision=%s client_order_id=%s qty=%s",
+                    self._market_name(),
+                    decision_id,
+                    residual.client_order_id,
+                    residual.quantity,
+                )
+            submitted = self._submit_orders(tuple(residuals), submit_gate=submit_gate)
+            return PortfolioRuntimeResult(
+                decision_id, None, None, tuple(residuals), submitted, "residual_sell_submitted"
+            )
+        if exhausted or dropped:
+            return self._close_unsettled_sell_legs(
+                decision_id, [*exhausted, *dropped], from_phase=REBALANCE_PHASE_SELL_PENDING
+            )
+        return None
 
     def _residual_sell_request(
         self,
@@ -2101,7 +2149,18 @@ class PortfolioRuntime:
         closes as before.
         """
         symbol = canonical_symbol(str(tail["symbol"]), self.market)
-        rules = self.broker.asset_trading_rules(symbol, self.market)
+        try:
+            rules = self.broker.asset_trading_rules(symbol, self.market)
+        except ValueError:
+            # The broker reports the symbol untradable (or its metadata is unreadable):
+            # the residual cannot be sent. The caller holds the leg; nothing halts.
+            log.warning(
+                "Residual SELL not sent (no trading rules): market=%s symbol=%s",
+                self._market_name(),
+                symbol,
+                exc_info=True,
+            )
+            return None
         order = PortfolioOrderRequest(
             client_order_id=f"{root}{RESIDUAL_SELL_SUFFIX}{round_index}",
             decision_id=decision_id,
@@ -2129,21 +2188,47 @@ class PortfolioRuntime:
             return None
         return order
 
-    def _close_residual_exhausted(self, decision_id: str, root: str) -> PortfolioRuntimeResult:
-        """Close the rebalance without its BUYs once a leg has used its residual rounds."""
+    def _hold_unsettled_sell_leg(self, decision_id: str, leg: str, reason: str) -> None:
+        """Alert and journal a SELL leg whose exit cannot be sent; the BUYs stay held."""
         self._raise_operator_alert_once(
-            (decision_id, "residual_sell_exhausted"),
-            message="Residual SELL still unfilled after the round limit; deferred BUYs discarded",
-            category="residual_sell_exhausted",
+            (leg, reason),
+            message="A SELL exit cannot be sent; deferred BUYs are held and the rebalance closes once no exit is left",
+            category=reason,
             decision_id=decision_id,
-            client_order_id=root,
+            client_order_id=leg,
+        )
+        _emit_no_trade_safe(
+            market=self._market_name(),
+            strategy=getattr(self.strategy, "name", None),
+            reason=reason,
+            session_id=self.session_id,
+            account_id=self.account_id,
+        )
+
+    def _close_unsettled_sell_legs(
+        self,
+        decision_id: str,
+        legs: Sequence[str],
+        *,
+        from_phase: str = REBALANCE_PHASE_BUY_READY,
+    ) -> PortfolioRuntimeResult:
+        """Close the rebalance without its BUYs while a SELL leg still owes its exit.
+
+        The deferred BUY side is discarded, never sent: the exit it depends on
+        was not done. The next scheduled decision re-plans from fresh state.
+        """
+        log.critical(
+            "Rebalance closed with an unsettled SELL leg; deferred BUYs discarded: market=%s decision=%s legs=%s",
+            self._market_name(),
+            decision_id,
+            ",".join(legs),
         )
         self.repository.update_rebalance_execution(
             decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
         )
         _emit_rebalance_phase_safe(
             decision_id,
-            REBALANCE_PHASE_SELL_PENDING,
+            from_phase,
             REBALANCE_PHASE_COMPLETE,
             market=self._market_name(),
             account_id=self.account_id,
@@ -2356,6 +2441,16 @@ class PortfolioRuntime:
             else:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
             self.repository.update_order(client_order_id, status, broker_order_id)
+            if status == "canceled":
+                # The broker has no such order, so it was never sent and is not re-sent here: the
+                # work it belonged to is not retried this session. Raise it rather than drop it silently.
+                self._raise_operator_alert_once(
+                    (client_order_id, "submission_resolved_canceled"),
+                    message="Submitting order resolved as canceled by the broker lookup; it was not re-sent",
+                    category="submission_resolved_canceled",
+                    client_order_id=client_order_id,
+                    side=str(item.get("side") or ""),
+                )
             changed = True
         return changed
 
@@ -2411,6 +2506,7 @@ class PortfolioRuntime:
         decision_id: str,
         *,
         account: AccountSnapshot | None = None,
+        submit_gate: Callable[[], str | None] | None = None,
     ) -> PortfolioRuntimeResult | None:
         """Re-plan and submit the BUY side of a completed SELL phase.
 
@@ -2503,7 +2599,22 @@ class PortfolioRuntime:
             reference = stored.get("reference_price")
             if symbol and reference is not None:
                 prices.setdefault(symbol, float(str(reference)))
-        rules = {symbol: self.broker.asset_trading_rules(symbol, self.market) for symbol in self.symbols}
+        # Rules only for the symbols this plan can touch (held or targeted). One
+        # untradable symbol elsewhere in the universe must not block the BUY phase.
+        universe = set(self.symbols)
+        held_or_targeted = {
+            canonical_symbol(position.symbol, position.market)
+            for position in account.positions
+            if position.market == self.market and not position.is_flat
+        } | {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
+        rules = self._trading_rules_for(sorted(held_or_targeted & universe))
+        untradable_held = sorted((held_or_targeted & universe) - set(rules))
+        if untradable_held:
+            # A held symbol that cannot be traded has an exit owed that cannot be sent:
+            # the BUY side is held and the rebalance closes, nothing halts.
+            for symbol in untradable_held:
+                self._hold_unsettled_sell_leg(decision_id, symbol, "held_symbol_untradable")
+            return self._close_unsettled_sell_legs(decision_id, untradable_held)
         gain_band_holds: list[GainBandHold] = []
         december_deferral_holds: list[DecemberDeferralHold] = []
         planned = self.planner.plan(
@@ -2517,28 +2628,29 @@ class PortfolioRuntime:
             open_order_sides=open_order_sides,
             decision_id=decision_id,
             client_order_salt=self.repository.client_order_salt(decision_id),
-            open_lots=self._managed_open_lots(
-                {
-                    canonical_symbol(position.symbol, position.market)
-                    for position in account.positions
-                    if position.market == self.market and not position.is_flat
-                }
-                | {canonical_symbol(weight.symbol, self.market) for weight in risk.target.weights}
-            ),
+            open_lots=self._managed_open_lots(held_or_targeted),
             gain_band_holds=gain_band_holds,
             december_deferral_holds=december_deferral_holds,
             gain_band_tl_shadow=self._gain_band_tl_shadow_probe(),
         )
+        # A re-plan that planned a SELL still owes that exit even when the SELL is
+        # left to its retry path (below): the BUYs wait for the slot it holds.
+        replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
+        planned = self._replan_orders_with_fresh_ids(decision_id, planned)
         if gain_band_holds:
             risk = replace(risk, target=record_gain_band_holds(risk.target, gain_band_holds))
         if december_deferral_holds:
             risk = replace(risk, target=record_december_deferral_holds(risk.target, december_deferral_holds))
+        # Sells before buys (C-2): a re-plan that still needs a SELL submits it and
+        # keeps every BUY deferred until that SELL settles.
+        replan_sells = tuple(order for order in planned if order.side == PortfolioOrderSide.SELL)
+        if replan_sells:
+            return self._submit_replan_sells(decision_id, risk, replan_sells, rules, submit_gate=submit_gate)
         buy_orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
             for order in planned
             if order.side == PortfolioOrderSide.BUY
         )
-        replan_needs_sell = any(order.side == PortfolioOrderSide.SELL for order in planned)
         if not buy_orders and working_buy:
             return self._enter_buy_pending(decision_id, risk, (), ())
         if not buy_orders:
@@ -2599,10 +2711,130 @@ class PortfolioRuntime:
         # ``_submit_orders`` records the same row (INSERT OR IGNORE).
         submitted: tuple[str, ...] = ()
         for order in buy_orders:
+            if submit_gate is not None:
+                reason = submit_gate()
+                if reason is not None:
+                    # Held before any row is written: the BUY stays deferred and the next advance re-plans it.
+                    log.warning(
+                        "Deferred BUY held by the submit gate; left pending: market=%s decision=%s client_order_id=%s reason=%s",
+                        self._market_name(),
+                        decision_id,
+                        order.client_order_id,
+                        reason,
+                    )
+                    return PortfolioRuntimeResult(decision_id, risk.target, risk, (), submitted, "submit_blocked")
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
             submitted += self._submit_orders((order,), rules)
         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+
+    def _submit_replan_sells(
+        self,
+        decision_id: str,
+        risk: RiskOverlayDecision,
+        sells: tuple[PortfolioOrderRequest, ...],
+        rules: Mapping[str, AssetTradingRules],
+        *,
+        submit_gate: Callable[[], str | None] | None = None,
+    ) -> PortfolioRuntimeResult:
+        """Submit the SELL side a re-plan still needs and hold the BUY side.
+
+        Sells before buys: the re-planned SELLs go out first, the phase returns
+        to ``sell_pending`` and the BUYs are re-planned once those SELLs settle.
+        A SELL that fails validation is not sent: its leg is held (alert and
+        journal) and, when no SELL can go, the rebalance closes without its BUYs.
+        """
+        valid = self._validated_batch(sells, rules)
+        sent_ids = {order.client_order_id for order in valid}
+        dropped = [order.symbol for order in sells if order.client_order_id not in sent_ids]
+        for symbol in dropped:
+            self._hold_unsettled_sell_leg(decision_id, symbol, "replan_sell_dropped")
+        if not valid:
+            return self._close_unsettled_sell_legs(decision_id, dropped)
+        submitted = self._submit_orders(valid, rules, submit_gate=submit_gate)
+        self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_SELL_PENDING)
+        _emit_rebalance_phase_safe(
+            decision_id,
+            REBALANCE_PHASE_BUY_READY,
+            REBALANCE_PHASE_SELL_PENDING,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+        )
+        for order in valid:
+            log.warning(
+                "Re-planned SELL submitted; BUYs held until it settles: market=%s decision=%s client_order_id=%s qty=%s",
+                self._market_name(),
+                decision_id,
+                order.client_order_id,
+                order.quantity,
+            )
+        return PortfolioRuntimeResult(decision_id, risk.target, risk, valid, submitted, "replan_sell_submitted")
+
+    def _replan_orders_with_fresh_ids(
+        self,
+        decision_id: str,
+        orders: Sequence[PortfolioOrderRequest],
+    ) -> tuple[PortfolioOrderRequest, ...]:
+        """Give a re-planned order a new client id when its planned id is already terminal.
+
+        The planned id carries no quantity, so a re-plan would reuse the id of
+        its own canceled or rejected row: the insert is ignored, the order is
+        skipped and the rebalance completes with no BUY and no alert. Such an
+        order is sent as ``{id}-replan{n}`` (the first free ``n``). Past
+        ``REPLAN_ORDER_MAX_ATTEMPTS`` it is not sent and the operator is alerted.
+
+        A SELL whose planned id is a rejected row is left out: a rejected exit
+        belongs to ``retry_rejected_exit_sells`` (one retry, then an alert), and
+        a second SELL from the re-plan would sell the same shares twice.
+        """
+        if not orders:
+            return ()
+        statuses = {
+            str(row["client_order_id"]): str(row["status"]) for row in self.repository.orders_for_decision(decision_id)
+        }
+        fresh: list[PortfolioOrderRequest] = []
+        for order in orders:
+            planned_id = order.client_order_id
+            if planned_id not in statuses or not is_terminal_order_status(statuses[planned_id]):
+                fresh.append(order)
+                continue
+            if statuses[planned_id] == "rejected" and order.side == PortfolioOrderSide.SELL:
+                continue
+            candidates = [f"{planned_id}{REPLAN_ORDER_SUFFIX}{n}" for n in range(1, REPLAN_ORDER_MAX_ATTEMPTS + 1)]
+            free = next((candidate for candidate in candidates if candidate not in statuses), None)
+            if free is None:
+                self._raise_operator_alert_once(
+                    (planned_id, "replan_order_exhausted"),
+                    message="Re-planned order exhausted its fresh client ids; it is not sent",
+                    category="replan_order_exhausted",
+                    decision_id=decision_id,
+                    client_order_id=planned_id,
+                )
+                continue
+            fresh.append(replace(order, client_order_id=free))
+        return tuple(fresh)
+
+    def _trading_rules_for(self, symbols: Iterable[str]) -> dict[str, AssetTradingRules]:
+        """Broker trading rules for the given symbols, leaving out any the broker refuses.
+
+        A symbol with no rules cannot be sized, so the planner skips it. The
+        operator is alerted once per symbol and the rest of the plan goes on.
+        """
+        rules: dict[str, AssetTradingRules] = {}
+        for symbol in symbols:
+            try:
+                rules[symbol] = self.broker.asset_trading_rules(symbol, self.market)
+            except ValueError:
+                log.warning("No trading rules for %s; left out of this plan", symbol, exc_info=True)
+                self._raise_operator_alert_once(
+                    (symbol, "asset_untradable"),
+                    message="Broker refused trading rules for a symbol; it is left out of the plan",
+                    category="asset_untradable",
+                    market=self._market_name(),
+                    symbol=symbol,
+                )
+        return rules
 
     def _validated_batch(
         self,
@@ -2940,12 +3172,16 @@ class PortfolioRuntime:
                 )
                 for order in buy_orders
             )
+            # The same notional floor validate_order_batch applies: the stricter of the policy and the symbol's rule.
             sized = tuple(
                 order
                 for order in sized
                 if order.quantity >= rules[(order.symbol, order.market)].minimum_order_size
                 and order.quantity * prices[order.client_order_id]
-                >= rules[(order.symbol, order.market)].minimum_order_notional
+                >= max(
+                    self.planner.policy.minimum_order_notional,
+                    rules[(order.symbol, order.market)].minimum_order_notional,
+                )
             )
             if not sized and reason is None:
                 reason = "below_broker_minimum_after_sizing"
@@ -3037,6 +3273,8 @@ class PortfolioRuntime:
         self,
         orders: tuple[PortfolioOrderRequest, ...],
         rules_by_symbol: Mapping[str, AssetTradingRules] | None = None,
+        *,
+        submit_gate: Callable[[], str | None] | None = None,
     ) -> tuple[str, ...]:
         """Persist and submit one order batch with broker idempotency keys.
 
@@ -3059,28 +3297,49 @@ class PortfolioRuntime:
         # Every order in a batch shares one decision id, so the ledger is read
         # once. The map is keyed by client order id, which is stable per
         # decision, so a row recorded in an earlier batch is still found.
-        existing_by_client = {}
+        existing_by_client: dict[str, str] = {}
+        existing_shape: dict[str, tuple[str, str, float]] = {}
         if orders:
             rows = self.repository.orders_for_decision(orders[0].decision_id)
             existing_by_client = {str(row.get("client_order_id")): str(row.get("status", "")) for row in rows}
+            existing_shape = {
+                str(row.get("client_order_id")): (
+                    str(row.get("symbol", "")),
+                    str(row.get("side", "")),
+                    float(str(row.get("quantity") or 0.0)),
+                )
+                for row in rows
+            }
         for index, order in enumerate(orders):
-            # Idempotency: if the logical order already exists with a terminal
-            # or submitted status, do not submit a duplicate broker order.
+            # Idempotency: a logical order that already has a row is never sent
+            # again under its id, whatever its status: a working, terminal,
+            # ambiguous or stopped row is decided by the broker or by
+            # reconciliation, never by a second submit. Only a row still at
+            # ``submitting`` is sent again, and only for the same order: the
+            # direct path persists its batch at ``submitting`` just before this
+            # call, and Alpaca refuses a duplicate client id, so a row that did
+            # reach the broker cannot be doubled. A changed order never reuses it.
             already = existing_by_client.get(order.client_order_id)
             if already is not None:
-                status = already
-                if status in {
-                    "submitted",
-                    "new",
-                    "accepted",
-                    "pending_new",
-                    "pending_cancel",
-                    "pending_replace",
-                    "accepted_for_bidding",
-                    "partial_fill",
-                }:
+                if already != "submitting":
                     continue
-                if is_terminal_order_status(status) or status in _AMBIGUOUS_ORDER_STATUSES:
+                symbol, side, quantity = existing_shape.get(order.client_order_id, ("", "", float("nan")))
+                if symbol != order.symbol or side != order.side.value or abs(quantity - order.quantity) > 1e-9:
+                    log.error(
+                        "Submitting row does not match the order it would resend; not sent: client_order_id=%s",
+                        order.client_order_id,
+                    )
+                    continue
+            if submit_gate is not None:
+                reason = submit_gate()
+                if reason is not None:
+                    # Held before the row is written: nothing is booked as sent and the order stays pending.
+                    log.warning(
+                        "Submit held by the submit gate; order left pending: market=%s client_order_id=%s reason=%s",
+                        self._market_name(),
+                        order.client_order_id,
+                        reason,
+                    )
                     continue
             self.repository.record_order(order, "submitting")
             submit_started_at = datetime.now(UTC)
@@ -3134,7 +3393,9 @@ class PortfolioRuntime:
             submitted.append(broker_order_id)
         return tuple(submitted)
 
-    def retry_rejected_exit_sells(self, account: AccountSnapshot) -> tuple[str, ...]:
+    def retry_rejected_exit_sells(
+        self, account: AccountSnapshot, *, submit_gate: Callable[[], str | None] | None = None
+    ) -> tuple[str, ...]:
         """Retry each broker-rejected SELL of the newest decision ONCE (R3).
 
         A SELL exits or reduces a held position, so a rejection must not
@@ -3198,10 +3459,23 @@ class PortfolioRuntime:
             sellable = position.managed_qty
             if position.qty_available is not None:
                 sellable = min(sellable, max(0.0, position.qty_available))
-            rules = self.broker.asset_trading_rules(symbol, self.market)
+            try:
+                rules = self.broker.asset_trading_rules(symbol, self.market)
+            except ValueError:
+                # Untradable now: no retry can be sent. The exit is still owed, so say so.
+                self._raise_operator_alert_once(
+                    (str(row["client_order_id"]), "exit_sell_untradable"),
+                    message="Rejected SELL cannot be retried: the broker refuses the symbol's trading rules",
+                    category="exit_sell_untradable",
+                    decision_id=decision_id,
+                    client_order_id=str(row["client_order_id"]),
+                    symbol=symbol,
+                )
+                continue
             quantity = floor_increment(min(remaining, sellable), rules.quantity_increment)
             price = position.current_price if position.current_price > 0 else float(str(row["reference_price"] or 0.0))
-            if price <= 0 or quantity < rules.minimum_order_size or quantity * price < rules.minimum_order_notional:
+            minimum_notional = max(self.planner.policy.minimum_order_notional, rules.minimum_order_notional)
+            if price <= 0 or quantity < rules.minimum_order_size or quantity * price < minimum_notional:
                 continue
             retries.append(
                 PortfolioOrderRequest(
@@ -3227,7 +3501,7 @@ class PortfolioRuntime:
                 retry.client_order_id,
                 retry.quantity,
             )
-        return self._submit_orders(tuple(retries))
+        return self._submit_orders(tuple(retries), submit_gate=submit_gate)
 
     def close(self, status: str = "stopped") -> None:
         self.repository.end_session(self.session_id, status)

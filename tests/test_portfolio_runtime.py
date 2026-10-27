@@ -2164,6 +2164,10 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
+    # The broker now shows the sold position at the decision target (100 - 50).
+    broker._positions = (
+        PositionSnapshot("AAPL", 50, 100, 100, Market.EQUITY, qty_available=50, ownership="managed", managed_qty=50),
+    )
     resumed = runtime.advance_rebalance()
     assert resumed is not None and resumed.status == "buy_phase_submitted"
     assert [order.side for order in broker.submitted] == [
@@ -2188,10 +2192,10 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
     assert completed is not None and completed.status == "rebalance_complete"
 
     # After the rebalance completes, a latched decision is risk-reducing
-    # only: the cap drops the MSFT entry entirely.
+    # only: the cap drops the MSFT entry entirely. The account is at target
+    # now, so no SELL is owed and the decision may carry no order at all.
     after = runtime.process_closed_bars(next_batch, entry_latch="daily_loss_limit")
     assert after.status != "rebalance_in_progress"
-    assert after.orders
     assert all(order.side == PortfolioOrderSide.SELL for order in after.orders)
     assert all(order.symbol != "MSFT" for order in after.orders)
 

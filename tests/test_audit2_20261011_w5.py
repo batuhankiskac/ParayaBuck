@@ -91,10 +91,12 @@ def _ledger(path: Path, *, sessions: list[tuple[str, str, str]], decisions: list
                 "INSERT INTO portfolio_runtime_sessions VALUES (?, ?, 'digest', 'paper', ?, NULL, 'running')",
                 (session_id, account_id, started_at),
             )
+        # Each decision belongs to its account's session, as the engine writes it.
+        session_of_account = {account_id: session_id for session_id, account_id, _ in sessions}
         for decision_id, account_id, stamp in decisions:
             conn.execute(
-                "INSERT INTO portfolio_decisions VALUES (?, 's', ?, 'digest', ?, 'equity', 'vt35', '{}', '{}')",
-                (decision_id, account_id, stamp),
+                "INSERT INTO portfolio_decisions VALUES (?, ?, ?, 'digest', ?, 'equity', 'vt35', '{}', '{}')",
+                (decision_id, session_of_account.get(account_id, "s"), account_id, stamp),
             )
         conn.commit()
     finally:

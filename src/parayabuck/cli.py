@@ -38,6 +38,23 @@ from parayabuck.utils.io import atomic_write
 
 log = get_logger("parayabuck.cli")
 
+# Lower bound for an operator's --retention-days. Below a day the prune removes
+# every older automatic backup, so a fraction of a day is refused.
+_MIN_BACKUP_RETENTION_DAYS = 1.0
+
+
+def _retention_days_arg(value: str) -> float:
+    """--retention-days: a finite number of days, at least one day."""
+    try:
+        days = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from exc
+    if not isfinite(days) or days < _MIN_BACKUP_RETENTION_DAYS:
+        raise argparse.ArgumentTypeError(
+            f"must be a finite number of at least {_MIN_BACKUP_RETENTION_DAYS:g} day(s): {value}"
+        )
+    return days
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="parayabuck", description="ParayaBuck trading bot")
@@ -50,7 +67,7 @@ def _parser() -> argparse.ArgumentParser:
     backup = commands.add_parser("backup", help="consistent SQLite backup of the runtime decision database")
     backup.add_argument(
         "--retention-days",
-        type=float,
+        type=_retention_days_arg,
         default=None,
         help="override the configured backup retention (days)",
     )
@@ -229,6 +246,10 @@ def _add_backtest_arguments(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Every file this CLI creates (decision DB, backups, bundles, reports) is
+    # owner-only whatever the caller's umask; the units set UMask=0077 too, but
+    # a manual run inherited the operator's shell umask.
+    os.umask(0o077)
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments:
         from parayabuck.web.app import main as web_main
@@ -480,7 +501,11 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
     from parayabuck.backup import backup_database, verify_backup
 
     if args.verify_only:
-        target = Path(args.verify_only)
+        target = Path(args.verify_only).absolute()
+        if not target.is_file():
+            # Nothing to verify is not a corrupt backup: no alert, exit 2.
+            print(f"Backup not found: {target}", file=sys.stderr)
+            return 2
         ok = verify_backup(target)
         if ok:
             print(f"Backup OK: {target}")
@@ -493,6 +518,19 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             backup_path=str(target),
         )
         return 1
+    source = Path(config.runtime.decision_db_path).absolute()
+    if not source.is_file():
+        # Same alert as any failed backup (the timer is unattended), but no
+        # traceback and no empty backup directory written for a missing source.
+        print(f"Backup refused: runtime database not found: {source}", file=sys.stderr)
+        _emit_ops_alert(
+            "backup_failed",
+            f"Backup could not be written: runtime database not found: {source}",
+            reason="write_failed",
+            source_path=str(source),
+            backup_dir=str(config.backup.path),
+        )
+        return 2
     retention_days = args.retention_days if args.retention_days is not None else config.backup.retention_days
     try:
         destination = backup_database(
@@ -519,7 +557,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             backup_path=str(destination),
         )
         raise SystemExit(f"Backup failed integrity check: {destination}")
-    print(f"Backup written: {destination}")
+    print(f"Backup written: {Path(destination).absolute()}")
     print(f"Retention: {retention_days:g} day(s); older automatic backups pruned")
     _prune_decision_receipts()
     return 0
@@ -562,8 +600,14 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
 
     from parayabuck.live_safety import clear_operator_halt, read_operator_halt, write_operator_halt
 
-    marker = _operator_halt_marker(config)
+    # Relative settings resolve against the working directory: name the absolute
+    # marker path, and refuse to create a marker in a directory that is not the
+    # runtime data directory (a halt run from $HOME would halt nothing).
+    marker = _operator_halt_marker(config).absolute()
     if args.command == "halt":
+        if not marker.parent.is_dir():
+            print(f"Operator halt NOT set: directory {marker.parent} does not exist", file=sys.stderr)
+            return 2
         try:
             user = getpass.getuser()
         except Exception:
@@ -580,6 +624,47 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
     else:
         print(f"No operator halt present at {marker}; nothing to clear.")
     return 0
+
+
+def _configured_config_path(args: argparse.Namespace) -> str | None:
+    """``--config``, else CONFIG_PATH (process environment or .env), else None.
+
+    The same order :func:`load_config` uses, so the checks that read the file
+    directly look at the settings the engine loads.
+    """
+    explicit = getattr(args, "config", None)
+    if explicit:
+        return str(explicit)
+    from parayabuck.config import load_env_file
+
+    load_env_file()
+    return os.getenv("CONFIG_PATH") or None
+
+
+def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
+    """(pins checked, human-readable differences) between ``lock_path`` and the installed versions.
+
+    Only ``name==version`` lines are compared; a pin that is not installed is a
+    difference too. Read-only: importlib.metadata never imports the packages.
+    """
+    import importlib.metadata
+
+    checked = 0
+    differences: list[str] = []
+    for raw in lock_path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line or line.startswith("-") or "==" not in line:
+            continue
+        name, wanted = (part.strip() for part in line.split("==", 1))
+        checked += 1
+        try:
+            installed = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            differences.append(f"{name} not installed (locked {wanted})")
+            continue
+        if installed != wanted:
+            differences.append(f"{name} installed {installed} != locked {wanted}")
+    return checked, differences
 
 
 def _credential_permission_row(warning: str | None, *, strict: bool) -> tuple[str, str] | None:
@@ -611,7 +696,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
             else:
                 warning = True
 
-    config_path = args.config
+    config_path = _configured_config_path(args)
     config: Config | None = None
     try:
         config = load_config(config_path)
@@ -727,7 +812,11 @@ def _run_doctor(args: argparse.Namespace) -> int:
                     add("sqlite integrity_check", row is not None and row[0] == "ok", row[0] if row else "no row")
                     jm = conn.execute("PRAGMA journal_mode").fetchone()
                     jm_val = str(jm[0]).lower() if jm and jm[0] else ""
-                    add("sqlite journal_mode WAL", jm_val == "wal", jm_val, is_blocker=False)
+                    # Informational only: a restored backup opens in DELETE mode
+                    # until the engine sets WAL, and this read-only check cannot
+                    # switch it. A WARN here would fail `doctor --strict` and
+                    # keep the unit from ever starting the engine that sets WAL.
+                    checks.append(("sqlite journal_mode", "INFO", jm_val or "unknown"))
                     fk = conn.execute("PRAGMA foreign_keys").fetchone()
                     fk_val = int(fk[0]) if fk and fk[0] is not None else 0
                     add("sqlite foreign_keys ON", fk_val == 1, str(fk_val), is_blocker=False)
@@ -764,8 +853,13 @@ def _run_doctor(args: argparse.Namespace) -> int:
             tracked = result.stdout.decode(errors="ignore").split("\0")
             has_env = any(t == ".env" or t.endswith("/.env") for t in tracked)
             add("no tracked .env", not has_env, "tracked .env found" if has_env else "clean")
-        except Exception:
-            add("no tracked .env", True, "git not available (skip)", is_blocker=False)
+        except Exception as exc:
+            if args.strict:
+                # A scan that cannot run is not a clean scan: the unit's
+                # ExecStartPre (--strict) fails closed.
+                add("no tracked .env", False, f"tracked-file scan could not run: {exc}")
+            else:
+                add("no tracked .env", True, "git not available (skip)", is_blocker=False)
         try:
             raw: dict[str, object] = {}
             cfg_file = Path(config_path) if config_path and Path(config_path).exists() else Path("config/settings.yaml")
@@ -780,6 +874,25 @@ def _run_doctor(args: argparse.Namespace) -> int:
             add("package version", True, ver)
         except Exception as exc:
             add("package version", False, str(exc), is_blocker=False)
+        # Installed versions against the reviewed lock. The lock's own
+        # "skip when unchanged" deploy rule means a missed pin bump would
+        # otherwise run on old dependencies with doctor green. WARN only, so
+        # it never blocks the start.
+        lock_path = Path("requirements.lock")
+        if not lock_path.is_file():
+            checks.append(("locked pins", "WARN", f"{lock_path} not found in the working directory"))
+        else:
+            try:
+                pins_checked, pin_differences = _locked_pin_mismatches(lock_path)
+                if pin_differences:
+                    shown = "; ".join(pin_differences[:5])
+                    checks.append(
+                        ("locked pins", "WARN", f"{len(pin_differences)} of {pins_checked} differ: {shown}")
+                    )
+                else:
+                    checks.append(("locked pins", "PASS", f"{pins_checked} installed versions match the lock"))
+            except Exception as exc:
+                checks.append(("locked pins", "WARN", f"check skipped: {exc}"))
         if not args.offline and paper_checks and api_key and secret:
             broker = None
             try:
@@ -923,7 +1036,9 @@ def _parse_time_arg(value: str | None) -> datetime | None:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
-        return dt
+        # The journal compares ISO text, so an offset such as +03:00 must be
+        # rewritten to UTC first or the window is shifted by the offset.
+        return dt.astimezone(UTC)
     except Exception:
         raise SystemExit(f"Invalid time value: {value} (use ISO or 30m/2h/1d)")
 
@@ -1053,7 +1168,7 @@ def _ops_status(args: argparse.Namespace) -> int:
     health = evaluate_health(snapshot_path=snapshot_path, database_path=db_path, config=config)
     if getattr(args, "json", False):
         print(json.dumps(health, indent=2, default=str))
-        return 0
+        return _health_exit_code(health.get("overall_health"))
     # Text formatting similar to spec
     # Determine snapshot age string
     age = health.get("snapshot_age_seconds")
@@ -1137,12 +1252,25 @@ def _ops_status(args: argparse.Namespace) -> int:
     except Exception:
         pass
     # Observability degradation
+    return _health_exit_code(overall)
+
+
+def _health_exit_code(overall: object) -> int:
+    """Exit code for an overall health label, as ``ops doctor`` maps it.
+
+    CRITICAL is 2; BLOCKED, DEGRADED and UNKNOWN are 1; OK is 0. A script that
+    polls ``ops status`` must not read a CRITICAL runtime as success.
+    """
+    if overall == "CRITICAL":
+        return 2
+    if overall in {"BLOCKED", "DEGRADED", "UNKNOWN"}:
+        return 1
     return 0
 
 
 def _ops_doctor(args: argparse.Namespace) -> int:
     # Use diagnostic _run_doctor_checks
-    config_path = getattr(args, "config", None) or "config/settings.yaml"
+    config_path = _configured_config_path(args) or "config/settings.yaml"
     snapshot_path = getattr(args, "snapshot", None) or "data/runtime/health_snapshot.json"
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
@@ -1377,14 +1505,19 @@ def _ops_explain(args: argparse.Namespace) -> int:
             import sqlite3
 
             if Path(str(db_path)).exists():
-                from parayabuck.monitoring.forensics import latest_decision_row
+                from parayabuck.monitoring.forensics import expected_session_id, latest_decision_row
 
                 conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
                 conn.row_factory = sqlite3.Row
                 try:
-                    # Scoped to the current account: after a credential
-                    # rotation the old account's decision is not "latest".
-                    row = latest_decision_row(conn, "decision_id, decision_timestamp, market, strategy_name")
+                    # Scoped to the current account (after a credential rotation
+                    # the old account's decision is not "latest") and to the
+                    # engine's session: when that session persisted no decision,
+                    # say so rather than explaining the previous session.
+                    session_id = expected_session_id(conn)
+                    row = latest_decision_row(
+                        conn, "decision_id, decision_timestamp, market, strategy_name", session_id=session_id
+                    )
                     if row:
                         decision_id = row["decision_id"]
                         # --json keeps stdout a single parseable document.
@@ -1392,6 +1525,9 @@ def _ops_explain(args: argparse.Namespace) -> int:
                             f"Latest decision: {decision_id} at {row['decision_timestamp']} market={row['market']} strategy={row['strategy_name']}",
                             file=sys.stderr if getattr(args, "json", False) else sys.stdout,
                         )
+                    elif session_id is not None:
+                        _print_explain_empty(args, f"no decision persisted for {session_id}")
+                        return 0
                     else:
                         _print_explain_empty(args, "No decisions found in DB")
                         return 0
@@ -1429,7 +1565,10 @@ def _ops_explain(args: argparse.Namespace) -> int:
             # Try to infer from decision target/risk or summary event
             if summary_events:
                 se = summary_events[0]
-                no_trade_reason = se.fields.get("no_trade_reason") or se.fields.get("decision_status")
+                # Canonicalised like the target-JSON reason below: the engine's
+                # raw hold string is not printed as the cause.
+                raw_reason = se.fields.get("no_trade_reason") or se.fields.get("decision_status")
+                no_trade_reason = map_no_trade_reason(str(raw_reason)) if raw_reason else None
                 detail = str(se.fields)
             elif decision:
                 try:
@@ -1524,7 +1663,7 @@ def _ops_bundle(args: argparse.Namespace) -> int:
     snapshot_path = getattr(args, "snapshot", None) or "data/runtime/health_snapshot.json"
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
-    config_path = getattr(args, "config", None) or "config/settings.yaml"
+    config_path = _configured_config_path(args) or "config/settings.yaml"
     # Allow config overrides
     try:
         cfg = load_config(config_path if Path(config_path).exists() else None)

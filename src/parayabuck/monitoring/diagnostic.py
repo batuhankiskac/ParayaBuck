@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import platform
 import shutil
 import sqlite3
@@ -407,6 +408,15 @@ def _run_doctor_checks(
     if snapshot_data is not None:
         inner = snapshot_data.get("runtime_health")
         merged = {**snapshot_data, **inner} if isinstance(inner, dict) else snapshot_data
+    # Runtime state: an open circuit breaker has halted decisions and orders.
+    # Reading it from the engine's snapshot keeps `ops doctor` from reporting
+    # OK (exit 0) for a halted runtime; a snapshot without the field is unknown.
+    if merged is None or "circuit_breaker_reason" not in merged:
+        _add("circuit_breaker", "UNKNOWN", "runtime state not in the snapshot")
+    elif merged["circuit_breaker_reason"]:
+        _add("circuit_breaker", "CRITICAL", f"circuit breaker open: {merged['circuit_breaker_reason']}")
+    else:
+        _add("circuit_breaker", "OK", "not tripped")
     for check in (_check_intent_watchdog(merged), _check_signal_cross_check(merged)):
         _add(check.code, str(check.status), check.summary, action=check.action)
     journal_check = _check_observability(persisted_journal_state(merged))
@@ -487,8 +497,21 @@ def create_bundle_zip(
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write zip with sanitized files, size bounded
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    # Written beside the target and renamed into place: a write that fails
+    # part-way leaves no partial archive that looks like a complete bundle.
+    staging = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    try:
+        _write_bundle_archive(staging, data)
+        os.replace(staging, out)
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
+    return out
+
+
+def _write_bundle_archive(path: Path, data: dict[str, Any]) -> None:
+    """Write the sanitized, size-bounded bundle members of ``data`` to ``path``."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         # manifest
         zf.writestr("manifest.json", _dump_section(data.get("manifest")))
         zf.writestr("status.json", _dump_section(data.get("status")))
@@ -521,7 +544,6 @@ def create_bundle_zip(
                 zf.writestr(f"{key}.json", _dump_section(content))
             except Exception:
                 zf.writestr(f"{key}.json", json.dumps({"error": "serialize failed"}, indent=2))
-    return out
 
 
 __all__ = ["collect_bundle_data", "create_bundle_zip"]

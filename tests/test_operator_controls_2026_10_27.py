@@ -56,6 +56,8 @@ def no_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_halt_and_resume_create_and_remove_marker(tmp_path: Path, no_dotenv, capsys) -> None:
     settings = _settings(tmp_path)
     marker = tmp_path / "runtime" / HALT_MARKER_FILENAME
+    # halt writes into an existing runtime directory and never creates one (audit F8-5).
+    (tmp_path / "runtime").mkdir()
 
     assert cli.main(["--config", str(settings), "halt", "--reason", "fill mismatch"]) == 0
     assert marker.is_file()

@@ -416,8 +416,9 @@ def test_cli_ops_status_json(isolated_config_path: Path) -> None:
     # Without --config the state paths come from the operator's config, i.e.
     # from data/runtime on the trading VM; this suite runs against tmp_path.
     code, out, _ = _run_cli("--config", str(isolated_config_path), "ops", "status", "--json")
-    assert code == 0
     data = json.loads(out)
+    # ops status mirrors ops doctor's exit codes (audit F8-7): a non-OK overall is not 0.
+    assert code == (0 if data["overall_health"] == "OK" else 2 if data["overall_health"] == "CRITICAL" else 1)
     assert "overall_health" in data
     assert "trading_state" in data
     assert "checks" in data
@@ -599,8 +600,8 @@ def test_cli_snapshot_corruption_handling(tmp_path: Path) -> None:
     snap = tmp_path / "corrupt.json"
     snap.write_text("{ truncated", encoding="utf-8")
     code, out, _ = _run_cli("ops", "status", "--snapshot", str(snap), "--json")
-    assert code == 0
     data = json.loads(out)
+    assert code == (2 if data["overall_health"] == "CRITICAL" else 1)
     # should be UNKNOWN, not crash
     assert data["overall_health"] in {"UNKNOWN", "CRITICAL", "DEGRADED"}
 
@@ -922,8 +923,8 @@ def test_missing_db_produces_unknown(tmp_path: Path) -> None:
     missing_db = tmp_path / "nope.sqlite3"
     missing_snap = tmp_path / "nope.json"
     code, out, _ = _run_cli("ops", "status", "--snapshot", str(missing_snap), "--db", str(missing_db), "--json")
-    assert code == 0
     data = json.loads(out)
+    assert code == 1  # UNKNOWN exits 1, as ops doctor does (audit F8-7)
     assert data["overall_health"] == "UNKNOWN"
     assert data["trading_state"] == "UNKNOWN"
 
@@ -958,7 +959,7 @@ def test_ops_status_ignores_relative_defaults_when_paths_are_given(tmp_path: Pat
             "--json",
         )
 
-    assert code == 0
+    assert code == 1  # UNKNOWN exits 1, as ops doctor does (audit F8-7)
     data = json.loads(out)
     assert data["overall_health"] == "UNKNOWN"
     assert data["trading_state"] == "UNKNOWN"
@@ -981,7 +982,7 @@ def test_ops_status_text_prints_the_market_halts_check(tmp_path: Path) -> None:
             "ops", "status", "--snapshot", str(tmp_path / "absent.json"), "--db", str(tmp_path / "absent.sqlite3")
         )
 
-    assert code == 0
+    assert code == 1  # DEGRADED exits 1, as ops doctor does (audit F8-7)
     assert "Market halts   DEGRADED — equity entries halted: worker_restart_limit" in out
 
 
@@ -1196,7 +1197,7 @@ def test_ops_status_text_prints_watchdog_and_cross_check_from_the_snapshot(tmp_p
     )
     code, out, _ = _run_cli("ops", "status", "--snapshot", str(snapshot), "--db", str(tmp_path / "absent.sqlite3"))
 
-    assert code == 0
+    assert code == 2  # the watchdog ALARM is CRITICAL, and ops status mirrors ops doctor (audit F8-7)
     assert "Universe" not in out
     assert "Watchdog       ALARM    — equity_decision_missing: no decision for 2026-09-30" in out
     assert "Cross-check    TREND_MISMATCH — session 2026-09-29, position held" in out

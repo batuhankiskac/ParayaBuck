@@ -322,9 +322,16 @@ engine; in LIVE `doctor --configured-mode` requires valid e-mail alerts.
 The e-mail channel cannot report that the VM itself is down. The unit
 `parayabuck-deadman.timer` runs every 5 minutes: it GETs the loopback
 readiness endpoint (`PARAYABUCK_READYZ_URL`, default
-`http://127.0.0.1:8000/readyz`) and pings the heartbeat URL on HTTP 200, or
-`<url>/fail` on any other status or error. The external service e-mails the
-owner when pings stop. With no URL configured the run prints
+`http://127.0.0.1:8000/readyz`) and pings the heartbeat URL on HTTP 200. Any
+other status or error pings `<url>/fail`, with one exception: a 503 whose body
+shows an expected state still pings success. Those are `engine_state=warming_up`
+or `engine_state=stopped` with no degraded reason, and `running` or `warming_up`
+with `equity_signal_source_hold` as the only degraded reason. So a deliberate
+stop and a warm-up that never ends both ping success, so the external service
+cannot see them. A deliberate stop is intended. An unexpected stop or a failed
+start reaches the owner through the opt-in e-mail alerts (`runtime_stopped_unexpected`,
+`runtime_start_failed`), and a warm-up that never ends shows only as a 503 on
+`/readyz`. The external service e-mails the owner when pings stop. With no URL configured the run prints
 `deadman: no heartbeat URL configured` to stderr and exits 1, so the unit
 shows as failed instead of passing silently. Its only outbound traffic is one
 HTTPS request per run.
@@ -399,9 +406,12 @@ The unit runs with `ProtectSystem=strict` and `ReadWritePaths=` limited to
 `config/`, `data/` and `reports/`, so `.env` in the repo root is read-only.
 The settings drawer therefore refuses a credential
 change up front (HTTP 400, engine left running) instead of stopping the engine
-and failing the write with EROFS. Edit `/opt/parayabuck/.env` on the host
-(`sudo install -m 0600 …`) and `sudo systemctl restart parayabuck`; never work
-around it by relaxing `ProtectSystem`.
+and failing the write with EROFS. Edit `/opt/parayabuck/.env` on the host and
+`sudo systemctl restart parayabuck`. Install the edited file with the service
+user as owner, or the engine cannot read it:
+`sudo install -m 0600 -o "$PB_USER" -g "$PB_USER" <edited file> /opt/parayabuck/.env`,
+where `PB_USER=$(systemctl show -p User --value parayabuck)`. Never work around
+the read-only path by relaxing `ProtectSystem`.
 
 Config-only edits (risk limits, host/port, log level) are unaffected: they do
 not touch `.env`.
@@ -441,6 +451,27 @@ disk image. On the new host, repeat the `systemd-creds encrypt` commands above
 with the values from your secret store, add the drop-in and verify `/readyz`.
 Keep the plain lines in `.env` until the new host is verified: the rollback path
 above assumes they are still there.
+
+**Manual commands after the migration.** Once a key lives only in its credential
+file, a shell run of `parayabuck doctor`, `parayabuck authorize-live` or
+`parayabuck ops test-email` sees no key and fails: the config loader reads a
+credential from `$CREDENTIALS_DIRECTORY` or the environment, and a login shell has
+neither. Run such a command as a transient unit that loads the same credentials
+(systemd 250 or later; confirm on the VM first):
+
+```bash
+PB_USER=$(systemctl show -p User --value parayabuck)
+PB_DIR=$(systemctl show -p WorkingDirectory --value parayabuck)
+sudo systemd-run --pipe --wait --collect --uid="$PB_USER" \
+  -p WorkingDirectory="$PB_DIR" \
+  -p LoadCredentialEncrypted=ALPACA_API_KEY:/etc/parayabuck/creds/ALPACA_API_KEY.cred \
+  -p LoadCredentialEncrypted=ALPACA_SECRET_KEY:/etc/parayabuck/creds/ALPACA_SECRET_KEY.cred \
+  "$PB_DIR/.venv/bin/parayabuck" doctor --strict --configured-mode --offline
+```
+
+Add a `LoadCredentialEncrypted=` line for each LIVE or SMTP credential the command
+needs (the names are listed above). The keys stay inside systemd; never print them
+or decrypt them into the shell.
 
 ## First install (fresh VM)
 
@@ -490,8 +521,11 @@ of `parayabuck doctor`.
 ```bash
 sudo systemctl disable --now parayabuck-watchdog.timer
 sudo rm -f /etc/systemd/system/parayabuck-watchdog.service /etc/systemd/system/parayabuck-watchdog.timer
-sudo cp deploy/systemd/parayabuck.service deploy/systemd/parayabuck-backup.service /etc/systemd/system/
-#   (re-apply the hand edits: checkout paths, ProtectHome=read-only, the trading-host drop-in stays)
+# Do not copy the template units over the installed ones: the VM's units carry hand
+# edits (checkout paths, ProtectHome=read-only) that a copy silently drops. Compare
+# first, then apply only the differences by hand; the trading-host drop-in stays.
+diff -u /etc/systemd/system/parayabuck.service deploy/systemd/parayabuck.service || true
+diff -u /etc/systemd/system/parayabuck-backup.service deploy/systemd/parayabuck-backup.service || true
 sudo systemctl daemon-reload
 sudo sed -i '/^PARAYABUCK_ALERT_WEBHOOK_URL=/d' <env file>   # ignored now; drop the secret
 grep -n -A6 '^alerting:' config/settings.yaml                # only daily_summary may remain
@@ -568,6 +602,10 @@ git log --oneline HEAD..bundle/main               # review what ships
 # Dependency and build changes stand out here, not in the commit subjects. Any output
 # means the dependency set changes: name the reviewer in docs/OPERATIONS_LOG.md first.
 git diff --stat HEAD bundle/main -- requirements.lock requirements-dev.lock pyproject.toml uv.lock
+# a dashboard save rewrites the tracked config/settings.yaml: if this prints a line,
+# copy it aside and reapply the saved values after the merge (a merge that touches
+# the same file refuses, and a reset --hard rollback discards it)
+git status --porcelain config/settings.yaml
 git merge --ff-only bundle/main
 # when deploy/systemd/ changed in the range (git diff --name-only <deployed-sha>..HEAD -- deploy/systemd):
 # install each changed unit and run sudo systemctl daemon-reload. Before the backup
@@ -698,11 +736,18 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
 1. `.venv/bin/parayabuck backup --label rollback-<sha>`, then
    `sudo systemctl stop parayabuck`. Labelled snapshots are never auto-pruned,
    so the pre-rollback ledger is still there if the rollback has to be undone.
-2. `git reset --hard <previous-sha>` (or check out a tag), reinstall with
-   `pip install -e . --no-deps`, restart. `config/settings.yaml` is tracked:
-   the rolled-back commit brings its own config, which must match its code
-   (e.g. a pre-2026-09-30 build needs its crypto keys; the current build
-   rejects them).
+2. `OLD=$(git rev-parse HEAD)`, then `git status --porcelain config/settings.yaml`.
+   A dashboard save rewrites that tracked file; if it prints a line, copy the file
+   aside (`cp config/settings.yaml ~/settings-saved-$(date -u +%Y%m%dT%H%M%SZ).yaml`)
+   because `reset --hard` discards it. Then `git reset --hard <previous-sha>` (or
+   check out a tag) and reinstall with `pip install -e . --no-deps`. A
+   `--no-deps` install leaves the new pins in place, so when the lock changed,
+   also run `.venv/bin/pip install --require-hashes -r requirements.lock`:
+   `git diff --quiet "$OLD" HEAD -- requirements.lock || .venv/bin/pip install --require-hashes -r requirements.lock`.
+   Then restart.
+   `config/settings.yaml` is tracked: the rolled-back commit brings its own
+   config, which must match its code (e.g. a pre-2026-09-30 build needs its
+   crypto keys; the current build rejects them).
 3. Restore the runtime DB only when the new release corrupted or migrated it
    (loud schema errors at startup). Migrations are forward-only: an older build
    may not open a DB a newer build migrated, so keep the pre-deploy backup

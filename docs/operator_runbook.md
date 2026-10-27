@@ -522,7 +522,11 @@ with a message naming the keys: delete them.
 
 `ops doctor` reports `integrity_check` ≠ ok or foreign-key violations. Stop the
 service and restore a verified backup (`docs/operations.md`, State, backup and
-restore). Do not delete the DB.
+restore). Do not delete the DB. Install the database together with the peak
+sidecars (`paper_equity_peak.json`, `live_equity_peak.json` on a LIVE host) and the
+`<stem>.OPERATOR_HALT` copy of the same backup set, never a file from another set.
+Before the restore, run `find config data -type l`: atomic writes refuse a symlink
+that leaves its directory, so the engine cannot write through such a link.
 
 ## Backups failing or stale (`backup_failed`)
 
@@ -651,6 +655,9 @@ record the decision in `docs/OPERATIONS_LOG.md` before acting.
   engine keeps running; only the next restart needs the renewal.
 - `live_authorization_expired`: the next restart waits for a manual re-arm, as above.
 - To revoke at any time: `parayabuck authorize-live --revoke-standing`.
+  After the credential migration, a plain shell cannot see the LIVE keys: run the
+  command as the transient unit in `docs/deployment.md` ("Manual commands after the
+  migration") with the LIVE credential lines added.
 
 ### `data_provider_unavailable`
 

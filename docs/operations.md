@@ -57,7 +57,7 @@ Verify on the VM with:
 
 ```bash
 systemctl show parayabuck -p Environment | grep -o 'PARAYABUCK_TRADING_HOST=[^ ]*'
-curl -s http://127.0.0.1:8000/api/status | python3 -m json.tool | grep engine_state
+curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool | grep engine_state   # /api/status calls it "state"
 ```
 
 ## Health and readiness
@@ -629,10 +629,13 @@ such files the directory holds and how many megabytes they take.
 Restore (never overwrite in place unverified). The units run with
 `UMask=0077`, so the ledger and the backups are mode `0600` and owned by the
 service user: every step runs as that user, and the restored file is installed
-with the same owner and mode, or the engine cannot open it.
+with the same owner and mode, or the engine cannot open it. Restore the database,
+the peak sidecars and the `<stem>.OPERATOR_HALT` copy from the same backup set, in
+one pass: a database without its halt copy can start unhalted.
 
 ```bash
 sudo systemctl stop parayabuck
+find config data -type l    # list symlinks first (prints nothing on a plain host); atomic writes refuse a link that leaves its directory, so re-point or replace each listed link before the start
 PB_USER=$(systemctl show -p User --value parayabuck)     # parayabuck on a template install
 EVIDENCE=/var/tmp/pb-bad-$(date -u +%Y%m%dT%H%M%SZ)
 sudo install -d -o "$PB_USER" -g "$PB_USER" -m 700 "$EVIDENCE"
@@ -732,10 +735,11 @@ whether S9 had anything to require and how many sessions were expected; a
 resolved reconciliation failure (a later `reconciliation_succeeded`) does not
 keep failing S8.
 
-It also writes an anonymised replay fixture for offline reproduction. Both
-outputs go to the git-ignored `reports/paper_incident/` tree by default
-(`--report`, `--fixture`); keep broker-linked history out of `tests/`, where a
-later `git add -A` would commit it.
+`scripts/audit_paper_soak.py --output <file>` also writes the verdict JSON to that
+file (it always prints it to stdout). The incident reconciler, `scripts/reconcile_paper_incident.py`,
+is the one that writes an anonymised replay fixture for offline reproduction. Its
+`--report` and `--fixture` default to the git-ignored `reports/paper_incident/` tree;
+keep broker-linked history out of `tests/`, where a later `git add -A` would commit it.
 
 Every decision also publishes one immutable JSON receipt under
 `data/runtime/paper_receipts/` (`..._<decision_id>.v2.json`; ~252/yr). The
@@ -833,8 +837,9 @@ and the session enforces that rather than trusting every test:
   suite passes in any order.
 
 Run it the way CI does (the `quality` job in `.github/workflows/ci.yml`): install the
-package without dependencies (`./.venv/bin/python -m pip install --no-deps .`), then run
-`./.venv/bin/python -m pytest -q`.
+locked dev dependencies (`./.venv/bin/python -m pip install --require-hashes -r requirements-dev.lock`,
+which provides pytest), then the package without dependencies (`./.venv/bin/python -m pip install --no-deps .`),
+then run `./.venv/bin/python -m pytest -q`.
 
 ## PAPER rules
 

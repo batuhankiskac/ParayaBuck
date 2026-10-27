@@ -18,6 +18,19 @@ from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 NOW = datetime(2026, 8, 8, tzinfo=UTC)
 
+# The pre-VT35 caps these risk tests were written against (0.5 % daily latch,
+# 10 % per asset, 6 positions). Passed explicitly, because the default limits
+# are the shipped RiskLimits.
+PRE_VT35_LIMITS = PortfolioRiskLimits(
+    daily_loss_limit=0.005,
+    drawdown_halt=0.05,
+    maximum_gross=0.60,
+    maximum_equity=0.50,
+    maximum_equity_asset=0.10,
+    minimum_cash=0.40,
+    maximum_positions=6,
+)
+
 
 def _target(weights: dict[str, float]) -> TargetPortfolio:
     return TargetPortfolio(
@@ -70,7 +83,7 @@ def _rule(symbol: str) -> AssetTradingRules:
 
 
 def test_risk_overlay_enforces_account_sleeve_asset_and_cash_caps() -> None:
-    decision = PortfolioRiskOverlay().apply(
+    decision = PortfolioRiskOverlay(PRE_VT35_LIMITS).apply(
         _target({"SPY": 0.30, "QQQ": 0.30, "IWM": 0.30}),
         _account(),
         market=Market.EQUITY,
@@ -87,7 +100,7 @@ def test_daily_loss_halt_allows_reductions_but_forbids_increases() -> None:
     # The limit is a fraction of DAY-START equity (equity - daily_pnl), so the
     # pinned loss trips under either denominator convention.
     account = _account((_position("SPY", 100, 100),), daily_pnl=-600.0)
-    decision = PortfolioRiskOverlay().apply(
+    decision = PortfolioRiskOverlay(PRE_VT35_LIMITS).apply(
         _target({"SPY": 0.05, "QQQ": 0.10}),
         account,
         market=Market.EQUITY,
@@ -361,7 +374,7 @@ def test_anonymized_paper_loss_replay_triggers_risk_halt() -> None:
         daily_pnl=raw_account["daily_pnl"],
         positions=(position,),
     )
-    decision = PortfolioRiskOverlay().apply(
+    decision = PortfolioRiskOverlay(PRE_VT35_LIMITS).apply(
         _target({raw_position["symbol"]: payload["proposed_increase"], "NEW": 0.10}),
         account,
         market=Market.EQUITY,

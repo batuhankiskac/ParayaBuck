@@ -120,8 +120,11 @@ class AlpacaHistoricalData:
     """Bounded Alpaca equity REST client used to warm up the streaming engine.
 
     ``_last_batch_degraded`` tells the caller of the latest ``get_bars_batch``
-    whether any part of its answer came from the local cache instead of the
-    provider (the split-basis verifier treats such an answer as unverified).
+    whether any part of its answer came from the local cache or the IEX
+    downgrade instead of the provider's SIP basis (the split-basis verifier
+    treats such an answer as unverified). ``last_incomplete_symbols`` lists
+    the symbols whose provider window failed the completeness gate (missing
+    sessions or dropped rows); warmup must not seed them.
     """
 
     def __init__(
@@ -171,6 +174,7 @@ class AlpacaHistoricalData:
         # verifier never counts cache rows as provider coverage.
         self._provider_fallbacks: int = 0
         self._last_batch_degraded: bool = False
+        self.last_incomplete_symbols: frozenset[str] = frozenset()
         # Observability counters (measured provider calls).
         self.provider_calls: int = 0
         self.provider_symbols_requested: int = 0
@@ -227,6 +231,7 @@ class AlpacaHistoricalData:
             return {}
         symbols, start_at, end_at = self._resolve_batch_request(symbols, timeframe, start, end, adjustment)
         fallbacks_before = getattr(self, "_provider_fallbacks", 0)
+        self.last_incomplete_symbols = frozenset()
         minutes = TIMEFRAME_MINUTES.get(timeframe)
         if minutes is not None:
             # Alpaca caps a single bars response at 10,000 ROWS total, across
@@ -248,7 +253,7 @@ class AlpacaHistoricalData:
                     minutes,
                     adjustment,
                 )
-                self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
+                self._last_batch_degraded = self._batch_degraded_since(fallbacks_before)
                 return result
         result = self._fetch_window(
             symbols,
@@ -257,8 +262,19 @@ class AlpacaHistoricalData:
             end_at,
             adjustment,
         )
-        self._last_batch_degraded = getattr(self, "_provider_fallbacks", 0) != fallbacks_before
+        self._last_batch_degraded = self._batch_degraded_since(fallbacks_before)
         return result
+
+    def _batch_degraded_since(self, fallbacks_before: int) -> bool:
+        """Whether the batch just answered was not provider SIP-basis data.
+
+        A cache fallback is degraded, and so is an answer served by the IEX
+        downgrade: IEX daily closes are not the SIP basis the split verifier
+        checks against, so they must not be adopted as authoritative.
+        """
+        return getattr(self, "_provider_fallbacks", 0) != fallbacks_before or bool(
+            getattr(self, "_sip_fallback_active", False)
+        )
 
     def get_session_daily_bars(
         self,
@@ -612,12 +628,14 @@ class AlpacaHistoricalData:
         bars: dict[str, list[Bar]] = {symbol: [] for symbol in symbols}
         intraday_bounds: dict[date, tuple[datetime, datetime] | None] | None = None
         if timeframe != "1d":
-            intraday_bounds = _session_bounds_for(
-                [
-                    _normalize_row_timestamp(row.timestamp).astimezone(NEW_YORK).date()
-                    for row in frame.reset_index().itertuples(index=False)
-                ]
-            )
+            # An unparseable timestamp is skipped here and counted per row below.
+            intraday_dates: list[date] = []
+            for row in frame.reset_index().itertuples(index=False):
+                try:
+                    intraday_dates.append(_normalize_row_timestamp(row.timestamp).astimezone(NEW_YORK).date())
+                except (TypeError, ValueError, OverflowError):
+                    continue
+            intraday_bounds = _session_bounds_for(intraday_dates)
         # Rows are keyed by the REQUESTED symbol: a provider row for a symbol
         # nobody asked for (a successor ticker after a corporate action) is
         # dropped, never leaked into the answer or the chunked merge.
@@ -627,12 +645,6 @@ class AlpacaHistoricalData:
         # A stable sort keeps the provider's order among same-instant rows so
         # the de-duplication below is deterministically last-wins.
         for row in frame.reset_index().sort_values("timestamp", kind="stable").itertuples(index=False):
-            timestamp = _normalize_row_timestamp(row.timestamp)
-            if timeframe != "1d":
-                assert intraday_bounds is not None
-                window = intraday_bounds.get(timestamp.astimezone(NEW_YORK).date())
-                if window is None or not (window[0] <= timestamp < window[1]):
-                    continue
             row_symbol = str(getattr(row, "symbol", symbols[0]))
             try:
                 key = requested.get(canonical_symbol(row_symbol, Market.EQUITY))
@@ -641,10 +653,17 @@ class AlpacaHistoricalData:
             if key is None:
                 unrequested.add(row_symbol)
                 continue
-            # One hostile row (NaN, inf, high < low) must not abort every
-            # other symbol's window: skip it, and the per-symbol completeness
-            # and history-adequacy gates fail that symbol closed.
+            # One hostile row (NaN, inf, high < low, an unparseable timestamp)
+            # must not abort every other symbol's window: skip it, and the
+            # per-symbol completeness and history-adequacy gates fail that
+            # symbol closed.
             try:
+                timestamp = _normalize_row_timestamp(row.timestamp)
+                if timeframe != "1d":
+                    assert intraday_bounds is not None
+                    window = intraday_bounds.get(timestamp.astimezone(NEW_YORK).date())
+                    if window is None or not (window[0] <= timestamp < window[1]):
+                        continue
                 item = Bar(
                     timestamp=timestamp,
                     symbol=row_symbol,
@@ -656,7 +675,7 @@ class AlpacaHistoricalData:
                     volume=float(row.volume),
                     market=Market.EQUITY,
                 )
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 invalid[key] = invalid.get(key, 0) + 1
                 continue
             bars[key].append(item)
@@ -693,6 +712,11 @@ class AlpacaHistoricalData:
             for symbol in symbols
             if self._window_is_complete(bars.get(symbol, []), start_at, end_at, cached_in_window.get(symbol, []))
         }
+        # Accumulated across the chunks of one batch: warmup must not seed a
+        # symbol whose provider history has a hole (missing session or dropped row).
+        self.last_incomplete_symbols = getattr(self, "last_incomplete_symbols", frozenset()) | (
+            frozenset(symbols) - complete
+        )
         replaced = False
         if fetched and complete == set(symbols):
             try:

@@ -3161,12 +3161,19 @@ class EngineRuntime:
             # does not clear a market halt on its own.
             self._mark_market_stream_recovered(bar.market)
         if corrected:
-            # A corrected minute only revises the still-open candle it belongs
-            # to. A correction of an already-emitted candle has no consumer:
-            # the decision for that bucket was already taken.
+            # A corrected minute revises the still-open candle it belongs to.
+            # A correction of an already-emitted candle is not re-queued: the
+            # revised bar is not used for a decision. That drop is logged so it
+            # stays visible.
             with self._ingestion_lock:
-                for aggregator in self.aggregators.values():
-                    aggregator.update_correction(bar)
+                for timeframe, aggregator in self.aggregators.items():
+                    if aggregator.update_correction(bar) is not None:
+                        log.warning(
+                            "Corrected minute dropped for an already-emitted bar: symbol=%s timeframe=%s minute=%s",
+                            bar.symbol,
+                            timeframe,
+                            bar.timestamp.isoformat(),
+                        )
             return
         with self._ingestion_lock:
             finalized = {timeframe: aggregator.update(bar) for timeframe, aggregator in self.aggregators.items()}
@@ -5738,9 +5745,23 @@ class EngineRuntime:
                         start=start,
                         adjustment="splits",
                     )
+                    # A provider window with a missing session or a dropped row is
+                    # never seeded: the decision-time verifier cannot see a hole that
+                    # was never stored, so the signals would read one session further
+                    # back. The symbol stays not ready and the warmup retry covers it.
+                    incomplete = getattr(history, "last_incomplete_symbols", frozenset())
                     for symbol in symbol_batch:
+                        if symbol in incomplete:
+                            log.warning(
+                                "Warmup not ready %s %s: provider window incomplete, not seeded",
+                                symbol,
+                                timeframe,
+                            )
+                            continue
                         signal_tail = signal_bars.get(symbol, [])[-requested_bars:]
-                        with self._ingestion_lock, self._portfolio_lock:
+                        # Only the portfolio lock: seeding never touches the stream
+                        # aggregators, and the stock stream must not wait behind it.
+                        with self._portfolio_lock:
                             for runtime in self._portfolio_runtimes:
                                 if runtime.strategy.timeframe == timeframe and runtime.market == Market.EQUITY:
                                     runtime.seed(signal_tail)

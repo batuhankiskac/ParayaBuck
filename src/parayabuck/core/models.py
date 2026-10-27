@@ -36,6 +36,10 @@ class Bar:
             raise ValueError("Bar timestamps must be timezone-aware")
         if not all(math.isfinite(value) for value in (self.open, self.high, self.low, self.close, self.volume)):
             raise ValueError("Bar values must be finite")
+        # A zero or negative price is never a traded price. Left in, a
+        # non-positive close reads as a downtrend and can force a full exit.
+        if self.low <= 0:
+            raise ValueError("Bar prices must be positive")
         if self.high < self.low or not self.low <= self.open <= self.high:
             raise ValueError("Invalid OHLC values")
         if not self.low <= self.close <= self.high or self.volume < 0:

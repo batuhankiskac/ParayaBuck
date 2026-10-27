@@ -96,6 +96,11 @@ def _engine(
         slippage_bps=0.0,
         spread_bps=0.0,
         commission=0.0,
+        equity_use_effective_dated_fees=False,
+        equity_taf_per_share=0.0,
+        equity_taf_cap=0.0,
+        equity_cat_per_share=0.0,
+        equity_sec_fee_rate=0.0,
         benchmark_symbol="SPY",
         max_participation_pct=0.10,
         turnover_band=0.1,
@@ -120,15 +125,16 @@ def test_flat_default_and_empty_initial_state_reproduce_the_baseline() -> None:
 
 def test_initial_positions_show_in_the_first_equity_point_without_a_fill() -> None:
     bars = _bars(3)
-    # 10 QLD at 50 USD cost. QLD opens at 100 on day 0, so the holdings are worth
-    # 1000 at the open and the cash is 99,000 out of the 100,000 starting equity.
-    engine = _engine({}, initial_positions={"QLD": (10.0, 50.0)})
+    # 10 QLD at 50 USD cost. Holdings are valued at the day-0 CLOSE (101), the
+    # same mark as the first equity point and the benchmark (T8-2), so the cash
+    # is 98,990 and the first point is exactly the starting equity.
+    # A 1% target sits inside the 10% band: the holding is kept, so no order is made.
+    engine = _engine({0: {"QLD": 0.01}}, initial_positions={"QLD": (10.0, 50.0)})
     result = engine.run(bars, liquidate_at_end=False)
     assert result.starting_equity == pytest.approx(100_000.0)
     assert result.fills == ()  # no order, fee or slippage for the pre-existing holdings
-    # First equity point: 99,000 cash plus 10 shares marked at the day-0 close of 101.
-    assert result.equity_curve[0] == pytest.approx(99_000.0 + 10 * 101.0)
-    assert result.equity_curve[1] == pytest.approx(99_000.0 + 10 * 102.0)
+    assert result.equity_curve[0] == pytest.approx(100_000.0)
+    assert result.equity_curve[1] == pytest.approx(98_990.0 + 10 * 102.0)
 
 
 def test_initial_positions_enter_the_fifo_lot_book_and_gain_api() -> None:
@@ -178,7 +184,8 @@ def test_negative_initial_cash_raises() -> None:
 def test_explicit_initial_cash_sets_the_starting_equity_from_cash_plus_holdings() -> None:
     engine = _engine({}, initial_positions={"QLD": (10.0, 50.0)}, initial_cash=500.0)
     result = engine.run(_bars(2), liquidate_at_end=False)
-    assert result.starting_equity == pytest.approx(500.0 + 10.0 * 100.0)
+    # Holdings are marked at the day-0 close (101), not the open (T8-2).
+    assert result.starting_equity == pytest.approx(500.0 + 10.0 * 101.0)
     assert result.equity_curve[0] == pytest.approx(500.0 + 10.0 * 101.0)
 
 

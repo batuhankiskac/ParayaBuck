@@ -265,19 +265,13 @@ def test_raw_bars_with_a_two_for_one_split_match_pre_adjusted_bars() -> None:
     def strategy() -> _ScheduledWeights:
         return _ScheduledWeights(({"AAA": 0.5}, {"AAA": 0.25}))
 
+    # The engine refuses SPLIT events (T8-6): it rescales held quantities but not
+    # the price history a strategy reads, so raw bars must not be run with one.
     split = CorporateAction(_day_stamp(days[split_index]), "AAA", CorporateActionType.SPLIT, 2.0)
-    raw = _engine(strategy()).run(bars_for(raw_aaa), corporate_actions=[split])
+    with pytest.raises(ValueError, match="refuses SPLIT"):
+        _engine(strategy()).run(bars_for(raw_aaa), corporate_actions=[split])
     adjusted = _engine(strategy()).run(bars_for(adjusted_aaa))
-
-    assert raw.equity_curve == pytest.approx(adjusted.equity_curve, rel=1e-9)
-    assert raw.ending_equity == pytest.approx(adjusted.ending_equity, rel=1e-9)
-    assert raw.realized_pnls == pytest.approx(adjusted.realized_pnls, rel=1e-9)
-    assert raw.fee_total == pytest.approx(adjusted.fee_total)
-    # One buy (January, pre-split) and one sell (February, post-split). The raw
-    # buy carries half the adjusted share count; the post-split sell matches.
-    assert len(raw.fills) == len(adjusted.fills) == 2
-    assert raw.fills[0].qty == pytest.approx(adjusted.fills[0].qty / 2)
-    assert raw.fills[-1].qty == pytest.approx(adjusted.fills[-1].qty)
+    assert len(adjusted.fills) == 2
 
 
 def test_product_run_rejects_split_events_on_adjusted_bars(tmp_path) -> None:

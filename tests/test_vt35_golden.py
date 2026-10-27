@@ -71,12 +71,12 @@ _VT35 = _Golden(
     start_date="2019-10-16T00:00:00-04:00",
     end_date="2022-12-30T00:00:00-05:00",
     rebalances=809,
-    fills=228,
-    ending_equity=210_284.95,
-    cagr=0.260721,
+    fills=227,
+    ending_equity=210_288.53,
+    cagr=0.260728,
     max_drawdown=0.277902,
     benchmark_return=0.281602,
-    fill_digest="9d2bc7c934b9f27ebaf1538875fc79298133b49c89ec94d1088c493cfa23e1c4",
+    fill_digest="820637fc4c628eab3d70499fe294cb503f64ce5996141fe897e0b4d53c4bb7af",
 )
 
 _VT35_WITH_BAND = replace(
@@ -85,12 +85,12 @@ _VT35_WITH_BAND = replace(
     # Review fix (2026-10-15): a reduction the risk overlay produced keeps the
     # constant band, so VT35's binding 98 % managed-exposure cap trades its
     # drift trims again (122 -> 123 fills, 149 -> 137 held).
-    fills=123,
-    ending_equity=210_819.74,
-    cagr=0.26172,
-    max_drawdown=0.282175,
+    fills=122,
+    ending_equity=210_831.44,
+    cagr=0.261742,
+    max_drawdown=0.282176,
     suppressed=137,
-    fill_digest="5f2c44ef8f32fc47da4f8b5941ab4ee870375cae50de3ec249c73e9fbf567890",
+    fill_digest="2754070b4375d1d9795c116881184cb77ef8f2c113ec83f8b6a968d4ef037b57",
 )
 
 _E2_ONLY = _Golden(
@@ -101,22 +101,22 @@ _E2_ONLY = _Golden(
     end_date="2022-12-30T00:00:00-05:00",
     rebalances=756,
     fills=230,
-    ending_equity=174_227.06,
-    cagr=0.203702,
+    ending_equity=174_217.87,
+    cagr=0.203681,
     max_drawdown=0.278088,
     benchmark_return=0.177179,
-    fill_digest="f5a2fffd6b6bdd3dcae3fd812a5f7c9286fa4d0760036cd3f3a91061389b4362",
+    fill_digest="e4f4db1fa9e313fd42753e13f1b3f08e6ec15cb10514b4ecc764f6e1916c9777",
 )
 
 _E2_ONLY_WITH_BAND = replace(
     _E2_ONLY,
     gain_band=True,
     fills=126,
-    ending_equity=175_653.46,
-    cagr=0.206984,
+    ending_equity=175_650.94,
+    cagr=0.206978,
     max_drawdown=0.278136,
     suppressed=134,
-    fill_digest="63bd0ba807f91d70ff90be5b44dae56187ef3a9914a883bee19ee197712a3ed1",
+    fill_digest="2585edacd0fd49649d2f288636954d4ede1e43e48bdb18e2b80bb7e4564ff003",
 )
 
 _E2 = _Golden(
@@ -130,22 +130,22 @@ _E2 = _Golden(
     end_date="2022-12-30T00:00:00-05:00",
     rebalances=612,
     fills=187,
-    ending_equity=149_267.49,
-    cagr=0.179857,
-    max_drawdown=0.253766,
+    ending_equity=149_261.69,
+    cagr=0.179838,
+    max_drawdown=0.253764,
     benchmark_return=0.176273,
-    fill_digest="973ae38617bfc0c6a0204e5a4bce7e8f0d3c6de78ca0a5d419ffef35c04edef1",
+    fill_digest="77eefae66eff6d423c1cc874f6381b825102583aee33e1aa473298df8be1bfbc",
 )
 
 _E2_WITH_BAND = replace(
     _E2,
     gain_band=True,
     fills=93,
-    ending_equity=148_552.15,
-    cagr=0.17752,
+    ending_equity=148_551.80,
+    cagr=0.177518,
     max_drawdown=0.255391,
     suppressed=124,
-    fill_digest="ec9667ae421f07f7a93f90dfefae379551abddddcf0a29031c4a25fa594ea978",
+    fill_digest="e610df392d9ef153109e0acca623b833590dae5330a6646524f955df0036b6f9",
 )
 
 # The shipped policy: A1u's band and H2's December deferral together. The
@@ -156,13 +156,13 @@ _VT35_WITH_BAND_AND_DEFERRAL = replace(
     _VT35,
     gain_band=True,
     deferral=True,
-    fills=119,
-    ending_equity=211_391.10,
-    cagr=0.262785,
-    max_drawdown=0.282175,
+    fills=118,
+    ending_equity=211_402.83,
+    cagr=0.262807,
+    max_drawdown=0.282176,
     suppressed=132,
     deferred=9,
-    fill_digest="8ee087fe118bb74f1633561869956addf8d8981385932ff582cd86ea8d6687d6",
+    fill_digest="f19c564e25d8628cb6ad7f895c9f72e47bc3848307852d344b21f37bf41b63d6",
 )
 
 _E2_ONLY_WITH_BAND_AND_DEFERRAL = replace(
@@ -170,12 +170,12 @@ _E2_ONLY_WITH_BAND_AND_DEFERRAL = replace(
     gain_band=True,
     deferral=True,
     fills=122,
-    ending_equity=176_129.51,
-    cagr=0.208075,
+    ending_equity=176_126.98,
+    cagr=0.208069,
     max_drawdown=0.278136,
     suppressed=129,
     deferred=9,
-    fill_digest="49765f33b097ed880eb5228848bbbc4e606fbcbe00daafca05fe472a45ff39d6",
+    fill_digest="a6ac147223669c841d5ef4f609f011a178ddce6beb30f5a54280c25be9b07225",
 )
 
 _E2_WITH_BAND_AND_DEFERRAL = replace(
@@ -183,12 +183,12 @@ _E2_WITH_BAND_AND_DEFERRAL = replace(
     gain_band=True,
     deferral=True,
     fills=89,
-    ending_equity=148_954.75,
-    cagr=0.178836,
+    ending_equity=148_954.41,
+    cagr=0.178835,
     max_drawdown=0.253373,
     suppressed=119,
     deferred=9,
-    fill_digest="43dccab59e47b6e76caee7a51ac36590368ae86a22c651818f850adcc9f87b63",
+    fill_digest="a764c61c23f51bbb43afc890a5ff358a098cde4d3f5f4a30cb58e6923431f8eb",
 )
 
 

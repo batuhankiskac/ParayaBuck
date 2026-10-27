@@ -984,7 +984,11 @@ class TargetToOrderPlanner:
                 and symbol not in risk_reduced
                 and not deferral_case
             )
-            if gap < self.policy.rebalance_band_pct and not gain_band_case:
+            if (
+                gap < self.policy.rebalance_band_pct
+                and not gain_band_case
+                and not (target_weight == 0.0 and current_qty > 0.0)
+            ):
                 continue
             delta = target_qty - current_qty
             if delta < 0:

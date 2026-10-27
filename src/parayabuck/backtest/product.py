@@ -4,6 +4,7 @@ import csv
 import itertools
 import json
 import math
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -36,6 +37,7 @@ from parayabuck.markets.nyse_calendar import nyse_sessions, session_bounds
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import NEW_YORK, TIMEFRAME_MINUTES, is_regular_equity_time
 from parayabuck.portfolio import portfolio_strategy_from, rebalance_policy_for
+from parayabuck.utils.io import atomic_write
 
 _MAX_OPTIMIZATION_COMBINATIONS = 256
 _CSV_TIMEFRAME_ALIASES = {"1d": "1d", "1Day": "1d"}
@@ -710,15 +712,21 @@ def run_product_backtest(
     destination = Path(output_dir or config.backtest.output_dir) / run_id
     if persist_artifacts:
         destination.mkdir(parents=True, exist_ok=True)
-        (destination / "report.json").write_text(
-            json.dumps(report.to_dict(), indent=2, sort_keys=True, allow_nan=False),
-            encoding="utf-8",
-        )
-        report.write_csvs(str(destination))
-        (destination / "universe.json").write_text(
-            json.dumps(universe.to_dict(), indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        try:
+            (destination / "report.json").write_text(
+                json.dumps(report.to_dict(), indent=2, sort_keys=True, allow_nan=False),
+                encoding="utf-8",
+            )
+            report.write_csvs(str(destination))
+            (destination / "universe.json").write_text(
+                json.dumps(universe.to_dict(), indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+        except BaseException:
+            # A partial run directory would look like a complete run to a later
+            # reader, so a failed write removes the whole directory.
+            shutil.rmtree(destination, ignore_errors=True)
+            raise
     score = ranking_score(result, config.backtest.ranking_metric)
     return ProductBacktestResult(run_id, result, report, universe, str(destination), score)
 
@@ -1015,7 +1023,7 @@ def optimize_grid(
     destination = Path(output_dir or config.backtest.output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     path = destination / "optimization.json"
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
+    atomic_write(path, json.dumps(payload, indent=2, sort_keys=True, allow_nan=False))
     payload["output"] = str(path)
     return payload
 

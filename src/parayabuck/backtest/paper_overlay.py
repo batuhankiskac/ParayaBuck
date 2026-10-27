@@ -12,7 +12,11 @@ Summary definitions:
 - ``tracking_error_annualised``: sample standard deviation of the daily
   return differences (PAPER return minus backtest return, consecutive shared
   dates only) times ``sqrt(periods_per_year)``; ``None`` with fewer than two
-  return differences.
+  return differences. A pair of consecutive shared dates more than
+  ``MAX_REGULAR_GAP_DAYS`` calendar days apart spans several sessions, so its
+  return difference is not one period; the annualised figure is then inflated.
+  Such pairs are counted in ``tracking_error_date_gap_count`` (and the largest
+  spacing in ``max_date_gap_days``) rather than silently mixed in.
 - ``max_abs_gap``: the largest ``|gap|`` over the shared dates, with its date.
 - ``first_threshold_breach_date``: the first shared date where ``|gap|``
   exceeds ``gap_threshold`` (default 2%), or ``None``.
@@ -34,6 +38,9 @@ from parayabuck.backtest.portfolio_engine import session_date_for
 
 GAP_THRESHOLD = 0.02
 PERIODS_PER_YEAR = 252.0
+# Longest calendar spacing of consecutive sessions without a holiday gap (a
+# Friday to Tuesday weekend); anything longer spans a missing session.
+MAX_REGULAR_GAP_DAYS = 4
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -117,11 +124,14 @@ def paper_overlay(
     tracking_error: float | None = None
     if len(differences) >= 2:
         tracking_error = stdev(differences) * math.sqrt(periods_per_year)
+    spacings = [(cur - prev).days for prev, cur in pairwise(common)]
 
     summary: dict[str, Any] = {
         "common_days": len(common),
         "first_common_date": common[0].isoformat(),
         "last_common_date": common[-1].isoformat(),
+        "tracking_error_date_gap_count": sum(1 for spacing in spacings if spacing > MAX_REGULAR_GAP_DAYS),
+        "max_date_gap_days": max(spacings, default=0),
         "tracking_difference": rows[-1]["ratio"] - 1.0,
         "tracking_error_annualised": tracking_error,
         "max_abs_gap": abs(worst["gap"]),

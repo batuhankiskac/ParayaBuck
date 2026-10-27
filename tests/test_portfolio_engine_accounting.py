@@ -108,6 +108,8 @@ def _engine(
     commission: float = 0.0,
     risk_limits=None,
 ) -> PortfolioBacktestEngine:
+    # Regulatory fees are zeroed so these accounting invariants see commission
+    # only: direct construction now defaults to the shipped fee model (D9-5).
     return PortfolioBacktestEngine(
         strategy,
         RebalancePolicy(strategy.market, "monthly"),
@@ -115,6 +117,11 @@ def _engine(
         slippage_bps=2.0,
         spread_bps=4.0,
         commission=commission,
+        equity_use_effective_dated_fees=False,
+        equity_taf_per_share=0.0,
+        equity_taf_cap=0.0,
+        equity_cat_per_share=0.0,
+        equity_sec_fee_rate=0.0,
         benchmark_symbol="SPY",
         max_participation_pct=0.10,
         turnover_band=0.005,

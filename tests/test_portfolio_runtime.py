@@ -584,9 +584,9 @@ def test_duplicate_canonical_broker_positions_fail_closed(tmp_path) -> None:
         broker.account()
 
 
-def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
-    """A missed stop fill or a manual sell leaves the repository claiming a
-    managed position the broker no longer holds; reconcile must clear it."""
+def test_reconcile_refuses_to_clear_unexplained_flat_ownership(tmp_path) -> None:
+    """A flat broker with no local exit to explain it is not cleared: the
+    residue stays owned and reconcile reports it as drift, so the runtime halts."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
     assert repo.owned_quantities("acct") == {"QLD": 0.5}
@@ -595,10 +595,10 @@ def test_reconcile_clears_stale_ownership_when_broker_is_flat(tmp_path) -> None:
     broker = _portfolio_broker(client, repo, tmp_path)
     broker.portfolio_flat_reconciled = lambda symbol, market: repo.clear_stale_ownership("acct", symbol, market)
 
-    broker.reconcile()
+    categories = broker.reconcile()
 
-    assert repo.owned_quantities("acct") == {}
-    assert repo.owned_symbols("acct") == set()
+    assert repo.owned_quantities("acct") == {"QLD": 0.5}
+    assert categories["LOCAL_STALE"] == ["QLD"]
 
 
 def test_reconcile_keeps_ownership_when_broker_still_holds_the_position(tmp_path) -> None:
@@ -1697,9 +1697,9 @@ def test_negative_net_ownership_is_an_invariant_violation(tmp_path) -> None:
         repo.owned_quantities("acct")
 
 
-def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
-    """No real fill in broker history: reconcile records an explicit
-    ownership adjustment instead of a synthetic precise SELL fill."""
+def test_stale_flat_position_is_not_cleared_without_a_local_exit(tmp_path) -> None:
+    """No real fill and no local exit: reconcile records no adjustment and
+    books no synthetic precise SELL fill; the residue stays for the operator."""
     repo = PortfolioStateRepository(tmp_path / "runtime.sqlite3")
     _owned_equity_entry(repo, quantity=0.5)
     client = FakeTradingClient()  # flat, no filled orders
@@ -1708,7 +1708,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
 
     broker.reconcile()
 
-    assert repo.owned_quantities("acct") == {}
+    assert repo.owned_quantities("acct") == {"QLD": 0.5}
     with repo.store.lock:
         adjustments = repo.store.connection.execute(
             "SELECT kind, quantity, consumed_quantity FROM portfolio_ownership_adjustments"
@@ -1716,7 +1716,7 @@ def test_stale_flat_position_records_adjustment_not_fake_fill(tmp_path) -> None:
         synthetic_sells = repo.store.connection.execute(
             "SELECT COUNT(*) FROM portfolio_orders WHERE client_order_id LIKE 'pbp-reconcile-%'"
         ).fetchone()[0]
-    assert adjustments == [("stale_ownership_clear", 0.5, 0.0)]
+    assert adjustments == []
     assert synthetic_sells == 0
 
 

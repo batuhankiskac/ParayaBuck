@@ -256,6 +256,11 @@ Then compare `ops bundle` with the Alpaca dashboard:
   a position the bot owns — leaves the broker holding fewer shares. The runtime
   reduces ownership to the broker count, alerts, and keeps trading the
   remainder.
+- A **flat broker** that still shows our shares, with no local exit to explain
+  it, is not auto-cleared (only dust is). The runtime halts and the alert
+  `ownership_stale_uncorroborated` names the command. First check the QLD
+  order and activity history on the Alpaca dashboard for the real exit; the
+  rebase below then records 0 shares and books the depletion.
 - Neither explains the numbers → adopt the broker's count explicitly:
 
 ```bash

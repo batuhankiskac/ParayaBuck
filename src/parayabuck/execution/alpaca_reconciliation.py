@@ -570,6 +570,9 @@ class ReconciliationService:
                 market = Market.CRYPTO if is_crypto(symbol) else Market.EQUITY
                 if broker._reconcile_stale_portfolio_ownership(symbol, market):
                     continue
+                # The repository clears only dust or a residue a local exit
+                # explains; any other residue is refused and stays in the
+                # LOCAL_STALE drift above, so the startup halts for the operator.
                 flat_reconciler(symbol, market)
         local_open_ids: set[str] = set()
         local_provider = getattr(broker, "portfolio_open_orders", None)

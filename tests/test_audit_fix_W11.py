@@ -361,11 +361,6 @@ def test_late_sell_books_its_realized_pnl_before_the_stale_clear(tmp_path: Path)
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, 50.0, T0)
     early_exit = _order(repo, "sell", 100.0, 50.0, T0 + timedelta(minutes=1), "cid-early-exit")
-    with repo.store.lock, repo.store.connection:
-        repo.store.connection.execute(
-            "UPDATE portfolio_orders SET created_at = ? WHERE client_order_id = ?",
-            (T0.isoformat(), early_exit),
-        )
     assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
 
     _apply_fill(repo, early_exit, 100.0, 60.0, T0 + timedelta(minutes=2))

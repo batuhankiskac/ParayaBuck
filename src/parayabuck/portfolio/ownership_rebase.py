@@ -380,6 +380,25 @@ def _cost_basis_confirms(
     return False
 
 
+def _cost_basis_unchanged(
+    owned_average_costs: Sequence[float | None],
+    broker_average_cost: float | None,
+) -> bool:
+    """Whether the broker's average entry price is still our own average cost.
+
+    A corporate action changes the broker basis; a plain sale leaves it where
+    it was. Only an unchanged basis proves that no split happened.
+    """
+    if broker_average_cost is None or not math.isfinite(broker_average_cost) or broker_average_cost <= 0:
+        return False
+    for owned in owned_average_costs:
+        if owned is None or not math.isfinite(owned) or owned <= 0:
+            continue
+        if abs(broker_average_cost - owned) <= COST_BASIS_TOLERANCE * owned:
+            return True
+    return False
+
+
 def classify_share_change(
     owned_quantity: float,
     broker_quantity: float,
@@ -396,8 +415,9 @@ def classify_share_change(
     other lot method's value); ``broker_average_cost`` is the broker position's
     ``avg_entry_price``. A share *increase* needs both sides to be accepted
     as a split; a share *decrease* at a standard split ratio needs the
-    broker basis to corroborate it, otherwise it is a foreign sell (an
-    unchanged broker basis proves no corporate action occurred).
+    broker basis to corroborate it. An unchanged broker basis proves no
+    corporate action occurred and makes it a foreign sell; any other basis
+    halts for the operator instead of being booked as a sale.
 
     ``post_boundary_quantity`` is the owned quantity booked at or after the
     split's effective time (signed; post-split buys are positive). It is held
@@ -451,13 +471,28 @@ def classify_share_change(
                 whole_ratio,
                 "broker holds fewer shares than owned and no standard split ratio explains the gap",
             )
+        if _cost_basis_unchanged((owned_average_cost, *owned_average_cost_candidates), broker_average_cost):
+            # The broker basis did not move, so no corporate action happened:
+            # this is a real sale that happens to sit at a standard ratio.
+            return ShareChange(
+                FOREIGN_SELL,
+                owned,
+                broker,
+                whole_ratio,
+                f"broker holds fewer shares than owned at a {candidate:g}x ratio with an unchanged average "
+                "entry price, so it is a foreign sell",
+            )
+        # A reverse split with a basis that neither corroborates nor stays put
+        # (a cash-in-lieu fraction removed from the broker cost, or no broker
+        # basis at all) must not be booked as a sale: it strips the wrong lots'
+        # cost. Halt for the operator instead.
         return ShareChange(
-            FOREIGN_SELL,
+            UNKNOWN,
             owned,
             broker,
-            whole_ratio,
-            f"broker holds fewer shares than owned at a {candidate:g}x ratio but its average entry price "
-            "does not corroborate a reverse split",
+            candidate,
+            f"broker holds {candidate:g}x the owned quantity but its average entry price neither corroborates "
+            "a reverse split nor stays unchanged; halting for the operator",
         )
     if corroborated and candidate is not None:
         return ShareChange(

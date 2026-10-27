@@ -193,6 +193,9 @@ REFUSED_BOOKING = "refused"
 # A stale-ownership clear: the broker showed no position, so the repository
 # cleared the shares. A real SELL submitted after the clear consumes it.
 STALE_CLEAR_KIND = "stale_ownership_clear"
+# Residues at or below this many shares are dust and clear without further
+# proof. Anything larger needs a local SELL order that explains the flat broker.
+STALE_CLEAR_DUST_QUANTITY = 1e-6
 
 
 class OwnershipRebaseRefused(ValueError):
@@ -1173,27 +1176,56 @@ class PortfolioStateRepository:
         """Record an explicit ownership reconciliation adjustment when the
         broker holds no position and no real fill could be recovered.
 
+        The caller has already checked the broker for an open exit order and
+        for a recoverable fill. The clear is then allowed only for dust (at
+        most ``STALE_CLEAR_DUST_QUANTITY`` shares) or when a local SELL order
+        submitted after the latest local BUY explains the flat broker. A
+        larger residue with no such exit is never cleared here: the ledger
+        keeps it, the reconcile keeps the symbol as drift (so the runtime
+        halts), and an operator alert names the rebase command. A restored
+        ledger older than the broker is the usual cause, and its missing exit
+        would otherwise vanish without a sale.
+
         This never books a synthetic precise SELL fill at an invented price:
         an unknown exit is an anomaly, not a normal trading fill. The
         adjustment reduces owned quantity and can be consumed later by a real
         fill arriving after reconciliation (stream downtime race). Idempotent:
-        returns the adjusted quantity (0.0 when nothing is owned anymore).
+        returns the adjusted quantity (0.0 when nothing is owned anymore, or
+        when the residue is refused).
 
         The read and the insert share one lock hold: a late SELL fill applied
         by the trade-update thread between them would already have removed
         the quantity, and the clear would then drive the net negative."""
+        refused_quantity = 0.0
         with self.store.lock:
             owned = self.owned_quantities(account_id, market).get(symbol, 0.0)
             if owned <= 1e-12:
                 return 0.0
-            self.record_ownership_adjustment(
+            if owned <= STALE_CLEAR_DUST_QUANTITY:
+                note = "broker position absent; residue at or below the dust threshold"
+            elif self._local_exit_follows_last_buy(account_id, symbol, market):
+                note = "broker position absent; local SELL order after the last BUY, no broker fill recovered"
+            else:
+                refused_quantity = owned
+                note = ""
+            if not refused_quantity:
+                self.record_ownership_adjustment(
+                    account_id,
+                    symbol,
+                    market,
+                    owned,
+                    kind="stale_ownership_clear",
+                    note=note,
+                )
+        if refused_quantity:
+            log.error(
+                "Stale-ownership clear refused: account=%s symbol=%s qty=%s (no local exit explains the flat broker)",
                 account_id,
                 symbol,
-                market,
-                owned,
-                kind="stale_ownership_clear",
-                note="broker position absent and no real fill found in activity history",
+                refused_quantity,
             )
+            self._alert_uncorroborated_stale_clear(account_id, symbol, market, refused_quantity)
+            return 0.0
         log.warning(
             "Recorded stale-ownership adjustment: account=%s symbol=%s qty=%s (no broker position found)",
             account_id,
@@ -1201,6 +1233,63 @@ class PortfolioStateRepository:
             owned,
         )
         return owned
+
+    def _local_exit_follows_last_buy(self, account_id: str, symbol: str, market: Market) -> bool:
+        """Whether a local SELL order of this account was submitted at or after
+        the latest local BUY of the symbol. Only then does our own exit explain
+        a flat broker; an older exit cannot explain a lot bought later."""
+        rows = self.store.connection.execute(
+            """SELECT LOWER(o.side), MAX(o.created_at)
+               FROM portfolio_orders o
+               JOIN portfolio_decisions d ON d.decision_id = o.decision_id
+               JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
+               WHERE s.account_id = ? AND o.symbol = ? AND o.market = ?
+               GROUP BY LOWER(o.side)""",
+            (account_id, symbol, market.value),
+        ).fetchall()
+        latest = {str(side): created_at for side, created_at in rows}
+        sell_at = latest.get("sell")
+        if sell_at is None:
+            return False
+        buy_at = latest.get("buy")
+        return buy_at is None or _at_or_before(buy_at, sell_at)
+
+    def _alert_uncorroborated_stale_clear(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        owned: float,
+    ) -> None:
+        """Raise an operator alert (once per episode) for a residue the broker
+        flat state would have cleared without any local exit to explain it."""
+        key = (account_id, market.value, symbol, round(owned, 6))
+        alerted = self.__dict__.setdefault("_stale_clear_alerts", set())
+        if key in alerted:
+            return
+        message = (
+            f"Broker'da {symbol} pozisyonu yok, ancak bot {format_quantity(owned)} adet sahipliği kayıtlı tutuyor "
+            "ve bu kaybı açıklayan yerel bir satış emri yok. Sahiplik otomatik silinmedi; sistem bu sembolü "
+            "uzlaşmada tutarsızlık sayıp durdurur. Gerçek bir satış gerçekleştiyse brokerdaki emir geçmişini "
+            "kontrol edin; ardından sahipliği brokerin gerçek durumuna (0 adet) getirmek için şu komutu "
+            f"çalıştırın: `parayabuck ops rebase-ownership {symbol} --broker-qty 0 --confirm {format_quantity(owned)}`."
+        )
+        try:
+            from parayabuck.monitoring import alerts
+
+            alerts.emit(
+                "paper_incident",
+                message=message,
+                category="ownership_stale_uncorroborated",
+                incident_id=f"ownership_stale_uncorroborated:{market.value}:{symbol}",
+                symbol=symbol,
+                market=market.value,
+                owned_quantity=owned,
+            )
+        except Exception:
+            log.warning("Alert emission failed for the stale ownership of %s", symbol, exc_info=True)
+            return
+        alerted.add(key)
 
     def record_ownership_adjustment(
         self,
@@ -1796,7 +1885,8 @@ class PortfolioStateRepository:
                    JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-                   WHERE s.account_id = ? AND o.symbol = ? AND o.market = ? AND f.quantity > 0""",
+                   WHERE s.account_id = ? AND o.symbol = ? AND o.market = ? AND f.quantity > 0
+                   ORDER BY f.rowid""",
                 (account_id, symbol, market.value),
             ).fetchall()
             adjustments = self.store.connection.execute(
@@ -1807,7 +1897,11 @@ class PortfolioStateRepository:
                 (account_id, symbol, market.value),
             ).fetchall()
         events: list[tuple[tuple[datetime, int], tuple[str, float, float | None, float]]] = []
-        for occurred_at, side, quantity, price, fee in fills:
+        # Fills that share one instant replay buys first (a same-instant SELL
+        # ahead of its BUY would look like a sale of nothing), then in booking
+        # order: the sort is stable over the rowid order fixed by the query.
+        ordered_fills = sorted(fills, key=lambda row: (_parse_instant(row[0]), str(row[1]).lower() != "buy"))
+        for occurred_at, side, quantity, price, fee in ordered_fills:
             kind = BUY if str(side).lower() == "buy" else SELL
             instant = _parse_instant(occurred_at)
             events.append(((instant, 0), (kind, float(quantity), float(price), float(fee or 0.0))))

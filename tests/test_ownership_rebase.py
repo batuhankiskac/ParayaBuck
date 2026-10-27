@@ -197,12 +197,10 @@ def test_foreign_partial_sell_reduces_ownership_with_an_audit_row(tmp_path: Path
 # ---------------------------------------------------------------------------
 
 
-def _force_order_created_at(repo: PortfolioStateRepository, client_order_id: str, when: datetime) -> None:
-    with repo.store.lock, repo.store.connection:
-        repo.store.connection.execute(
-            "UPDATE portfolio_orders SET created_at = ? WHERE client_order_id = ?",
-            (when.isoformat(), client_order_id),
-        )
+def _unfilled_exit(repo: PortfolioStateRepository, when: datetime) -> str:
+    """Our own exit submitted after the entry and not yet filled: the local
+    SELL that explains a flat broker (the clear is refused without one)."""
+    return _order(repo, "sell", 100.0, ENTRY_PRICE, when, f"cid-exit-{when.isoformat()}")
 
 
 def test_only_a_sell_older_than_the_adjustment_consumes_it(tmp_path: Path) -> None:
@@ -211,7 +209,6 @@ def test_only_a_sell_older_than_the_adjustment_consumes_it(tmp_path: Path) -> No
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     early_exit = _order(repo, "sell", 100.0, ENTRY_PRICE, T0 + timedelta(minutes=1), "cid-early-exit")
-    _force_order_created_at(repo, early_exit, T0)
     assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
 
     _apply_fill(repo, early_exit, 100.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
@@ -226,6 +223,7 @@ def test_a_newer_sell_does_not_consume_a_stale_adjustment(tmp_path: Path) -> Non
     shares and then halted the runtime on ownership drift."""
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+    _unfilled_exit(repo, T0 + timedelta(minutes=1))
     assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
 
     _fill(repo, "sell", 30.0, ENTRY_PRICE, T0 + timedelta(minutes=5), client_order_id="cid-later-exit")
@@ -242,6 +240,7 @@ def test_foreign_liquidation_rebuy_and_partial_exit_stay_consistent(tmp_path: Pa
     50. Ownership must be 50 — never a negative net and never a drift halt."""
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+    _unfilled_exit(repo, T0 + timedelta(minutes=1))
     assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
     _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=1))
     _fill(repo, "sell", 30.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
@@ -258,6 +257,7 @@ def test_a_rebuy_does_not_resurrect_cleared_ownership(tmp_path: Path) -> None:
     row stays visible for the operator."""
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
+    _unfilled_exit(repo, T0 + timedelta(minutes=1))
     assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
 
     _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=1))

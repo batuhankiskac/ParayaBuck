@@ -664,6 +664,16 @@ def _configured_config_path(args: argparse.Namespace) -> str | None:
     return os.getenv("CONFIG_PATH") or None
 
 
+def _marker_applies(marker: str) -> bool:
+    """True when a requirement environment marker holds here (unknown: True, so it is checked)."""
+    try:
+        from packaging.markers import Marker
+
+        return bool(Marker(marker).evaluate())
+    except Exception:
+        return True
+
+
 def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
     """(pins checked, human-readable differences) between ``lock_path`` and the installed versions.
 
@@ -680,8 +690,12 @@ def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
             continue
         name, wanted = (part.strip() for part in line.split("==", 1))
         # A hashed export continues the pin line with " \" and may add an
-        # environment marker ("; python_version ..."): keep the version only.
-        wanted = wanted.rstrip("\\").split(";", 1)[0].strip().split()[0] if wanted.rstrip("\\").strip() else ""
+        # environment marker ("; sys_platform == 'win32'"): keep the version,
+        # and skip a pin whose marker does not apply on this host.
+        wanted, _, marker = wanted.rstrip("\\").partition(";")
+        wanted = wanted.strip()
+        if marker.strip() and not _marker_applies(marker.strip()):
+            continue
         checked += 1
         try:
             installed = importlib.metadata.version(name)

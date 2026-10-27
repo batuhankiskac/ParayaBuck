@@ -75,7 +75,9 @@ def test_locked_pin_check_reads_a_hashed_export(tmp_path) -> None:
         f"pyyaml=={installed} \\\n"
         "    --hash=sha256:00\n"
         f"pyyaml=={installed} ; python_version >= '3.11' \\\n"
-        "    --hash=sha256:11\n",
+        "    --hash=sha256:11\n"
+        "not-a-real-package==1.0 ; sys_platform == 'no-such-platform' \\\n"
+        "    --hash=sha256:22\n",
         encoding="utf-8",
     )
     assert _locked_pin_mismatches(lock) == (2, [])

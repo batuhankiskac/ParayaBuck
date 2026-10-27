@@ -2155,8 +2155,9 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
     assert latched.status == "rebalance_in_progress"
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
 
-    # The AAPL sell fills; the deferred BUY phase resumes with a fresh
-    # account, submitting the re-planned MSFT BUY exactly once.
+    # The AAPL sell fills. The superseded decision's BUY side was discarded at
+    # the new session (P9-1), so nothing resumes and the stale MSFT BUY is
+    # never submitted.
     runtime.repository.apply_trade_update(
         client_order_id=sell.client_order_id,
         broker_order_id=f"broker-{sell.client_order_id}",
@@ -2169,31 +2170,17 @@ def test_entry_risk_latch_blocks_entries_but_allows_sells(tmp_path) -> None:
         realized_pnl=0.0,
         unrealized_pnl=0.0,
     )
-    resumed = runtime.advance_rebalance()
-    assert resumed is not None and resumed.status == "buy_phase_submitted"
-    assert [order.side for order in broker.submitted] == [
-        PortfolioOrderSide.SELL,
-        PortfolioOrderSide.BUY,
-    ]
-    # The deferred BUY fills and the rebalance completes.
-    for order in resumed.orders:
-        runtime.repository.apply_trade_update(
-            client_order_id=order.client_order_id,
-            broker_order_id=f"broker-{order.client_order_id}",
-            status="fill",
-            cumulative_filled_quantity=order.quantity,
-            average_fill_price=order.reference_price,
-            occurred_at=order.decision_timestamp,
-            activity_id=f"activity-{order.client_order_id}",
-            fee=0.0,
-            realized_pnl=0.0,
-            unrealized_pnl=0.0,
-        )
-    completed = runtime.advance_rebalance()
-    assert completed is not None and completed.status == "rebalance_complete"
+    assert runtime.advance_rebalance() is None
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
+    state = runtime.repository.current_rebalance_execution(runtime.account_id, Market.EQUITY)
+    assert state is not None
+    assert (state.decision_id, state.phase, state.status) == (
+        sell.decision_id,
+        "complete",
+        "closed_unresolved",
+    )
 
-    # After the rebalance completes, a latched decision is risk-reducing
-    # only: the cap drops the MSFT entry entirely.
+    # A latched decision is risk-reducing only: the cap drops the MSFT entry entirely.
     after = runtime.process_closed_bars(next_batch, entry_latch="daily_loss_limit")
     assert after.status != "rebalance_in_progress"
     assert after.orders

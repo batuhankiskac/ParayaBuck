@@ -537,6 +537,52 @@ def _downsize_hold_reason(target: TargetPortfolio, orders: tuple[Any, ...] | lis
     return None
 
 
+def _no_order_reason(
+    target: TargetPortfolio,
+    orders: tuple[Any, ...] | list[Any],
+    *,
+    entry_capped: bool,
+    account: AccountSnapshot,
+    market: Market,
+    symbols: Iterable[str],
+    rebalance_band: float,
+) -> str | None:
+    """Decision-summary reason for a decision that planned no order.
+
+    ``None`` means NO_TARGET_CHANGE: the target already matches the holdings.
+    The planner drops a sub-band or sub-minimum change silently, so that case
+    is named from the target gap against the band (a gap above the band that
+    still produced no order is the minimum-notional or lot-size floor).
+    """
+    if orders:
+        return None
+    if entry_capped:
+        return "ENTRY_LATCH"
+    downsize = _downsize_hold_reason(target, orders)
+    if downsize is not None:
+        return downsize
+    if account.equity <= 0:
+        return None
+    approved = set(symbols)
+    held = {
+        canonical_symbol(position.symbol, position.market): position.market_value / account.equity
+        for position in account.positions
+        if position.market == market and not position.is_flat
+    }
+    targeted = {canonical_symbol(weight.symbol, market): weight.weight for weight in target.weights}
+    largest_gap = max(
+        (
+            abs(targeted.get(symbol, 0.0) - held.get(symbol, 0.0))
+            for symbol in set(targeted) | set(held)
+            if symbol in approved
+        ),
+        default=0.0,
+    )
+    if largest_gap <= 1e-9:
+        return None
+    return "REBALANCE_BAND" if largest_gap < rebalance_band else "MIN_NOTIONAL"
+
+
 class PortfolioRuntime:
     def __init__(
         self,
@@ -684,6 +730,12 @@ class PortfolioRuntime:
         """Whether a decision exists for ``timestamp``'s decision period,
         under either equity daily label."""
         if self.repository.has_decision(self.account_id, self.configuration_digest, timestamp, self.market):
+            return True
+        # A configuration change (new digest) must not re-decide a session an
+        # earlier configuration already decided: the newest decision of any
+        # digest counts for its session.
+        latest = self.repository.latest_decision_target(self.account_id, self.market)
+        if latest is not None and self._session_key(latest[0]) == self._session_key(timestamp):
             return True
         if not self._daily_equity_signal():
             return False
@@ -1060,13 +1112,27 @@ class PortfolioRuntime:
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "already_invested")
         # A deferred BUY is an entry: a latched market keeps it deferred even
-        # though no fresh decision is planned here.
+        # though no fresh decision is planned here. An open rebalance decided
+        # for an earlier session never submits its BUY side (see process_closed_bars).
+        stale_decision = self._stale_rebalance_decision(timestamp)
         advance_result = self.advance_rebalance(
             account=account,
-            submit_deferred_buys=entry_latch is None,
+            submit_deferred_buys=entry_latch is None and stale_decision is None,
         )
+        if stale_decision is not None:
+            self._close_superseded_rebalance(stale_decision)
+        if advance_result is not None and advance_result.status == "rebalance_complete":
+            # The fill that completed the rebalance postdates the snapshot
+            # taken above: plan the catch-up from a fresh broker account.
+            account = self.broker.account()
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
-        if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
+        superseded_sells_working = self._superseded_sells_working()
+        open_rebalance = (
+            current_rebalance
+            if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE
+            else None
+        )
+        if open_rebalance is not None or superseded_sells_working:
             status = advance_result.status if advance_result is not None else "rebalance_in_progress"
             reason = "rebalance_blocked" if status == "rebalance_blocked" else "rebalance_in_progress"
             self.startup_catch_up_status = status
@@ -1080,7 +1146,7 @@ class PortfolioRuntime:
                 account_id=self.account_id,
             )
             return PortfolioRuntimeResult(
-                current_rebalance.decision_id,
+                open_rebalance.decision_id if open_rebalance is not None else None,
                 None,
                 None,
                 advance_result.orders if advance_result is not None else (),
@@ -1341,15 +1407,22 @@ class PortfolioRuntime:
             return PortfolioRuntimeResult(None, None, None, (), (), "duplicate_decision")
         # A deferred BUY is an entry, so a latched market keeps it deferred
         # (the latch caps fresh targets below; the persisted BUY side of an
-        # earlier decision needs the same gate).
+        # earlier decision needs the same gate). An open rebalance decided for
+        # an earlier session never submits its BUY side: its target is stale.
+        stale_decision = self._stale_rebalance_decision(timestamp)
         advance_result = self.advance_rebalance(
             account=account,
-            submit_deferred_buys=entry_latch is None,
+            submit_deferred_buys=entry_latch is None and stale_decision is None,
         )
+        if stale_decision is not None:
+            self._close_superseded_rebalance(stale_decision)
         # A terminal deferred BUY has just completed the persisted rebalance.
         # End this cycle before planning again: the caller's account snapshot
         # may predate that fill, so a same-cycle decision could replay the BUY.
+        # No decision was recorded for this session, so its cadence high-water
+        # is restored and the session is planned on a later cycle.
         if advance_result is not None and advance_result.status == "rebalance_complete":
+            self.previous_timestamp = previous_timestamp
             return advance_result
         current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if (
@@ -1359,6 +1432,9 @@ class PortfolioRuntime:
         ):
             current_rebalance = self.repository.current_rebalance_execution(self.account_id, self.market)
         if current_rebalance is not None and current_rebalance.phase != REBALANCE_PHASE_COMPLETE:
+            # Nothing was planned for this session: keep it due so it is
+            # decided once the rebalance settles.
+            self.previous_timestamp = previous_timestamp
             if current_rebalance.phase == REBALANCE_PHASE_BLOCKED:
                 _emit_decision_summary_safe(
                     decision_id=current_rebalance.decision_id,
@@ -1409,6 +1485,18 @@ class PortfolioRuntime:
                 advance_result.submitted_order_ids if advance_result is not None else (),
                 "rebalance_in_progress",
             )
+        if self._superseded_sells_working():
+            self.previous_timestamp = previous_timestamp
+            _emit_no_trade_safe(
+                market=self._market_name(),
+                strategy=getattr(self.strategy, "name", None),
+                reason="rebalance_in_progress",
+                decision_timestamp=timestamp,
+                data_timestamp=timestamp,
+                session_id=self.session_id,
+                account_id=self.account_id,
+            )
+            return PortfolioRuntimeResult(None, None, None, (), (), "rebalance_in_progress")
         # maximum_account_age_for_entry_seconds). Direct callers (tests,
         # startup catch-up) omit it and get a fresh broker fetch, preserving
         # the historical behavior exactly.
@@ -1506,6 +1594,8 @@ class PortfolioRuntime:
             )
             return PortfolioRuntimeResult(None, None, None, (), (), "not_scheduled")
         raw_target = self.strategy.decide(context)
+        # Whether the entry latch removed a BUY the strategy wanted (no-trade reason).
+        entry_capped = False
         if entry_latch is not None:
             # runtime may only reduce risk. Cap every target at the current
             # weight so the planner emits SELL orders only; entries stay
@@ -1515,6 +1605,9 @@ class PortfolioRuntime:
                 for position in account.positions
                 if position.market == self.market and not position.is_flat
             }
+            entry_capped = any(
+                weight.weight > current_weights.get(weight.symbol, 0.0) + 1e-9 for weight in raw_target.weights
+            )
             raw_target = replace(
                 raw_target,
                 weights=tuple(
@@ -1793,7 +1886,17 @@ class PortfolioRuntime:
                 planned=orders,
                 submitted=submitted,
                 no_trade_reason=(
-                    hold_reason.upper() if hold_reason is not None else _downsize_hold_reason(risk.target, orders)
+                    hold_reason.upper()
+                    if hold_reason is not None
+                    else _no_order_reason(
+                        risk.target,
+                        orders,
+                        entry_capped=entry_capped,
+                        account=account,
+                        market=self.market,
+                        symbols=self.symbols,
+                        rebalance_band=self.planner.policy.rebalance_band_pct,
+                    )
                 ),
             )
             return PortfolioRuntimeResult(
@@ -2167,6 +2270,76 @@ class PortfolioRuntime:
             REBALANCE_PHASE_BUY_READY,
         )
 
+    def _stale_rebalance_decision(self, timestamp: datetime) -> str | None:
+        """Decision id of the open rebalance when it was decided for an earlier session.
+
+        ``None`` when no rebalance is open or the open one belongs to
+        ``timestamp``'s own session.
+        """
+        current = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if current is None or current.phase == REBALANCE_PHASE_COMPLETE:
+            return None
+        decision = self.repository.decision_row(current.decision_id)
+        decided_at = datetime.fromisoformat(str(decision["decision_timestamp"])) if decision is not None else None
+        if decided_at is not None and self._session_key(decided_at) == self._session_key(timestamp):
+            return None
+        return current.decision_id
+
+    def _superseded_sells_working(self) -> bool:
+        """Whether a superseded rebalance still has SELLs working at the broker.
+
+        Its BUY side was discarded, but its SELLs keep their own outcomes. A
+        new decision waits for them, so no BUY is planned ahead of a pending
+        exit (sells before buys).
+        """
+        current = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if (
+            current is None
+            or current.phase != REBALANCE_PHASE_COMPLETE
+            or current.status != REBALANCE_STATUS_CLOSED_UNRESOLVED
+        ):
+            return False
+        # A crash-left ``submitting`` SELL is resolved here, as the planning path does.
+        self._resolve_stale_submitting_rows()
+        sells = self.repository.orders_for_decision(current.decision_id, side="sell")
+        return any(not is_terminal_order_status(str(item["status"])) for item in sells)
+
+    def _close_superseded_rebalance(self, decision_id: str) -> None:
+        """Discard the BUY side of a rebalance a newer session has superseded.
+
+        Only a BUY side not yet at the broker is discarded: ``sell_pending``
+        (its SELLs stay with their own outcomes) and ``buy_ready`` (withheld).
+        Without the close, a later SELL settlement would submit the stale BUYs
+        through the advance path. A ``buy_pending`` rebalance already has its
+        BUYs at the broker and is left to finish; BLOCKED is handled by
+        ``_close_settled_blocked_rebalance``.
+        """
+        current = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if (
+            current is None
+            or current.decision_id != decision_id
+            or current.phase not in (REBALANCE_PHASE_SELL_PENDING, REBALANCE_PHASE_BUY_READY)
+        ):
+            return
+        self.repository.update_rebalance_execution(
+            decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
+        )
+        log.warning(
+            "Open rebalance superseded by a new session; deferred BUYs discarded: market=%s decision=%s phase=%s",
+            self._market_name(),
+            decision_id,
+            current.phase,
+        )
+        _emit_rebalance_phase_safe(
+            decision_id,
+            current.phase,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+            reason=REBALANCE_STATUS_CLOSED_UNRESOLVED,
+        )
+
     def _close_settled_blocked_rebalance(self, decision_id: str) -> bool:
         """Close a BLOCKED rebalance whose orders have all settled.
 
@@ -2175,17 +2348,18 @@ class PortfolioRuntime:
         the blocked decision. The stale deferred BUYs are never submitted: the
         rebalance is closed as ``complete``/``closed_unresolved`` and the next
         scheduled decision re-plans from a fresh target. A block whose decision
-        cannot be restored stays BLOCKED and is raised to the operator once.
-        Returns True when the rebalance was closed.
+        cannot be restored is raised to the operator once and closed the same
+        way once its orders settle (it can never be resumed). Returns True when
+        the rebalance was closed.
         """
-        if not self._rebalance_target_recoverable(decision_id):
+        recoverable = self._rebalance_target_recoverable(decision_id)
+        if not recoverable:
             self._raise_operator_alert_once(
                 (decision_id, "rebalance_unrecoverable"),
-                message="Blocked rebalance decision cannot be restored; manual intervention required",
+                message="Blocked rebalance decision cannot be restored; its deferred BUYs are discarded",
                 category="rebalance_unrecoverable",
                 decision_id=decision_id,
             )
-            return False
         orders = self.repository.orders_for_decision(decision_id)
         if not orders or not all(is_terminal_order_status(str(item["status"])) for item in orders):
             return False

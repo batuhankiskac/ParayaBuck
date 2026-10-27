@@ -174,9 +174,31 @@ def test_settled_blocked_rebalance_closes_without_its_deferred_buys(tmp_path, ra
     assert raised == []
 
 
-def test_unrecoverable_blocked_rebalance_stays_blocked_and_alerts_once(tmp_path, raised) -> None:
+def test_unrecoverable_blocked_rebalance_alerts_then_closes_unresolved(tmp_path, raised) -> None:
+    """P9-2: an unrecoverable block is alerted once, then closed once its orders settle."""
     runtime, repository, broker, decision_id, sell = _blocked_rebalance(tmp_path)
     _settle(repository, sell, "sell-recovered")
+    with repository.store.lock, repository.store.connection:
+        repository.store.connection.execute(
+            "UPDATE portfolio_decisions SET risk_json = '{}' WHERE decision_id = ?", (decision_id,)
+        )
+
+    first = runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
+    second = runtime.process_closed_bars(_bars(_DAY + timedelta(days=2)), force_scheduled=True)
+
+    # The blocked decision's BUYs are discarded; the rebalance no longer blocks entries.
+    assert _phase(repository, decision_id) == (REBALANCE_PHASE_COMPLETE, REBALANCE_STATUS_CLOSED_UNRESOLVED)
+    assert first.status != "rebalance_blocked"
+    assert second.status != "rebalance_blocked"
+    assert all(order.decision_id != decision_id for order in broker.submitted[1:])
+    assert [(item["kind"], item["category"], item["decision_id"]) for item in raised] == [
+        ("paper_incident", "rebalance_unrecoverable", decision_id)
+    ]
+
+
+def test_unrecoverable_block_with_unsettled_sell_stays_blocked_and_alerts_once(tmp_path, raised) -> None:
+    """P9-2: the close waits for the blocked decision's orders to settle."""
+    runtime, repository, broker, decision_id, _ = _blocked_rebalance(tmp_path)
     with repository.store.lock, repository.store.connection:
         repository.store.connection.execute(
             "UPDATE portfolio_decisions SET risk_json = '{}' WHERE decision_id = ?", (decision_id,)
@@ -188,9 +210,7 @@ def test_unrecoverable_blocked_rebalance_stays_blocked_and_alerts_once(tmp_path,
     assert (first.status, second.status) == ("rebalance_blocked", "rebalance_blocked")
     assert _phase(repository, decision_id)[0] == REBALANCE_PHASE_BLOCKED
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
-    assert [(item["kind"], item["category"], item["decision_id"]) for item in raised] == [
-        ("paper_incident", "rebalance_unrecoverable", decision_id)
-    ]
+    assert [(item["category"], item["decision_id"]) for item in raised] == [("rebalance_unrecoverable", decision_id)]
 
 
 def test_stuck_deferred_buy_alerts_once_after_threshold_without_phase_change(tmp_path, raised) -> None:

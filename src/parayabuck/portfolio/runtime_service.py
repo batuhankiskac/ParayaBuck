@@ -359,16 +359,16 @@ OPG_SUBMIT_CUTOFF = dt_time(9, 28)
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 # Every order the runtime builds is a DAY market order (execution/alpaca_orders.py).
 RUNTIME_ORDER_TIME_IN_FORCE = "day"
-_OPEN_MARKET_TIME_IN_FORCE = frozenset({"day"})
 
 
 def market_clock_refusal(clock: BrokerClock, *, time_in_force: str) -> tuple[str, str] | None:
     """``(reason code, message)`` when the broker clock forbids submitting an order now, else ``None``.
 
-    A DAY market order needs an open market and is refused while the clock says
-    closed. An OPG order is refused once the 09:28 ET cutoff of the session it
-    targets has passed; that session is the one of ``next_open``, which is also
-    the target while the market is open.
+    A DAY market order is never refused: the strategy decides after the close
+    and Alpaca queues a DAY market order sent while the market is closed for
+    the next open, which is the intended fill. An OPG order is refused once the
+    09:28 ET cutoff of the session it targets has passed; that session is the
+    one of ``next_open``, which is also the target while the market is open.
     """
     tif = time_in_force.lower()
     if tif == "opg":
@@ -379,8 +379,6 @@ def market_clock_refusal(clock: BrokerClock, *, time_in_force: str) -> tuple[str
                 "opg_after_cutoff",
                 f"OPG order after the {OPG_SUBMIT_CUTOFF:%H:%M} ET cutoff of the {session.isoformat()} session",
             )
-    if tif in _OPEN_MARKET_TIME_IN_FORCE and not clock.is_open:
-        return ("market_closed", "market closed per the broker clock")
     return None
 
 

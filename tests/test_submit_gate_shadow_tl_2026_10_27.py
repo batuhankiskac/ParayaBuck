@@ -110,9 +110,9 @@ def _runtime_with_decision(tmp_path, broker):
 # ---------------------------------------------------------------------------
 
 
-def test_closed_clock_refuses_a_day_market_order() -> None:
-    refusal = market_clock_refusal(CLOSED_CLOCK, time_in_force="day")
-    assert refusal is not None and refusal[0] == "market_closed"
+def test_closed_clock_allows_a_day_market_order() -> None:
+    # Decisions are made after the close; Alpaca queues the DAY order for the next open.
+    assert market_clock_refusal(CLOSED_CLOCK, time_in_force="day") is None
 
 
 def test_open_clock_allows_a_day_market_order() -> None:
@@ -157,7 +157,7 @@ def test_opg_order_while_open_targets_the_next_session() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_closed_clock_refuses_a_day_order_locally_and_sends_nothing(tmp_path, _captured_alerts) -> None:
+def test_closed_clock_queues_a_day_order_for_the_next_open(tmp_path) -> None:
     broker = _ClockBroker(OPEN_CLOCK)
     runtime, repository, decision_id = _runtime_with_decision(tmp_path, broker)
     broker.clock_value = CLOSED_CLOCK
@@ -166,23 +166,9 @@ def test_closed_clock_refuses_a_day_order_locally_and_sends_nothing(tmp_path, _c
 
     submitted = runtime._submit_orders((order,))
 
-    assert submitted == ()
-    assert broker.submitted[sent_before:] == []
-    assert _status_of(repository, decision_id, "closed-aapl") == "rejected"
-    rejected = [event for event in _captured_alerts if event.get("event") == "order_rejected"]
-    assert [(event["client_order_id"], event["reason"]) for event in rejected] == [("closed-aapl", "market_closed")]
-
-
-def test_closed_clock_marks_an_order_already_at_submitting_as_rejected(tmp_path, _captured_alerts) -> None:
-    broker = _ClockBroker(OPEN_CLOCK)
-    runtime, repository, decision_id = _runtime_with_decision(tmp_path, broker)
-    broker.clock_value = CLOSED_CLOCK
-    order = _order(decision_id, "MSFT", PortfolioOrderSide.BUY, 10.0, client_order_id="pre-msft")
-    repository.record_order(order, "submitting")
-
-    assert runtime._submit_orders((order,)) == ()
-    assert _status_of(repository, decision_id, "pre-msft") == "rejected"
-    assert all(sent.client_order_id != "pre-msft" for sent in broker.submitted)
+    assert len(submitted) == 1
+    assert [sent.client_order_id for sent in broker.submitted[sent_before:]] == ["closed-aapl"]
+    assert _status_of(repository, decision_id, "closed-aapl") == "submitted"
 
 
 def test_open_clock_submits_the_batch(tmp_path) -> None:

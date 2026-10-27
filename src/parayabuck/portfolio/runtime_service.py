@@ -2820,6 +2820,19 @@ class PortfolioRuntime:
         # keeps every BUY deferred until that SELL settles.
         replan_sells = tuple(order for order in planned if order.side == PortfolioOrderSide.SELL)
         if replan_sells:
+            stale = self._snapshot_ahead_of_owned(account, replan_sells)
+            if stale is not None:
+                # The snapshot still shows shares the bot's fill book has already
+                # sold: a SELL sized from it would sell them twice (a short on
+                # margin). Nothing is sent; a later advance re-plans on a fresh
+                # snapshot.
+                log.warning(
+                    "Re-planned SELL held: the account snapshot lags the booked fills: market=%s decision=%s %s",
+                    self._market_name(),
+                    decision_id,
+                    stale,
+                )
+                return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "replan_snapshot_stale")
             return self._submit_replan_sells(decision_id, risk, replan_sells, rules, submit_gate=submit_gate)
         buy_orders = tuple(
             PortfolioOrderRequest(**{**asdict(order), "decision_id": decision_id})
@@ -2914,6 +2927,31 @@ class PortfolioRuntime:
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
             submitted += self._submit_orders((order,), rules)
         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+
+    def _snapshot_ahead_of_owned(
+        self,
+        account: AccountSnapshot,
+        sells: tuple[PortfolioOrderRequest, ...],
+    ) -> str | None:
+        """A reason when the snapshot's managed quantity exceeds the booked one, else None.
+
+        An unreadable or inconsistent ownership book counts as stale (fail closed).
+        """
+        try:
+            owned = self.repository.owned_quantities(self.account_id, self.market)
+        except Exception as exc:
+            return f"owned quantities unreadable: {exc}"
+        managed = {
+            canonical_symbol(position.symbol, position.market): float(position.managed_qty)
+            for position in account.positions
+            if position.market == self.market
+        }
+        for order in sells:
+            symbol = canonical_symbol(order.symbol, self.market)
+            booked = float(owned.get(symbol, 0.0))
+            if managed.get(symbol, 0.0) > booked + 1e-9:
+                return f"symbol={symbol} snapshot_managed={managed.get(symbol, 0.0)} booked={booked}"
+        return None
 
     def _submit_replan_sells(
         self,

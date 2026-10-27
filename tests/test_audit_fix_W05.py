@@ -168,9 +168,12 @@ def test_replan_sell_is_submitted_first_and_buy_waits_for_it(tmp_path) -> None:
     runtime, repository, first = _sell_decision(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20}, ("AAPL", "MSFT"))
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell)
-    # The account still holds 200 above target after the sell settled.
+    # The account still holds 200 above target after the sell settled, and the
+    # bot's fill book agrees (the fixture's opening 400 is not booked, so the
+    # booked holding is pinned to the snapshot here).
     broker.positions = [_position("AAPL", 300)]
     broker.open_symbols.discard("AAPL")
+    repository.owned_quantities = lambda *args, **kwargs: {"AAPL": 300.0}
 
     replan = runtime.advance_rebalance()
 
@@ -185,6 +188,7 @@ def test_replan_sell_is_submitted_first_and_buy_waits_for_it(tmp_path) -> None:
     _fill(repository, sent)
     broker.positions = [_position("AAPL", 100)]
     broker.open_symbols.discard("AAPL")
+    repository.owned_quantities = lambda *args, **kwargs: {"AAPL": 100.0}
     buy_phase = runtime.advance_rebalance()
     assert buy_phase is not None and buy_phase.status == "buy_phase_submitted"
     assert [order.symbol for order in broker.submitted if order.side == PortfolioOrderSide.BUY] == ["MSFT"]

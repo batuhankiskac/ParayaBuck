@@ -147,13 +147,13 @@ def test_residual_leg_helpers_map_retry_and_residual_ids_to_their_leg() -> None:
 # (b) a fully filled SELL and a stale snapshot still showing the position: no extra SELL
 
 
-def test_fully_filled_sell_with_stale_snapshot_holds_buys_while_replan_sell_is_owed(tmp_path) -> None:
+def test_fully_filled_sell_with_stale_snapshot_holds_the_replan_sell(tmp_path) -> None:
     """A fully filled SELL, then a snapshot that still shows the sold position.
 
-    The re-plan reads the broker snapshot, so it still asks for a SELL of the
-    excess and submits it under a fresh ``-replan1`` id (C-2); the BUY stays
-    deferred behind it. OPEN RISK: a snapshot that lags the fill makes that
-    SELL an oversell of shares already sold. No ledger guard exists yet.
+    The re-plan reads the broker snapshot, which would ask for a SELL of shares
+    the bot already sold (an oversell, a short on margin). The snapshot's
+    managed quantity is ahead of the booked fills, so nothing is sent and the
+    BUY stays deferred until a fresh snapshot agrees with the fill book.
     """
     broker = _SimBroker((_position("AAPL", 400),))
     runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
@@ -161,16 +161,35 @@ def test_fully_filled_sell_with_stale_snapshot_holds_buys_while_replan_sell_is_o
     sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
     _fill(repository, sell, activity_id="sell-full")
     broker.open_symbols.discard("AAPL")
-    # Stale: the account still shows the position the SELL just sold.
+    # Stale: the account still shows the position the SELL just sold, while the
+    # fill book holds 400 - 250 (the fixture's opening 400 is pinned as booked).
     broker.positions = [_position("AAPL", 400)]
+    repository.owned_quantities = lambda *args, **kwargs: {"AAPL": 400.0 - sell.quantity}
 
     resumed = runtime.advance_rebalance()
 
-    assert resumed is not None and resumed.status == "replan_sell_submitted"
-    sells = [order.client_order_id for order in broker.submitted if order.side == PortfolioOrderSide.SELL]
-    assert sells == [sell.client_order_id, f"{sell.client_order_id}-replan1"]
-    assert not any(order.side == PortfolioOrderSide.BUY for order in broker.submitted)
-    assert not any("-residual" in order.client_order_id for order in broker.submitted)
+    assert resumed is not None and resumed.status == "replan_snapshot_stale"
+    assert [order.client_order_id for order in broker.submitted] == [sell.client_order_id]
+
+
+def test_unreadable_fill_book_holds_the_replan_sell(tmp_path) -> None:
+    broker = _SimBroker((_position("AAPL", 400),))
+    runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.15, "MSFT": 0.20})
+    first = runtime.process_closed_bars(_bars(("AAPL", "MSFT")))
+    sell = next(order for order in first.orders if order.side == PortfolioOrderSide.SELL)
+    _fill(repository, sell, activity_id="sell-full")
+    broker.open_symbols.discard("AAPL")
+    broker.positions = [_position("AAPL", 400)]
+
+    def _broken(*args, **kwargs):
+        raise RuntimeError("negative net")
+
+    repository.owned_quantities = _broken
+
+    resumed = runtime.advance_rebalance()
+
+    assert resumed is not None and resumed.status == "replan_snapshot_stale"
+    assert [order.client_order_id for order in broker.submitted] == [sell.client_order_id]
 
 
 # (c) a rejected SELL leaves no residual: the retry path owns it

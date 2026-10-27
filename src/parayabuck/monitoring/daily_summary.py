@@ -106,12 +106,20 @@ def format_tax_ytd(status: Mapping[str, Any]) -> str:
     the operator sees the gap instead of a silent omission.
     """
     if status.get("status") != "ok":
-        return "tax: rates missing" if status.get("status") == "rates_missing" else f"tax: {status.get('status')}"
+        if status.get("status") == "rates_missing":
+            return "tax: rates missing"
+        if status.get("status") == "tables_missing":
+            return "tax: ledger tables missing"
+        return f"tax: {status.get('status')}"
     net = _number(status.get("net_gain_tl"))
     tax = _number(status.get("estimated_tax_tl"))
     if net is None or tax is None:
         return "tax: rates missing"
-    return f"tax YTD {status.get('year')}: net gain {net:+,.2f} TL, est. tax {tax:,.2f} TL"
+    line = f"tax YTD {status.get('year')}: net gain {net:+,.2f} TL, est. tax {tax:,.2f} TL"
+    # No imported dividend/interest rows: the income side of the estimate is unknown.
+    if status.get("income_declaration_status") == "veri eksik":
+        line += ", income data missing"
+    return line
 
 
 def build_equity_daily_summary(

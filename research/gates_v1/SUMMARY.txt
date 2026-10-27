@@ -1,0 +1,14 @@
+gates_v1 SUMMARY (K vs corrected registry; see docs/research/gates_v1.md)
+verdict: K survives DSR and PBO = False
+K pre-tax anchor: 15.7649 % (published 15.7649 %, diff 0.000008 pp)
+N ledger 321, backfill +44, N corrected 365
+family (C0, A1u, H2, K): rho_bar 0.999845, Meff 1.0005, N_eff 362.00
+K pre-tax: SR ann 0.6840, skew -0.5981, kurt 6.8007, T 6679
+K pre-tax PSR(0) 0.999742; MinTRL(0) 5.9513 y
+K pre-tax DSR (V_floor, N_eff) 0.711979; SR0 ann 0.5739
+K pre-tax MinTRL vs SR0 57784.725500275876 sessions
+K pre-tax DSR, no correlation adjustment (N=365): 0.711120
+K pre-tax DSR, family variance (sensitivity): 0.999699337662072
+K after-tax (progressive) PSR(0) 0.996837; DSR (V_floor, N_eff) 0.425345
+PBO (CSCV, S=16, purge 252, 12870 combinations) = 0.392929
+wall clock: simulation 0.3 s, total 3.5 s

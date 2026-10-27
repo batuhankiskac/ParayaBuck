@@ -1,0 +1,6 @@
+gates_v2 SUMMARY (numbers from RESULTS.json)
+wall_clock_seconds_run: 42.1
+arch 8.0.0
+K pre-tax CAGR 15.765% max_dd 46.670%
+lag K_cagr_percentile 99.60
+PW stationary 1.337 circular 1.531 (fixed 20)

@@ -34,6 +34,15 @@ succeeds only after the queue drains, data gaps clear and reconciliation
 passes, and it clears the reason it verified (plus the halt rows this start
 already re-armed, see "Circuit breaker active").
 
+From the VM shell a mutating call needs the control token header
+(`x-parayabuck-control-token`); without it the request is refused with 403. The same
+header applies to `POST /api/safety/risk-epoch`.
+
+```bash
+TOKEN=$(curl -s http://127.0.0.1:8000/api/control-token | python3 -c 'import json,sys; print(json.load(sys.stdin)["control_token"])')
+curl -s -X POST -H "x-parayabuck-control-token: $TOKEN" http://127.0.0.1:8000/api/engine/reset-safety-lock
+```
+
 ## Intent alarm (`/readyz` 503 with `degraded_reasons`)
 
 An active alarm is now on every operator surface, not only `/readyz`:
@@ -57,11 +66,12 @@ DEGRADED. None of them gate trading.
   events, entry latches and the broker account.
 - `equity_position_over_target` — 30 min after the next NYSE session open the
   account still holds more than the decision targeted, beyond
-  max(1 % of equity, 10 % of the target) — the slack covers exit dust and the
+  max(1 % of equity, 10 % of the target), plus the gain-band allowance when the latest
+  decision deliberately held the position above target — the slack covers exit dust and the
   ordinary price drift of a held position between decisions. In practice a cash target whose DAY SELL
   never filled, leaving the previous position; check the order in
-  `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` /
-  `order_expired` events and the broker account. The window is the next
+  `ops timeline --decision <id>` (expired/cancelled?), `order_rejected` events and the broker account (an expired or cancelled order
+  shows there too). The window is the next
   *session* open, so over a weekend/holiday or an early close it does not
   open early.
 - `equity_signal_source_hold` — the position was deliberately held because the
@@ -79,7 +89,8 @@ Alarms clear by themselves (`intent_recovered`) once reality matches intent.
 | `NO_TARGET_CHANGE` | Target unchanged | Normal |
 | `UNKNOWN` | No evidence names a cause (summary event pruned, or an unrecognised reason) | Not an all-clear: check `ops timeline --decision <id>`, `ops status` and the service log |
 | `REBALANCE_BAND` / `MIN_NOTIONAL` | Drift under 0.5% or order under $10 | Normal; do not lower the thresholds to force trades |
-| `ENTRY_LATCH` | Daily-loss or drawdown latch, or `signal_adjustment_unverified` | Wait for recovery; drawdown needs a risk-epoch reset after review |
+| `ENTRY_LATCH` | Daily-loss or drawdown latch: blocks new BUYs, exits still go out | Wait for recovery; drawdown needs a risk-epoch reset after review |
+| `signal_adjustment_unverified` latch | The split-basis history is not verified: the whole position is held for the session, no BUY and no SELL, exits included | Wait for the hourly `pb-signal-adjustment` check to verify (`ops status`, Adjustment); see the `SIGNAL_HISTORY_UNVERIFIED` category below |
 | `ACCOUNT_STALE` | Account snapshot > 30 s old | See below |
 | `SELL_PHASE_PENDING` | Previous rebalance still selling | `ops timeline --decision <id>` |
 | `AMBIGUOUS_ORDER` / `REBALANCE_BLOCKED` | Broker outcome unknown | Manual, see below |
@@ -93,7 +104,8 @@ fields give `reason` and `attempts`.
 
 - `credentials_missing` / `startup_rejected` — a startup guard refused the
   start (missing keys, tracked `.env` in git, live not armed, config error).
-  Fix the cause; do not bypass the guard. `Auto-start blocked` is deliberate.
+  Fix the cause; do not bypass the guard. The refusals are deliberate: "Engine start refused: this machine is not designated as
+  the trading host" and "Engine start refused: operator halt is in force".
 - `startup_error` — permanent startup error, e.g. Alpaca 401 after a key
   rotation, a SQLite error in `begin_session`, a corrupt peak sidecar, a
   catch-up exception. Fix it, then start the engine from the dashboard.
@@ -174,14 +186,12 @@ then reset from the dashboard once a clean reconcile has run. Never clear
 `safety_incidents` by hand, and never flatten broker positions to "fix"
 drift.
 
-`reconciliation_unexpected_fill_side` is NOT this failure: the reconciler
-skipped broker FILL activities whose side is outside Alpaca's vocabulary
-(`buy`, `sell`, `buy_minus`, `sell_plus`, `sell_short`,
-`sell_short_exempt`) and advanced its cursor. Check
-`parayabuck ops events --kind reconciliation_unexpected_fill_side` for the
-activity ids and symbols. A repeated alert for the same activity means
-Alpaca reports a side this build does not know; the position still has to be
-reconciled by hand, but reconciliation itself is not blocked.
+`reconciliation_unexpected_fill_side` is no longer emitted. The FILL-activity mirror that
+skipped activities whose side is outside Alpaca's vocabulary was removed on 2026-10-06, so
+this build reports no fill side. Older journal rows of that kind can still be listed with
+`parayabuck ops events --kind reconciliation_unexpected_fill_side`. An unexplained fill is
+caught at the order level and fails closed, so treat a position that does not match the
+ledger like any other drift: compare the broker account and fills by hand.
 
 ## Market data degraded (`market_data_degraded`)
 
@@ -221,7 +231,7 @@ close + `signal_cross_check.sip_embargo_minutes` and decides on it.
 ## Ownership drift after a split or a foreign sell
 
 `circuit_breaker` (`ownership_drift` or `reconciliation_failed`), and
-`ops status` → `reconciliation_anomalies` lists a `split_rebase`,
+the `reconciliation_anomalies` list of `/api/status` (not `ops status`) has a `split_rebase`,
 `foreign_sell_reduction` or `stale_ownership_clear` row. The repository's
 share count and the broker's disagree, so every decision — exits included — is
 blocked and dropped, and no reset can succeed until they match. A decision
@@ -306,6 +316,11 @@ two-phase rebalance stays at `buy_ready` until a verified reset submits it.
 Review `active_incidents.json` in the bundle and the broker account, then
 reset. Restarting does not clear it.
 
+If the reset reports stopped shared workers (for example `pb-decisions` after a drift
+halt), the dashboard refuses every reset until the service restarts. Restart with
+`sudo systemctl restart parayabuck` (the halt rows survive it), check `ops status`, then
+reset again.
+
 Two kinds of row never come back after a restart:
 
 - worker restart limits (`pb-decisions_restart_limit` and friends) are not
@@ -329,7 +344,7 @@ is **off**, and the brake is not a scaling rule: the research governors that
 scale exposure with drawdown were rejected (the drawdown-budget governor IC49
 failed stage 1 in `docs/research/batch_bank_v3.md`), so the existing
 `daily_loss_limit_pct` and `max_drawdown_pct` latches keep their current
-meaning: they cap targets at their current weight and never sell.
+meaning: they cap targets at their current weight: they block buying above it, but a target below the held weight still sells.
 
 When enabled, a drawdown at or above `threshold_pct` (for example 0.45) sets
 every managed target to zero and records the reason `drawdown_liquidation` on
@@ -354,10 +369,10 @@ State and wiring, read before enabling:
   as the decision that produced it, so a restart reloads the latched state and
   cannot re-enter a position inside the cooldown. The table is created at start
   up even while the brake is off, but it is never read or written while off.
-- `PortfolioRuntime` accepts the block (`drawdown_liquidation=`) and applies it.
-  The engine (`runtime.py`) does not pass `config.risk.drawdown_liquidation`
-  yet. Until that change lands, setting `enabled: true` has no effect on the
-  running engine.
+- `PortfolioRuntime` accepts the block (`drawdown_liquidation=`) and the engine passes
+  `config.risk.drawdown_liquidation` to it (`runtime.py`), so `enabled: true` takes effect at
+  the next start. Enabling it is a live sell: at the threshold every managed target goes to
+  zero.
 - While the brake is off, the configuration digest and the loaded configuration
   fingerprint are unchanged. Enabling the block changes both, so a standing LIVE
   authorization bound to the old values must be re-approved.
@@ -423,8 +438,10 @@ let it fill; do not delete rows to clear it.
 
 ## Where are the alerts?
 
-Nothing is delivered off the VM any more (no webhook, no dead-man probe since
-2026-10-06), and no health check turns DEGRADED for that reason. Every alert
+Only two things leave the VM, both optional: the dead-man heartbeat
+(`docs/deployment.md`, "Dead-man switch"), which pings an external service and carries no
+alert content, and the opt-in e-mail channel. The webhook was removed on 2026-10-06. No
+health check turns DEGRADED because alert delivery fails. Every alert
 is in the event journal and the service log:
 
 ```bash
@@ -487,12 +504,76 @@ sudo systemctl start parayabuck                           # or the console start
   Stop the engine as shown above.
 - `resume` only removes the marker. Check `parayabuck doctor` and the
   dashboard before starting again.
+- A stop from the dashboard is not sticky (see `docs/operations.md`, "Stop and restart"):
+  `sudo systemctl restart parayabuck` starts the engine again unless this marker exists.
+
+## `paper_incident` categories
+
+Each `paper_incident` alert carries `category=`, one of the twelve categories in
+`docs/paper_incident_taxonomy.md`. Start with `parayabuck ops events --kind paper_incident`,
+which shows the account and the error text.
+
+| Category | Check first | Action |
+|---|---|---|
+| `PROVIDER_UNAVAILABLE` | `ops events --kind data_provider_unavailable`, Alpaca status, `parayabuck doctor` without `--offline` | Retries are automatic. Persistent: fix connectivity or the data plan. |
+| `BROKER_ACCOUNT_STALE` | `/readyz`, account age in `ops status` | Self-clearing. Check broker reachability and the clock; no reset needed. |
+| `POSITION_DRIFT` | `ops bundle` against the Alpaca positions | Halt. Follow "Ownership drift after a split or a foreign sell", then a verified reset. |
+| `ORDER_DRIFT` | open orders at Alpaca against `ops timeline` | Reconciliation retries on its own. If halted, settle the unknown order by hand, then a verified reset. |
+| `PENDING_ORDER_UNKNOWN` | `ops timeline --order <client_order_id>` | Wait for broker finality; the next reconcile settles it. Never resubmit. |
+| `SIGNAL_HISTORY_UNVERIFIED` | `ops status` (Adjustment) and provider coverage | Equity entries and exits are held until the hourly check verifies the history. If it persists, check the digest and the universe. |
+| `DATABASE_ERROR` | disk space, file permissions, `parayabuck backup --verify-only` on the newest backup | Fix the disk or the permissions. Restore only as in "State, backup and restore". |
+| `STATE_RESTORE_FAILED` | `safety_incidents` and the log | Restore the database from a verified backup before any reset. |
+| `DUPLICATE_DECISION` | `portfolio_decisions` count for the period | Informational: the duplicate was skipped. Act only if the count is wrong. |
+| `DUPLICATE_ORDER_RISK` | `ops timeline --order` for the repeated client id | Halt. Verify the order at the broker first; never resubmit. |
+| `CLOCK_OR_SESSION_MISMATCH` | host time against NTP, the log | Sync the clock. Restart the engine if the bars have gaps. |
+| `RESTART_RECOVERY_FAILED` | `safety_incidents` and `runtime_sessions` | Clear each listed reason by its own verified recovery, then reset. |
+
+## Other alerted reasons
+
+### `exit_sell_rejected`
+
+The broker rejected a SELL that exits or reduces QLD. The engine retries it once at the
+next safe account poll, under the client id `<original>-retry1`. A rejected retry is
+alerted again with `state=retry_rejected` and is not retried. Read the rejection text in
+`ops timeline --order <client_order_id>` and on the Alpaca order first. Do not sell by hand
+without deciding how the ledger should see it: a manual reduction is reconciled as a
+foreign sell (`docs/operations.md`, "Splits and foreign sells"). If the exit cannot wait,
+record the decision in `docs/OPERATIONS_LOG.md` before acting.
+
+### `live_rearm_required`, `live_authorization_expiring`, `live_authorization_expired`
+
+- `live_rearm_required`: LIVE is configured but did not start by itself. Run
+  `parayabuck doctor --strict --configured-mode --offline` and read the refusal. Then
+  `parayabuck authorize-live --operator <name> --expires-minutes 30`, arm in the dashboard
+  (`LIVE <suffix>`) and press Start. Open positions stay open meanwhile.
+- `live_authorization_expiring` (within three days): renew with
+  `parayabuck authorize-live --operator <name> --standing-days <n>` before it ends. A running
+  engine keeps running; only the next restart needs the renewal.
+- `live_authorization_expired`: the next restart waits for a manual re-arm, as above.
+- To revoke at any time: `parayabuck authorize-live --revoke-standing`.
+
+### `data_provider_unavailable`
+
+A provider outage at warning level that did not halt the engine (formerly
+`scanner_refresh_failure`). Check `ops events --kind data_provider_unavailable` and Alpaca
+reachability (`parayabuck doctor` without `--offline`). Retries are automatic. If it lasts
+for hours, entries wait on the signal path: see `PROVIDER_UNAVAILABLE` above.
+
+### Market-scope restart-limit halt
+
+A `circuit_breaker` for a worker that exceeded its restart limit (the `<worker>_restart_limit`
+reasons, for example `pb-decisions_restart_limit`). The market is halted until the cause is
+fixed. Read the worker's last errors (`sudo journalctl -u parayabuck --since "2 hours ago"`),
+fix the cause (usually stream connectivity or the data entitlement), then do a verified reset.
+Restart limits are not restored on restart (see "Circuit breaker active"), so a repeat failure
+halts again by itself. If the reset reports stopped shared workers, see "Circuit breaker active".
 
 ## Credentials from systemd (`LoadCredentialEncrypted=`)
 
 Alpaca keys are read first from `$CREDENTIALS_DIRECTORY/<ENV_NAME>` (systemd's
 private credentials directory), then from `.env`, then from the process
-environment. The SMTP login is still read from the environment only. Put the secret in systemd
+environment. The SMTP login uses the same order (`PARAYABUCK_SMTP_USERNAME` / `PARAYABUCK_SMTP_PASSWORD`).
+Put the secret in systemd
 credentials to keep it out of plain-text files:
 
 ```bash
@@ -535,4 +616,4 @@ With the pin set, a mismatched account is refused with
 `broker account does not match broker.expected_account_id`, and so is an
 account number that cannot be read. Leave the block out to keep the previous
 behaviour. The pin is checked by the `authorize-live` command and the LIVE arm
-in the console; the PAPER runtime start check is not wired to it yet.
+in the console, and the PAPER runtime start checks it too.

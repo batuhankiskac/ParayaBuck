@@ -24,7 +24,10 @@ block bootstrap parallelised over paths.
 cells identical to the last bit (no fastmath, operation order preserved), and 5,360 published
 `band_h2_combo_v1` cells (pre-tax, R-USD, after-tax windows at $10k–$1M, m = 4, OOS, 21 ETFs,
 E1/E2/E3/E5, B1/B2 bootstraps) within 5e-7, i.e. the rounding of `RESULTS.json` itself. Rerun by
-the orchestrator (`python -m research.fast_engine.parity --quick`): PASS in 11 s.
+the orchestrator (`python -m research.fast_engine.parity --quick`): PASS in 11 s. The
+harness is not on `main`: check out the tag in a separate worktree first
+(`git worktree add <dir> archive/research/fast-engine-v1-2026-10`) and run the command
+there with the research venv (`~/.venvs/pb-research`), never from the main checkout.
 
 **Why earlier speed-ups did not help research.** Commits `c4943f7b` and `88e0c97c` (2.3×)
 accelerated the production backtest in `src/`; every research study copied its own pure-Python

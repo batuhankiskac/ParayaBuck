@@ -114,7 +114,7 @@ fails trading, and no health check depends on alert delivery.
 | `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | warning |
 | `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | warning |
 | `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | warning |
-| `reconciliation_unexpected_fill_side` | A broker FILL activity carried a side outside Alpaca's vocabulary; it is skipped and the cursor advanced, never fatal | warning |
+| `reconciliation_unexpected_fill_side` | Not emitted by this build: the FILL-activity mirror that raised it was removed on 2026-10-06 (commit `d88e6c91`); older journal rows may still exist | warning |
 | `paper_receipt` | Per-decision receipt (high volume) | info |
 | `exit_sell_rejected` | The broker rejected a SELL (an exit or a reduction of QLD). The engine retries it **once** at the next safe account poll (running, not warming up, no breaker or entry halt, no open order in the symbol) with the client id `<original>-retry1`, re-sized to the managed quantity still held; a rejected retry is alerted again (`state=retry_rejected`) and never retried | warning |
 | `live_rearm_required` | LIVE is configured but did not start by itself (no valid standing LIVE authorization, or a LIVE gate is closed) | warning |
@@ -124,7 +124,8 @@ fails trading, and no health check depends on alert delivery.
 E-mail (opt-in) forwards `runtime_stopped_unexpected`, `runtime_start_failed`,
 `circuit_breaker`, `drawdown_halt`, `risk_incident`, `ambiguous_order`,
 `paper_incident`, `order_rejected`, `exit_sell_rejected`, `intent_alarm`,
-`reconciliation_failure`, the three LIVE notices and, when
+`reconciliation_failure`, the three LIVE notices, `market_data_degraded`,
+`data_provider_unavailable`, `backup_failed` and, when
 `alerting.email.daily_summary` is true, `daily_summary`. Delivery is
 asynchronous and bounded (same incident at most every 30 min, at most 20 mails
 an hour); it never blocks or fails trading.
@@ -155,6 +156,14 @@ Transient auto-start retries keep the state at `starting` and back off
 5/15/30/60 s indefinitely; the alert fires from the third attempt and then
 every tenth, with `attempts`. `curl -s http://127.0.0.1:8000/readyz` gives the
 same verdict by hand (`engine_state`, `engine_error`, `start_retry_attempt`).
+
+### Stop and restart
+
+A stop from the dashboard is not sticky: nothing persists it, so it lasts only until
+the process restarts. `sudo systemctl restart parayabuck` (every deploy) starts the
+engine again when auto-start is allowed. To keep the engine down across restarts,
+set the operator halt first (`parayabuck halt`, see `docs/operator_runbook.md`,
+"Operator halt").
 
 ### Daily summary
 
@@ -201,7 +210,7 @@ closes included).
 |---|---|
 | `equity_decision_missing` | No decision persisted for the last NYSE session by ITS close (16:00 ET, 13:00 ET on an early close) + `equity_decision_grace_minutes` |
 | `equity_position_under_target` | Latest decision targets a positive weight, but after the next open + `equity_fill_grace_minutes` the account holds less than `minimum_held_fraction` of it |
-| `equity_position_over_target` | The account still holds more than the decision targeted after the fill window — the everyday case is a cash target whose DAY SELL never filled. Residual dust under 1 % of equity is tolerated |
+| `equity_position_over_target` | The account still holds more than the decision targeted after the fill window — the everyday case is a cash target whose DAY SELL never filled. The tolerance is the larger of 1 % of equity and 10 % of the target, plus the gain-band allowance when the latest decision deliberately held the position above target |
 | `equity_signal_source_hold` | The decision deliberately held the position because the IEX stream bar and the SIP daily bar disagree on the trend (see `signal_cross_check:`) |
 
 `intent_watchdog` keys: `enabled` (true), `equity_decision_grace_minutes`
@@ -215,8 +224,9 @@ The unit is `Type=notify` with `WatchdogSec=300`. The web process (`parayabuck
 web`) sends `READY=1` from its lifespan once the app is serving, whether or not
 the engine starts. A pinger thread sends `WATCHDOG=1` every 30 s while the
 engine gate allows it: no engine running (stopped, halted, never started), or
-a running engine whose account loop completed a successful pass within the last
-120 s. A hung account loop therefore stops the pings and systemd restarts the
+a running engine whose account loop completed any pass within the last
+120 s. A pass that raises still counts, so an outage does not restart-loop the
+unit; what stops the pings is an account loop that stops passing altogether. A hung account loop therefore stops the pings and systemd restarts the
 unit after `WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the
 sends are no-ops.
 
@@ -426,6 +436,13 @@ Known modelling differences (accepted, not bugs):
   engine constants with no config key, so they are not part of the
   configuration digest; they bind only when an order exceeds 10 % of a thin
   symbol's average volume.
+- **Cost basis of the K gate.** The production backtest charges the `backtest` block
+  costs (`slippage_bps`, `spread_bps`; about 3 bps per side as shipped). The K research
+  gate charged 8 bps per side: a base of 4 bps multiplied by `cost_multiplier=2`. A
+  production backtest of K therefore reads about 0.2 pp CAGR higher than the gate. To
+  compare like with like, run `run_product_backtest` with `cost_bps_per_side=4` and
+  `cost_multiplier=2` (the multiplier scales the base, so `cost_bps_per_side=8` with it
+  would charge 16 bps) and state the setting in the report.
 
 ## State, backup and restore
 
@@ -588,8 +605,9 @@ actionable incident for the rest:
 ```
 
 Every rebase writes one row to `portfolio_ownership_adjustments` and appears
-as a reconciliation anomaly (`ops status` → `reconciliation_anomalies`,
-dashboard → ownership). The command never flattens or cancels anything at the
+as a reconciliation anomaly in the `reconciliation_anomalies` list of
+`curl -s http://127.0.0.1:8000/api/status` (`ops status` does not print it). If the
+dashboard does not show the anomaly rows, read them from `/api/status`. The command never flattens or cancels anything at the
 broker.
 
 This applies only to shares the bot owns. Inventory nobody claims is treated
@@ -616,11 +634,13 @@ and the session enforces that rather than trusting every test:
   `logs` before `pytest -q` and verifies the tree is byte-identical (and gained
   no files) afterwards.
 - Process singletons (the alert throttle state, the Web backtest manager) and
-  the process environment (`CONFIG_PATH`, which `parayabuck web --config`
+  the process environment (`CONFIG_PATH`, which `parayabuck --config <file> web`
   exports for the process it serves) are restored around every test, so the
   suite passes in any order.
 
-Run it the way CI does: `PYTHONPATH=src ./.venv/bin/python -m pytest -q -o pythonpath=src`.
+Run it the way CI does (the `quality` job in `.github/workflows/ci.yml`): install the
+package without dependencies (`./.venv/bin/python -m pip install --no-deps .`), then run
+`./.venv/bin/python -m pytest -q`.
 
 ## PAPER rules
 

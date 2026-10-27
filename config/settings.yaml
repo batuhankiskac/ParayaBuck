@@ -96,7 +96,7 @@ risk:
   daily_loss_limit_pct: 0.20
   max_drawdown_pct: 0.75
   # Optional catastrophe brake, default off (docs/operator_runbook.md,
-  # "Drawdown liquidation"). Uncomment to enable; the runtime wiring is pending.
+  # "Drawdown liquidation"). Uncomment to enable: the runtime passes it on, and enabling it sells every managed target to zero at the threshold.
   # drawdown_liquidation:
   #   enabled: false
   #   threshold_pct: 0.45
@@ -128,6 +128,7 @@ live:
   buy_gap_margin_pct: 0.03
 engine:
   event_grace_seconds: 5
+  # The effective bound is max(this, 30 s): the session-close flush floor in runtime.py.
   data_finalization_grace_seconds: 2
   maximum_queue_age_seconds: 30
   account_poll_interval_seconds: 15
@@ -184,7 +185,7 @@ alerting:
   email:
     # Disabled: nothing leaves this host. To enable, see docs/deployment.md
     # "E-mail alerts". The SMTP login comes only from PARAYABUCK_SMTP_USERNAME
-    # and PARAYABUCK_SMTP_PASSWORD in the .env, never from this file.
+    # and PARAYABUCK_SMTP_PASSWORD (the environment or systemd credentials), never from this file.
     enabled: false
     smtp_host: ""
     smtp_port: 587

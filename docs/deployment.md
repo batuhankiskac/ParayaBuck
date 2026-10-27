@@ -30,8 +30,8 @@ console, settings and backtests work and the engine refuses to start — see
 
 | File | Purpose |
 |---|---|
-| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `TimeoutStopSec=120`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/`, plus the sandbox below |
-| `parayabuck-backup.service` | Oneshot `parayabuck backup`, same env file and sandbox; `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=120`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below |
+| `parayabuck-backup.service` | Oneshot `parayabuck backup`, the sandbox below and its own narrow env file `.env.backup` (see "Backup environment file"); `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
 | `parayabuck-deadman.service` | Oneshot `python -m parayabuck.monitoring.deadman`: pings the external heartbeat (see the dead-man section); `LoadCredential=` for the URL, no writes |
 | `parayabuck-deadman.timer` | `OnBootSec=3min`, `OnUnitActiveSec=5min`, `Persistent=true` |
@@ -45,6 +45,16 @@ glibc's interface probe in `getaddrinfo`), `RestrictNamespaces`,
 `SystemCallFilter=@system-service` (denied calls fail with `EPERM`, never kill
 the process). `MemoryDenyWriteExecute` stays off for CPython/numpy. Check the
 result with `systemd-analyze security parayabuck` after installing.
+
+`parayabuck.service` gives up after five failed starts in 600 s
+(`StartLimitBurst=5`, `StartLimitIntervalSec=600`), so a start that keeps failing
+(a broken restore, a bad config) ends in `failed` instead of retrying every 10 s.
+No `OnFailure=` unit ships, so nothing is e-mailed for that stop: check
+`systemctl status parayabuck` and `journalctl -u parayabuck`. After the cause is
+fixed: `sudo systemctl reset-failed parayabuck && sudo systemctl start parayabuck`.
+The preflight runs a full SQLite `integrity_check` on every start; on a large
+ledger that adds start time, and `PRAGMA quick_check` is the cheaper check if it
+becomes a problem (the shipped unit still runs the full one).
 
 There is no watchdog unit any more: `parayabuck ops watchdog` and
 `parayabuck-watchdog.{service,timer}` existed only to deliver a dead-man alert
@@ -90,6 +100,26 @@ is accessible by group or other users, `doctor` prints a WARN line with the
 | `OPEN_BROWSER` | no | `0` on the VM |
 | `LOG_LEVEL` | no | default `INFO` |
 | `PARAYABUCK_OPERATOR_APPROVAL_KEY` | live only | unused in PAPER |
+
+### Backup environment file
+
+`parayabuck-backup.service` does not read `.env`. It reads
+`/opt/parayabuck/.env.backup` (mode `0600`, owned by `parayabuck`) and sets
+`ENV_PATH` to that file, so the backup process and the off-host copy command it
+starts inherit only what the file holds. The Alpaca keys,
+`PARAYABUCK_OPERATOR_APPROVAL_KEY` and `PARAYABUCK_ENABLE_LIVE` stay in `.env` only.
+
+| Variable | Required | Notes |
+|---|---|---|
+| `CONFIG_PATH` | yes | `./config/settings.yaml` |
+| `PARAYABUCK_BACKUP_OFFHOST_CMD` | optional | the off-host copy command (see "Off-host backup copy") |
+| `PARAYABUCK_SMTP_USERNAME`, `PARAYABUCK_SMTP_PASSWORD` | e-mail only | so that a `backup_failed` mail can be sent |
+| `GOOGLE_APPLICATION_CREDENTIALS` | copy tool only | key file mode `0400`, owned by `parayabuck` |
+
+Create it once and fill it: `sudo install -m 0600 -o parayabuck -g parayabuck /dev/null /opt/parayabuck/.env.backup`.
+A host installed before this change keeps the old `.env` wiring until the backup
+unit is re-copied; `systemctl cat parayabuck-backup | grep -E 'EnvironmentFile|ENV_PATH'`
+shows which one is in force.
 
 ### Where alerts go
 
@@ -208,8 +238,8 @@ the external check then alarms on the missing ping.
 
 ### Off-host backup copy and monthly restore drill (optional)
 
-Local snapshots stay on the VM disk. Set `PARAYABUCK_BACKUP_OFFHOST_CMD` in the
-env file to copy each verified snapshot off the host, for example:
+Local snapshots stay on the VM disk. Set `PARAYABUCK_BACKUP_OFFHOST_CMD` in
+`/opt/parayabuck/.env.backup` to copy each verified snapshot off the host, for example:
 
 ```bash
 PARAYABUCK_BACKUP_OFFHOST_CMD=gsutil cp {path} gs://<bucket>/parayabuck/
@@ -221,7 +251,7 @@ verified local snapshot and emits `backup_failed` (reason
 `offhost_copy_failed`), which the e-mail channel forwards. The backup unit runs
 with `ProtectHome=true`, so the copy tool cannot read credentials from the
 deploy user's home: point it at a service-account key the `parayabuck` user can
-read (for example `GOOGLE_APPLICATION_CREDENTIALS` in the env file, with the key
+read (for example `GOOGLE_APPLICATION_CREDENTIALS` in `.env.backup`, with the key
 file mode `0400` and owned by `parayabuck`). Check the tool once by hand as the
 `parayabuck` user before relying on the timer.
 
@@ -280,17 +310,32 @@ login (`PARAYABUCK_SMTP_USERNAME` / `PARAYABUCK_SMTP_PASSWORD`) and the LIVE key
 (`ALPACA_LIVE_API_KEY` / `ALPACA_LIVE_SECRET_KEY`) work the same way. Rollback:
 delete the drop-in, put the lines back in `.env`, restart.
 
+**Rebuilt or restored host (disaster recovery).** A `.cred` file is encrypted
+with that host's key, so it does not decrypt on a rebuilt VM or on a restored
+disk image. On the new host, repeat the `systemd-creds encrypt` commands above
+with the values from your secret store, add the drop-in and verify `/readyz`.
+Keep the plain lines in `.env` until the new host is verified: the rollback path
+above assumes they are still there.
+
 ## First install (fresh VM)
 
 ```bash
-sudo useradd --system --home /opt/parayabuck --create-home parayabuck
-# full bundle from the laptop: `git bundle create pb.bundle main`, scp it, then
-sudo -u parayabuck git clone -b main ~/pb.bundle /opt/parayabuck
+sudo useradd --system --home /opt/parayabuck --no-create-home parayabuck
+# An empty directory owned by the service user is what git clone needs.
+sudo install -d -o parayabuck -g parayabuck -m 0750 /opt/parayabuck
+# Full bundle from the laptop (`git bundle create pb.bundle main`), copied to a path
+# the service user can read: the deploy user's home may not be readable by it.
+gcloud compute scp pb.bundle <vm>:/var/tmp/pb.bundle --zone <zone>
+sudo -u parayabuck git clone -b main /var/tmp/pb.bundle /opt/parayabuck
 cd /opt/parayabuck
 sudo -u parayabuck python3 -m venv .venv
-sudo -u parayabuck .venv/bin/pip install -r requirements.lock
+sudo -u parayabuck .venv/bin/pip install --require-hashes -r requirements.lock
 sudo -u parayabuck .venv/bin/pip install -e . --no-deps
-sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env   # then fill it
+# The unit's ReadWritePaths (config/, data/, reports/) must exist before the first start.
+sudo install -d -o parayabuck -g parayabuck -m 0750 data reports
+sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env
+sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env.backup   # see "Backup environment file"
+# Fill both files now, then run the preflight (it refuses an empty .env):
 sudo -u parayabuck .venv/bin/parayabuck doctor --strict --configured-mode --offline
 sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -359,10 +404,17 @@ Alpaca dashboard (or `GET /positions`, `GET /orders?status=open`) before
 ## Update by git bundle
 
 On the laptop (`<deployed-sha>` = the commit the VM runs, from
-`docs/OPERATIONS_LOG.md` or `git -C <checkout> rev-parse HEAD` on the VM):
+`docs/OPERATIONS_LOG.md` or `git -C <checkout> rev-parse HEAD` on the VM). Ship only
+a commit that is on `origin/main` and whose CI run is green:
 
 ```bash
-git bundle create /tmp/pb-update.bundle <deployed-sha>..main
+git fetch origin main
+git rev-parse origin/main                                  # the commit that ships
+gh run list --workflow=ci.yml --branch=main --limit=1 --json headSha,conclusion
+# headSha must be that commit and conclusion must be "success"; otherwise do not ship
+git bundle create /tmp/pb-update.bundle <deployed-sha>..origin/main
+git bundle verify /tmp/pb-update.bundle                    # must end with "is okay"
+shasum -a 256 /tmp/pb-update.bundle                        # record this checksum
 gcloud compute scp /tmp/pb-update.bundle <vm>:~/pb-update.bundle --zone <zone>
 ```
 
@@ -370,16 +422,23 @@ On the VM, in the checkout:
 
 ```bash
 .venv/bin/parayabuck backup --label predeploy     # verified snapshot first; never auto-pruned
+sha256sum ~/pb-update.bundle                              # must equal the laptop checksum
+git bundle verify ~/pb-update.bundle                       # must end with "is okay"
 git fetch ~/pb-update.bundle main:refs/remotes/bundle/main
 git log --oneline HEAD..bundle/main               # review what ships
 git merge --ff-only bundle/main
 .venv/bin/pip install -e . --no-deps              # when dependencies or entry points changed
 # when requirements.lock changed: the lock is a closed closure, so every
 # transitive dependency is pinned there — reinstall the whole file
-.venv/bin/pip install -r requirements.lock   # skip when the lock is unchanged
+.venv/bin/pip install --require-hashes -r requirements.lock   # skip when the lock is unchanged
 .venv/bin/parayabuck doctor --strict --configured-mode --offline
 sudo systemctl restart parayabuck
 ```
+
+A dashboard stop does not survive the `systemctl restart` above: the engine starts
+again unless the operator halt marker is set. Run `parayabuck halt --reason ...`
+before the restart when the engine must stay down (see `docs/operator_runbook.md`,
+"Operator halt").
 
 `requirements.lock` is a complete, closed runtime closure (every transitive
 dependency pinned, nothing resolved at install time) and it matches the
@@ -480,7 +539,11 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
    standing HMAC, the account id, and that the LIVE key is a live account
    (`PA...` paper accounts are refused).
 7. Go back to PAPER by setting `runtime.mode: paper` (the dashboard mode chip
-   clears the cap and approval path) and restarting.
+   clears the cap and approval path) and restarting. **Before the switch**, decide what
+   happens to any LIVE QLD position: the PAPER engine does not check the LIVE account
+   and never manages it, so a LIVE position left open after the switch is unmanaged
+   until LIVE is armed again. Close it in the Alpaca LIVE dashboard first, or write
+   down that it is being left open and who watches it.
 
 ## Rollback
 
@@ -497,6 +560,13 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
    may not open a DB a newer build migrated, so keep the pre-deploy backup
    until the release is stable. Otherwise keep the current ledger — it holds
    fills the broker already executed.
+
+   **Builds before 2026-10-01 (before commit `58716d01`).** Those builds subtract
+   split-rebase rows without the sign current builds use, and they do not check the
+   schema version. A current database rolled back to one of them opens without an
+   error and misreads the split-rebase (+1) rows, so the loud schema errors above do
+   not hold for that rollback. For such a rollback restore the pre-deploy `--label`
+   snapshot instead of running the old build on the migrated database.
 4. Broker state is authoritative. The engine reconciles the ledger to the
    Alpaca account on every start and halts on mismatch. Never flatten or cancel
    broker positions as part of a rollback.

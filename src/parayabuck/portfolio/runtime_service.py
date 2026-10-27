@@ -56,7 +56,7 @@ from parayabuck.portfolio.base import (
     require_product_universe_dependency,
 )
 from parayabuck.portfolio.models import MAX_WEIGHT, TargetPortfolio, TargetWeight
-from parayabuck.portfolio.ownership_rebase import BUY
+from parayabuck.portfolio.ownership_rebase import ACQUIRE, BUY
 from parayabuck.portfolio.runtime_models import (
     _AMBIGUOUS_ORDER_STATUSES,
     REBALANCE_PHASE_BLOCKED,
@@ -810,7 +810,9 @@ class PortfolioRuntime:
             for occurred_at, kind, quantity, price, _fee in self.repository._owned_events(
                 self.account_id, symbol, self.market
             )
-            if kind == BUY and price is not None and quantity > 0
+            # ACQUIRE lots are open lots too (owned_fifo_lots keeps them), so
+            # they take their place in the pairing (F2-4-4).
+            if kind in (BUY, ACQUIRE) and price is not None and quantity > 0
         ]
         if count <= 0 or len(buys) < count:
             return None

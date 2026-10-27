@@ -1345,7 +1345,9 @@ def expected_vs_actual(
     adverse_bps: float | None = None
     if average_fill_price is not None and reference_price:
         adverse_bps = slippage_bps(average_fill_price, reference_price, side)
-    complete = actual_quantity >= expected_quantity - 1e-12 and expected_quantity > 0
+    # The same band as the broker and reconcile fill checks (T2-4-7), so a fill
+    # the runtime calls "done" is not reported as incomplete here.
+    complete = actual_quantity >= expected_quantity - max(1e-9, expected_quantity * 1e-8) and expected_quantity > 0
     return {
         "client_order_id": client_order_id,
         "symbol": symbol,

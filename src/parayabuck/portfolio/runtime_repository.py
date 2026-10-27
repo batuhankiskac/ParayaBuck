@@ -38,6 +38,7 @@ from parayabuck.portfolio.ownership_rebase import (
     BUY,
     FOREIGN_SELL_KIND,
     MATCH,
+    QUANTITY_MATCH_FLOOR,
     QUANTITY_TOLERANCE,
     SELL,
     SPLIT,
@@ -1764,7 +1765,7 @@ class PortfolioStateRepository:
                     if side == "sell"
                     else realized_pnl
                 )
-                self.store.connection.execute(
+                fill_insert = self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
                         fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds,
@@ -1786,6 +1787,14 @@ class PortfolioStateRepository:
                         int(observed_fee),
                     ),
                 )
+                if fill_insert.rowcount != 1:
+                    # The activity id is already booked, so this delta would advance
+                    # the order cumulative and the stale-clear consumption with no
+                    # fill row, and the ledger and the lots would silently disagree.
+                    # Refuse the whole update instead (F2-4-2).
+                    raise RuntimeError(
+                        f"portfolio fill {activity_id} for {client_order_id} is already booked; refusing a second booking"
+                    )
                 if side == "sell":
                     # A real SELL fill proves the sale that a stale-clear
                     # adjustment assumed; consume the adjustment instead of
@@ -2203,10 +2212,14 @@ class PortfolioStateRepository:
                 remaining -= taken
             if remaining > max(1e-9, quantity * QUANTITY_TOLERANCE):
                 raise LotBookInconsistency(sell_quantity=quantity, open_quantity=open_quantity, symbol=symbol)
+            # Shares past the open lots, inside the band, are float noise: they
+            # are left out of the sale instead of being booked at the full
+            # price with zero cost (T2-4-2). The fee follows the matched shares.
+            matched = quantity - max(0.0, remaining)
         except LotBookInconsistency as error:
             log.warning("Realized P&L for %s booked as 0.0: %s", symbol, error)
             return 0.0
-        return (sell_price * quantity - sell_fee) - cost_of_consumed
+        return (sell_price * matched - sell_fee * (matched / quantity)) - cost_of_consumed
 
     def reconcile_broker_quantity(
         self,
@@ -2454,7 +2467,7 @@ class PortfolioStateRepository:
             if abs(adjustment) <= 1e-12:
                 return plan(NO_BOOKING, "ownership already matches the broker quantity")
             if expected_owned is not None and abs(owned - expected_owned) > max(
-                1e-9, expected_owned * QUANTITY_TOLERANCE
+                QUANTITY_MATCH_FLOOR, expected_owned * QUANTITY_TOLERANCE
             ):
                 return plan(
                     REFUSED_BOOKING,

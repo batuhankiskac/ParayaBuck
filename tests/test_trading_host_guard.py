@@ -131,7 +131,11 @@ def test_web_main_exports_named_config_path(tmp_path: Path, monkeypatch: Any) ->
     monkeypatch.delenv("OPEN_BROWSER", raising=False)
     monkeypatch.setattr(web_app, "_probe_web_bind", lambda *_args, **_kwargs: None)
     served: dict[str, Any] = {}
-    monkeypatch.setattr(web_app.uvicorn, "run", lambda app, host, port, **_kwargs: served.update(host=host, port=port))
+    monkeypatch.setattr(
+        web_app._ExitingServer,
+        "run",
+        lambda server: served.update(port=server.config.port),
+    )
 
     web_app.main(config_path=str(config_path))
 

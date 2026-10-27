@@ -444,12 +444,16 @@ def test_verification_does_not_clear_a_halt_that_changed_while_it_ran(tmp_path: 
     ledger.close()
 
 
-def test_verification_clears_the_halt_it_verified(tmp_path: Path) -> None:
+def test_verification_clears_the_halt_it_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime, ledger = _runtime(tmp_path)
     halts: dict[Market, str | None] = {Market.EQUITY: "pb-stocks_restart_limit"}
     runtime._restart_stream_worker = lambda _market: True  # type: ignore[method-assign]
+    # The delivery wait runs after the reconcile lock is released (C2-10-2):
+    # verification re-arms the worker, confirmation clears the halt.
+    monkeypatch.setattr(runtime, "_stream_restart_delivering", lambda _market: True)
 
-    runtime._verify_market_halts(halts)
+    pending = runtime._verify_market_halts(halts)
+    runtime._confirm_stream_restarts(halts, pending)
 
     assert halts[Market.EQUITY] is None
     ledger.close()
@@ -464,6 +468,8 @@ def test_stop_joins_its_spawned_threads_outside_the_spawn_locks(monkeypatch: pyt
     observed: list[tuple[str, bool, bool]] = []
 
     class _Thread:
+        ident = 1  # started; stop() skips unstarted threads (C2-9-3)
+
         def __init__(self, name: str) -> None:
             self.name = name
 

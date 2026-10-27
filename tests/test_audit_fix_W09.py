@@ -674,10 +674,12 @@ def _run_main_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, stop_fail
     monkeypatch.setitem(sys.modules, "parayabuck.web.server", fake_server)
     seen: dict[str, Any] = {}
 
-    def fake_run(_app: Any, **kwargs: Any) -> None:
-        seen.update(kwargs)
+    def fake_run(server: Any) -> None:
+        # The web entry point serves through its own uvicorn Server subclass
+        # (R2-4-1); the fake records the config it would have served with.
+        seen.update(timeout_graceful_shutdown=server.config.timeout_graceful_shutdown)
 
-    monkeypatch.setattr(app_module.uvicorn, "run", fake_run)
+    monkeypatch.setattr(app_module._ExitingServer, "run", fake_run)
     monkeypatch.setattr(app_module, "_probe_web_bind", lambda host, port: None)
     monkeypatch.setattr(app_module, "setup_logging", lambda **_kwargs: None)
     monkeypatch.setenv("CONFIG_PATH", str(tmp_path / "missing-settings.yaml"))

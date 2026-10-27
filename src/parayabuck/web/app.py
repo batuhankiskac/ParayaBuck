@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import os
+import signal
 import socket
+import threading
 import webbrowser
+from collections.abc import Iterator
 from pathlib import Path
 from threading import Thread
 from time import sleep
 
 import uvicorn
 import yaml
+from uvicorn.server import HANDLED_SIGNALS
 
 from parayabuck.logger import setup_logging
 from parayabuck.trading_host import trading_host_authorized
@@ -17,6 +24,43 @@ from parayabuck.trading_host import trading_host_authorized
 # at shutdown. It must stay well below the unit's TimeoutStopSec (180 s) so systemd
 # never SIGKILLs a process that is still persisting its journal.
 _GRACEFUL_SHUTDOWN_SECONDS = 30
+
+_log = logging.getLogger("parayabuck.web.app")
+
+
+class _ExitingServer(uvicorn.Server):
+    """uvicorn Server that returns after a stop signal instead of re-raising it.
+
+    uvicorn's ``capture_signals`` re-raises the captured signal once it has put
+    the previous handlers back. For SIGTERM that default action ends the process
+    inside ``uvicorn.run``, so ``main`` never reached its engine-stop check and
+    systemd saw a clean stop (R2-4-1). This keeps uvicorn's handler install,
+    restore and graceful shutdown, and returns normally so ``main`` decides the
+    exit status. It also refuses a pending engine start before uvicorn waits for
+    open connections (R2-4-2).
+    """
+
+    @contextlib.contextmanager
+    def capture_signals(self) -> Iterator[None]:
+        # Signals can only be listened to from the main thread.
+        if threading.current_thread() is not threading.main_thread():
+            yield
+            return
+        original_handlers = {sig: signal.signal(sig, self.handle_exit) for sig in HANDLED_SIGNALS}
+        try:
+            yield
+        finally:
+            for sig, handler in original_handlers.items():
+                signal.signal(sig, handler)
+
+    async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+        request_shutdown = getattr(getattr(self.config.app, "state", None), "engine_request_shutdown", None)
+        if callable(request_shutdown):
+            try:
+                await asyncio.to_thread(request_shutdown)
+            except Exception as exc:
+                _log.warning("Startup cancellation before connection drain failed: %s", exc)
+        await super().shutdown(sockets=sockets)
 
 
 def _probe_web_bind(host: str, port: int) -> None:
@@ -122,7 +166,16 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
 
     from parayabuck.web.server import app
 
-    uvicorn.run(app, host=host, port=port, log_level="info", timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS)
+    server = _ExitingServer(
+        uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level="info",
+            timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS,
+        )
+    )
+    server.run()
     if getattr(getattr(app, "state", None), "engine_stop_failed", False):
         # The engine's workers did not stop. Exit non-zero: a clean exit would
         # hide the still-running workers from systemd and the operator.

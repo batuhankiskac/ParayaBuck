@@ -84,7 +84,10 @@ async def _await_startup_attempt(task: asyncio.Task[None], manager: Any) -> None
     """Wait for the auto-start task for a bounded time while retry sleeps are cancelled.
 
     Past the bound the task is left to finish on its own: the stop that follows
-    marks the attempt interrupted, and the attempt then stops its runtime itself.
+    marks the attempt interrupted, and the attempt then stops its runtime itself
+    while the process is still up. An attempt still blocked in a broker call when
+    the process exits is abandoned; its open orders are left to reconciliation at
+    the next start.
     """
     deadline = time.monotonic() + _SHUTDOWN_START_WAIT_SECONDS
     cancel = getattr(manager, "_cancel_pending_retry", None)
@@ -143,6 +146,11 @@ def create_lifespan(state_provider: Any) -> Any:
                 manager = resolved
 
         auto_start_task: asyncio.Task[None] | None = None
+        request_shutdown = getattr(manager, "request_shutdown", None) if manager is not None else None
+        if callable(request_shutdown) and getattr(_app, "state", None) is not None:
+            # Read by the web server's shutdown before uvicorn waits for open
+            # connections, so a start is refused and cancelled during that wait too (R2-4-2).
+            _app.state.engine_request_shutdown = request_shutdown
         # Install the opt-in e-mail sink before anything can alert (a failed
         # auto-start, a LIVE engine waiting for re-arm). Never fatal.
         configure_alerts = getattr(manager, "configure_alert_delivery", None) if manager is not None else None
@@ -174,8 +182,8 @@ def create_lifespan(state_provider: Any) -> Any:
             if manager is not None:
                 # Refuse a start that has not begun and cancel the in-flight one
                 # BEFORE waiting on it: otherwise its resume/catch-up steps can
-                # submit orders during the shutdown wait.
-                request_shutdown = getattr(manager, "request_shutdown", None)
+                # submit orders during the shutdown wait. The web server already
+                # made this call before uvicorn's connection drain; repeating it is harmless.
                 if callable(request_shutdown):
                     try:
                         request_shutdown()

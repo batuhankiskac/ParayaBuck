@@ -195,6 +195,10 @@ the file, so they keep auto-start. For a hard stop that also refuses manual star
 set the operator halt first (`parayabuck halt`, see `docs/operator_runbook.md`,
 "Operator halt").
 
+A Stop pressed while a start is still in progress answers `stopping`, not
+`stopped`. The start attempt aborts before it submits any order (resume and
+catch-up are refused) and the engine reads `stopped` once that attempt has ended.
+
 A settings save never restarts a running engine by itself. The save request
 carries `restart_engine`, which defaults to `false` on the API: while the
 engine runs, a save that changes runtime settings is refused with "Stop the
@@ -271,7 +275,9 @@ missing worker record is not counted). A pass that raises still counts, so an
 outage does not restart-loop the unit. What stops the pings is an account loop
 that stops passing altogether, or a decision worker that stops beating. A hung
 loop therefore stops the pings and systemd restarts the unit after
-`WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
+`WatchdogSec`. A stop that did not finish stops the pings too: state `stop_failed`,
+or `stopping` for more than 150 s (below the unit's `TimeoutStopSec=180`). Outside
+systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
 
 **VM state (as of 2026-10-27).** The VM's unit is `Type=simple` with no
 `WatchdogSec`, so a wedged account loop is not restarted by systemd. Its deadman

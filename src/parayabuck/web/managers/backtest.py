@@ -8,7 +8,7 @@ import re
 import shutil
 import threading
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -48,6 +48,9 @@ class BacktestManager:
         self.progress: list[str] = []
         self.summary: dict[str, Any] | None = None
         self.universe: dict[str, Any] | None = None
+        # The window the run was started with, shown next to the summary so
+        # a 90-day figure is never read as a multi-year one.
+        self.period: dict[str, Any] | None = None
         self._engine_state_provider = engine_state_provider
         self.reports_root = Path("reports")
 
@@ -90,10 +93,12 @@ class BacktestManager:
             self.error = None
             self.summary = None
             self.universe = None
+            self.period = None
             self.progress = []
             try:
                 # Validate all user input before publishing a running state.
                 argv = self._build_argv(payload, self.output_dir)
+                self.period = self._period_from_argv(argv)
                 self._prune_web_runs()
                 thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
                 self._thread = thread
@@ -170,6 +175,13 @@ class BacktestManager:
                 raise ValueError("Parameters are too large in total")
             argv += ["--param", f"{name}={serialized}"]
         return argv
+
+    @staticmethod
+    def _period_from_argv(argv: list[str]) -> dict[str, Any]:
+        """The ``--start``/``--end`` window ``_build_argv`` put on the command line."""
+        start = date.fromisoformat(argv[argv.index("--start") + 1])
+        end = date.fromisoformat(argv[argv.index("--end") + 1])
+        return {"start": start.isoformat(), "end": end.isoformat(), "days": (end - start).days}
 
     def _run(self, argv: list[str]) -> None:
         import contextlib
@@ -276,4 +288,5 @@ class BacktestManager:
                 "progress": list(self.progress[-60:]),
                 "summary": self.summary,
                 "universe": self.universe,
+                "period": self.period,
             }

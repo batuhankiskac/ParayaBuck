@@ -124,6 +124,7 @@
                 <span><strong>Paper trading</strong><small>Gerçek para kullanmadan demo hesapta çalışır.</small></span>
                 <input type="checkbox" id="paperModeCheck"><span class="track"></span>
             </label>
+            <div id="paperOffWarning" class="note" hidden><strong>Gerçek para uyarısı</strong>Paper kapalıyken motor gerçek hesapta gerçek para ile çalışır.</div>
         </section>
 
         <section class="drawer-section">
@@ -133,7 +134,8 @@
                 <span><strong>Hisse / ETF işlemleri</strong><small>ABD borsası (VT35: QLD).</small></span>
                 <input type="checkbox" id="equityTradingCheck"><span class="track"></span>
             </label>
-            <div class="note"><strong>Canlı işlem uyarısı</strong>Paper testleri tamamlanmadan gerçek işlem iznini açmayın. Stop-limit tetiklenmesi gerçekleşmeyi garanti etmez.</div>
+            <small class="hint">Kapatılırsa bot QLD için yeni karar vermez ve alım yapmaz. Elde tutulan QLD pozisyonunu satmaz; pozisyon izlenmeye devam eder ve siz yönetirsiniz.</small>
+            <div class="note"><strong>Canlı işlem uyarısı</strong>Paper testleri tamamlanmadan gerçek işlem iznini açmayın. Bot yalnızca piyasa emri gönderir ve zarar durdur (stop-loss) emri koymaz. Açılışta fiyat boşluk verirse emir, ekranda görülen fiyattan çok uzakta dolabilir.</div>
             <div id="livePrerequisites" class="note" hidden>
                 <strong>Canlıya geçiş ön koşulları</strong>
                 <ul id="livePrerequisitesList" class="prereq"></ul>

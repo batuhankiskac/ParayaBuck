@@ -28,8 +28,10 @@ journal (`ops events`, filter with `--kind`/`--severity`) and in the service
 log (`journalctl -u parayabuck -g 'ALERT '`); `ops status` prints how many the
 engine emitted and how many repeats it throttled.
 
-Safety resets are operator actions in the dashboard (or
-`POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`). A reset
+Safety resets are operator actions in the dashboard (the **Kilidi doğrula**
+button, shown only while a safety lock is in force; the lock is named
+"Güvenlik kilidi devrede" on screen, and `CIRCUIT_BREAKER` in the logs and
+`ops` output) or `POST /api/engine/reset-safety-lock`, `POST /api/safety/risk-epoch`. A reset
 succeeds only after the queue drains, data gaps clear and reconciliation
 passes, and it clears the reason it verified. It also clears the halt rows
 this start already re-armed, but only those no longer in force in the running
@@ -178,7 +180,7 @@ one per retry; the log line is `Decision deferred for retry`.
   expired and the session was **not** decided. `equity_decision_missing` at the
   session close + 45 min (16:45 ET; 13:45 ET on an early close) is the
   authoritative alarm; treat it as a real missed session.
-- A halted runtime (`CIRCUIT_BREAKER`) blocks every decision, retry
+- A halted runtime (`CIRCUIT_BREAKER`, "Güvenlik kilidi devrede" on the dashboard) blocks every decision, retry
   included. A hard halt (ownership drift, a portfolio runtime failure, a
   crashed decision worker, the `account_fetch_failures` halt, an operator
   halt) re-queues the session-close batch for the same retry window, so a
@@ -345,7 +347,7 @@ they would otherwise pin `execution` at DEGRADED for good.
 
 ## Circuit breaker active
 
-Trading state `CIRCUIT_BREAKER`, runtime `halted`, incident persisted across
+Trading state `CIRCUIT_BREAKER` (shown as "Güvenlik kilidi devrede"), runtime `halted`, incident persisted across
 restarts. **Nothing trades while halted — not even sells.** A halt means the
 account state is not trusted (ownership, protection, reconciliation or a
 crashed worker), so no order of any side is submitted: a decision blocked at
@@ -644,8 +646,12 @@ record the decision in `docs/OPERATIONS_LOG.md` before acting.
 
 - `live_rearm_required`: LIVE is configured but did not start by itself. Run
   `parayabuck doctor --strict --configured-mode --offline` and read the refusal. Then
-  `parayabuck authorize-live --operator <name> --expires-minutes 30`, arm in the dashboard
-  (`LIVE <suffix>`) and press Start. Open positions stay open meanwhile.
+  `parayabuck authorize-live --operator <name> --expires-minutes 30`. The two commands
+  need shell access on the VM; the rest is for the owner in the dashboard: click the mode
+  chip (Paper, switching to CANLI), type `LIVE <suffix>` in the prompt, and confirm
+  "Canlıya geç". The arming phrase expires 2 minutes after it is issued; if the
+  confirmation is refused, start the switch again. Then press "Başlat". Open positions
+  stay open meanwhile.
 - `live_authorization_expiring` (within three days): renew with
   `parayabuck authorize-live --operator <name> --standing-days <n>` before it ends. A running
   engine keeps running; only the next restart needs the renewal.

@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  orders total={orders['total']} open={orders['open']}")
         print(f"  rejects: {metrics['rejects']}")
         _print_summary("  fill latency (s)", metrics["fill_latency"])
-        _print_summary("  slippage (bps)", metrics["slippage"])
+        _print_summary("  fill vs decision close (bps; incl. overnight gap, not pure slippage)", metrics["slippage"])
         print(
             f"  fees: total={_fmt(metrics['fees'].get('total'), 6)} "
             f"by_market={json.dumps(metrics['fees'].get('by_market'))}"

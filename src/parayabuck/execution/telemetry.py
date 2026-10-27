@@ -458,6 +458,13 @@ def execution_metrics(
                 "by_market": {market: _stat_summary(values) for market, values in sorted(slippage_by_market.items())},
                 "unit": "bps",
                 "sign_convention": "positive = adverse (fill worse than reference)",
+                # The reference is the DECISION close, and market orders fill at the
+                # next session open: the overnight gap is inside these numbers.
+                "reference_basis": "decision_close",
+                "note": (
+                    "portfolio fills vs decision close; includes the overnight next-open gap, "
+                    "so it is not pure execution slippage (legacy stored bps keep their own basis)"
+                ),
             },
             "fees": {
                 "total": round(sum(fee_values), 6),
@@ -758,7 +765,10 @@ def forward_metrics(
                 },
                 "note": (
                     "equity_estimate = day_start_equity + realized + unrealized - fees "
-                    "from the latest persisted risk_state; gross exposure and cash are "
+                    "from the latest persisted risk_state; the periods differ: day_start_equity "
+                    "is the session start, realized adds the all-time fills-ledger sum to the "
+                    "session figure, unrealized is the all-time open P&L, so the estimate is not "
+                    "a single-period equity; gross exposure and cash are "
                     "broker-snapshot values and are not persisted in the ledger"
                 ),
             },

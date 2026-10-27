@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -15,18 +16,27 @@ from parayabuck.core.models import Bar
 MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 
 
-def _benchmark_yearly_returns(benchmark_bars: Sequence[Bar] | None) -> dict[int, float]:
+def _csv_cell(value: object) -> object:
+    """Neutralise spreadsheet formula injection in text cells (broker-supplied symbols)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
+def _benchmark_yearly_returns(benchmark_bars: Sequence[Bar] | None) -> dict[int, float | None]:
+    """Calendar-year benchmark returns; ``None`` where no valid anchor exists (never a fabricated 0.0)."""
     if not benchmark_bars:
         return {}
     by_year: dict[int, list[float]] = {}
     for bar in sorted(benchmark_bars, key=lambda item: item.timestamp):
         by_year.setdefault(bar.timestamp.year, []).append(bar.close)
-    returns: dict[int, float] = {}
+    returns: dict[int, float | None] = {}
     previous_close: float | None = None
     for year in sorted(by_year):
         closes = by_year[year]
         anchor = previous_close if previous_close is not None else closes[0]
-        returns[year] = closes[-1] / anchor - 1 if anchor > 0 else 0.0
+        valid = math.isfinite(anchor) and anchor > 0 and math.isfinite(closes[-1])
+        returns[year] = closes[-1] / anchor - 1 if valid else None
         previous_close = closes[-1]
     return returns
 
@@ -42,7 +52,7 @@ class PortfolioReport:
     weight_history: tuple[tuple[str, dict[str, float]], ...]
     universe_history: tuple[tuple[str, tuple[str, ...]], ...]
     monthly_returns: dict[int, dict[int, float]]
-    yearly_returns: tuple[tuple[int, float, float], ...]
+    yearly_returns: tuple[tuple[int, float, float | None], ...]
     regime_performance: dict[str, object]
     rolling_beta: tuple[float, ...]
     per_symbol: tuple[dict[str, object], ...]
@@ -86,7 +96,7 @@ class PortfolioReport:
         with summary_path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             for key, value in self.summary.items():
-                writer.writerow([key, value])
+                writer.writerow([_csv_cell(key), _csv_cell(value)])
         written.append(str(directory / "portfolio_summary.csv"))
         with (directory / "rebalances.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
@@ -106,11 +116,11 @@ class PortfolioReport:
                     [
                         record.rebalance_number,
                         record.decision_timestamp.isoformat(),
-                        record.reason,
+                        _csv_cell(record.reason),
                         f"{record.target_cash_weight:.6f}",
                         f"{record.realized_turnover:.6f}",
                         f"{record.cost:.6f}",
-                        record.universe_version,
+                        _csv_cell(record.universe_version),
                     ]
                 )
         written.append(str(directory / "rebalances.csv"))
@@ -119,7 +129,7 @@ class PortfolioReport:
             writer.writerow(["timestamp", "symbol", "weight"])
             for timestamp, weights in self.weight_history:
                 for symbol, weight in sorted(weights.items()):
-                    writer.writerow([timestamp, symbol, f"{weight:.6f}"])
+                    writer.writerow([timestamp, _csv_cell(symbol), f"{weight:.6f}"])
         written.append(str(directory / "weight_history.csv"))
         with (directory / "fills.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
@@ -140,8 +150,8 @@ class PortfolioReport:
                 writer.writerow(
                     [
                         fill["timestamp"],
-                        fill["symbol"],
-                        fill["side"],
+                        _csv_cell(fill["symbol"]),
+                        _csv_cell(fill["side"]),
                         fill["qty"],
                         fill["reference_price"],
                         fill["fill_price"],
@@ -155,7 +165,7 @@ class PortfolioReport:
             writer = csv.writer(handle)
             writer.writerow(["timestamp", "symbols"])
             for timestamp, symbols in self.universe_history:
-                writer.writerow([timestamp, ",".join(symbols)])
+                writer.writerow([timestamp, _csv_cell(",".join(symbols))])
         written.append(str(directory / "universe_history.csv"))
         with (directory / "monthly_returns.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
@@ -174,8 +184,8 @@ class PortfolioReport:
             for contribution in self.per_symbol:
                 writer.writerow(
                     [
-                        contribution["symbol"],
-                        contribution["market"],
+                        _csv_cell(contribution["symbol"]),
+                        _csv_cell(contribution["market"]),
                         contribution["realized_pnl"],
                         contribution["fees"],
                         contribution["final_weight"],
@@ -403,12 +413,12 @@ def _monthly_matrix(result: PortfolioBacktestResult) -> dict[int, dict[int, floa
     return matrix
 
 
-def _yearly_returns(result: PortfolioBacktestResult) -> tuple[tuple[int, float, float], ...]:
+def _yearly_returns(result: PortfolioBacktestResult) -> tuple[tuple[int, float, float | None], ...]:
     by_year: dict[int, list[float]] = {}
     for timestamp, equity in zip(result.curve_timestamps, result.equity_curve, strict=True):
         by_year.setdefault(timestamp.year, []).append(equity)
     benchmark_yearly = _benchmark_yearly_returns(result.benchmark_bars)
-    yearly: list[tuple[int, float, float]] = []
+    yearly: list[tuple[int, float, float | None]] = []
     previous = result.starting_equity
     for year in sorted(by_year):
         values = by_year[year]
@@ -416,7 +426,7 @@ def _yearly_returns(result: PortfolioBacktestResult) -> tuple[tuple[int, float, 
             (
                 year,
                 values[-1] / previous - 1 if previous > 0 else 0.0,
-                benchmark_yearly.get(year, 0.0),
+                benchmark_yearly.get(year),
             )
         )
         previous = values[-1]

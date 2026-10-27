@@ -164,9 +164,13 @@ one per retry; the log line is `Decision deferred for retry`.
   session close + 45 min (16:45 ET; 13:45 ET on an early close) is the
   authoritative alarm; treat it as a real missed session.
 - A halted runtime (`CIRCUIT_BREAKER`) blocks every decision, retry
-  included: the deferred batch is retried until the deadline, so a reset
-  inside the window still lands the session. Nothing trades while halted —
-  **not even sells** (a halt is a state where the account is not trusted).
+  included. A hard halt (ownership drift, a portfolio runtime failure, a
+  crashed decision worker, the `account_fetch_failures` halt, an operator
+  halt) re-queues the session-close batch for the same retry window, so a
+  reset inside the window still decides the session. Once the window has
+  expired the session is not decided and `decision_deferred` says so. Nothing
+  trades while halted — **not even sells** (a halt is a state where the
+  account is not trusted).
 - `engine.reconcile_failure_threshold` (default 3) consecutive *transient*
   reconciliation failures are required before the reconciliation breaker and
   its persisted incident are raised. One Alpaca timeout only blocks entries
@@ -500,10 +504,16 @@ sudo systemctl start parayabuck                           # or the console start
 - While it exists, the automatic start and the console start are refused, and
   the log shows `operator halt is in force` as an ERROR. Any unreadable marker
   still counts as a halt.
-- `halt` does not stop a running engine, cancel orders or close positions.
-  Stop the engine as shown above.
-- `resume` only removes the marker. Check `parayabuck doctor` and the
-  dashboard before starting again.
+- A running engine checks the marker about every 10 s from its decision loop.
+  When it finds the marker, the runtime halts (circuit breaker `operator_halt`,
+  persisted as a safety incident) and takes no new decision. `halt` does not
+  cancel open orders or close positions, and it does not stop the process:
+  stop the engine as shown above when it must go down.
+- `resume` only removes the marker. A restart after `resume` still starts
+  halted while the persisted `operator_halt` incident exists. Reset is refused
+  while the marker exists and succeeds once it is gone and reconciliation
+  passes (dashboard, or `POST /api/engine/reset-safety-lock`). Check
+  `parayabuck doctor` and the dashboard before starting again.
 - A stop from the dashboard is not sticky (see `docs/operations.md`, "Stop and restart"):
   `sudo systemctl restart parayabuck` starts the engine again unless this marker exists.
 

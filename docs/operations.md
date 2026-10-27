@@ -165,6 +165,13 @@ engine again when auto-start is allowed. To keep the engine down across restarts
 set the operator halt first (`parayabuck halt`, see `docs/operator_runbook.md`,
 "Operator halt").
 
+A settings save never restarts a running engine by itself. The save request
+carries `restart_engine`, which defaults to `false` on the API: while the
+engine runs, a save that changes runtime settings is refused with "Stop the
+bot before saving settings without a restart" unless the request sets
+`restart_engine` to `true`. The console sends `true` only after the operator
+confirms the restart in its dialog.
+
 ### Daily summary
 
 One line per equity decision (format from `monitoring/daily_summary.py`; values illustrative):
@@ -174,7 +181,11 @@ equity_leveraged_trend_v1 2026-09-29: QQQ 550.00 vs SMA200 500.00 (+10.00%) uptr
 ```
 
 Weights are fractions of account equity; "held" is the position at decision
-time, before that decision's orders fill. Disable with
+time, before that decision's orders fill. When the decision has orders, the
+order segment reads per side, for example `submitted orders sell 2/2 buy 0/3`:
+submitted over planned for each side, so BUYs that the rebalance deferred show
+as not submitted instead of being netted against the SELLs. With no orders the
+segment keeps the combined `submitted orders 0/0` count. Disable with
 `alerting.daily_summary: false`.
 
 The summary ends with a YTD tax segment (`tax YTD <year>: net gain ..., est.
@@ -339,15 +350,23 @@ maximum events and queue size come from the `observability:` block in
 `ops events` reads. Default: `data/runtime/observability.sqlite3`.
 
 ```bash
-parayabuck ops status [--json]            # overall health, trading state, per-check lines
+parayabuck ops status [--json]            # overall health, trading state, per-check lines; exit 0 OK, 1 BLOCKED/DEGRADED/UNKNOWN, 2 CRITICAL
 parayabuck ops doctor [--json] [--journal PATH]   # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h [--kind K] [--severity DEBUG|INFO|WARNING|CRITICAL] [--decision ID] [--order ID]
 parayabuck ops timeline --decision ID | --order ID
 parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade (latest = current account)
-parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets)
+parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets; account ids masked)
 parayabuck ops rebase-ownership SYMBOL --broker-qty QTY [--account-id ID] [--note TEXT]
     # adopt the broker's share count for one symbol; dry run unless --confirm
 ```
+
+Sharing a bundle: the bundle masks account ids to `***` plus their last four
+characters (`expected_account_id`, `account_id`, `account_number` in the
+sanitized config and the journal fields), and redacts the alert e-mail
+routing (addresses and the SMTP host) with the same policy the event journal
+uses (`redact_fields`). Keys and tokens are redacted as before. Masking does
+not hide positions, order ids or decision history, so read the zip before it
+leaves the VM and send only what the question needs.
 
 Health checks: `runtime_heartbeat` (snapshot ≤ 90 s old), `workers`, `queue`
 (age ≤ 30 s), `account`, `reconciliation` (CRITICAL after 5 min without
@@ -387,10 +406,18 @@ copies as `alert_stats.json` / `journal_stats.json` (`source:
 engine_snapshot`), or `unavailable` without a snapshot. `--severity` is
 case-insensitive and rejects values outside the vocabulary.
 
+`ops doctor` also has a `circuit_breaker` check: CRITICAL while a breaker is
+open (with its reason), UNKNOWN when the snapshot carries no runtime state.
+
 `parayabuck doctor [--strict] [--paper] [--offline]` is the deployment
 preflight (config, mode, live off, credentials, writability, SQLite
-integrity/WAL, tracked `.env`, config digest; online it also checks Alpaca
-PAPER reachability).
+integrity, tracked `.env`, config digest; online it also checks Alpaca
+PAPER reachability). The SQLite `journal_mode` row is informational only:
+a restored backup opens in DELETE mode until the engine sets WAL on its
+next start, so that row never fails `--strict`. `--strict` does fail when
+the tracked-file scan cannot run (`git ls-files` fails, for example under a
+service user with dubious ownership), because a scan that cannot run is not
+a clean scan.
 
 It also reports backup freshness: the age of the newest *automatic* snapshot in
 `backup.path`. Labelled `parayabuck-keep-*` snapshots do not count: they are
@@ -444,6 +471,20 @@ Known modelling differences (accepted, not bugs):
   `cost_multiplier=2` (the multiplier scales the base, so `cost_bps_per_side=8` with it
   would charge 16 bps) and state the setting in the report.
 
+## Config flags
+
+`risk.adjust_for_cash_flows` (default `false`) decides whether same-day
+external cash moves count as trading P&L. Off, a deposit, a withdrawal or a
+journal (`CSD`, `CSW`, `JNLC` activities) moves the day's P&L, the daily-loss
+latch input and the drawdown peak, as it always has. On, the account snapshot
+reads the day's net external cash from the broker's activities and subtracts
+it from the daily P&L, from the drawdown peak (which tracks equity net of that
+cash) and so from the figures the latches read. If the activities read fails,
+that poll is not adjusted and a warning is logged. The runtime copies the flag
+onto the broker when the engine is built (`execution/alpaca_account.py`). The default keeps
+today's figures; turning the flag on changes the risk inputs and is an owner
+decision.
+
 ## State, backup and restore
 
 | Path | What | If lost |
@@ -461,10 +502,20 @@ safe while running) to `backup.path` (`data/backups`), verifies it with
 `parayabuck backup --verify-only <file>`. Copy backups off the VM
 occasionally; they live on the same disk.
 
+Each backup set is the snapshot plus a verified copy of every peak sidecar
+that exists (`paper_equity_peak.json`, `live_equity_peak.json`), published
+next to it as `<snapshot stem>.<sidecar name>`. A missing sidecar is skipped
+(a host that has not traded has none). A sidecar that is unreadable, fails
+the peak-record check, or whose copy does not read back fails the whole set:
+the new files are removed, nothing half-complete is kept, and the command
+raises after `backup_failed` is recorded.
+
 Failures are visible on the VM: `parayabuck backup` logs an ERROR, records
 `backup_failed` in the journal and exits non-zero (the unit shows `failed` in
 `systemctl status parayabuck-backup`) when the configuration does not load or
-a snapshot cannot be written or verified; `parayabuck doctor` prints a
+a snapshot cannot be written or verified. A missing runtime database (no
+decision has been written yet) exits 2 with one `backup_failed` alert and
+writes no backup directory. `parayabuck doctor` prints a
 `backup stale` row when the newest backup is older than 12 h, i.e. when the
 timer itself has stopped working.
 
@@ -495,6 +546,11 @@ sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:800
 Orders and fills after the backup are missing from the restored ledger. On
 start the engine reconciles it against the broker and halts on drift it cannot
 explain; review the broker account before any safety reset. Never delete the DB, safety incidents or the peak file to "reset".
+
+A restored file is in DELETE journal mode, because the backup normalizes to
+it. That is expected: `doctor --strict` reports `sqlite journal_mode` as INFO
+and the `ExecStartPre` preflight does not fail on it, and the engine sets WAL
+when it opens the ledger, so the next start after the restore goes through.
 
 ## Incident reconciliation
 

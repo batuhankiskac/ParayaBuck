@@ -8,12 +8,26 @@ from parayabuck.core.models import AccountSnapshot, Market, PositionSnapshot
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
     PortfolioOrderSide,
+    PortfolioRiskLimits,
     PortfolioRiskOverlay,
     TargetToOrderPlanner,
 )
 from parayabuck.portfolio.models import TargetPortfolio, TargetWeight
 
 NOW = datetime(2026, 8, 24, tzinfo=UTC)
+
+# The pre-VT35 caps this test was written against (10 % per asset, 60 % gross,
+# 50 % equity, 40 % cash, 6 positions). Passed explicitly: the default limits
+# are the shipped RiskLimits.
+PRE_VT35_LIMITS = PortfolioRiskLimits(
+    daily_loss_limit=0.005,
+    drawdown_halt=0.05,
+    maximum_gross=0.60,
+    maximum_equity=0.50,
+    maximum_equity_asset=0.10,
+    minimum_cash=0.40,
+    maximum_positions=6,
+)
 
 
 def _position(symbol: str, qty: float) -> PositionSnapshot:
@@ -118,7 +132,7 @@ def test_identity_switch_respects_existing_pending_order_ownership() -> None:
 
 def test_new_identity_target_keeps_existing_paper_risk_caps() -> None:
     target = _target({f"S{index}": 0.10 for index in range(8)})
-    decision = PortfolioRiskOverlay().apply(
+    decision = PortfolioRiskOverlay(PRE_VT35_LIMITS).apply(
         target,
         _account(),
         market=Market.EQUITY,

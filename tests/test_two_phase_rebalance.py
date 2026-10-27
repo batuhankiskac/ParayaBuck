@@ -117,6 +117,19 @@ class _SimBroker:
         return outcome
 
 
+# The pre-VT35 caps the sell/replan fixtures were sized against (10 % per asset,
+# 6 positions). Explicit because the default limits are the shipped RiskLimits.
+_PRE_VT35_LIMITS = PortfolioRiskLimits(
+    daily_loss_limit=0.005,
+    drawdown_halt=0.05,
+    maximum_gross=0.60,
+    maximum_equity=0.50,
+    maximum_equity_asset=0.10,
+    minimum_cash=0.40,
+    maximum_positions=6,
+)
+
+
 def _runtime(
     tmp_path,
     broker: _SimBroker,
@@ -134,7 +147,7 @@ def _runtime(
         repository,
         mode=mode,
         maximum_allocation=0.50,
-        risk_limits=limits,
+        risk_limits=limits or _PRE_VT35_LIMITS,
         live_dollar_cap=cap,
         account_id="acct",
     )

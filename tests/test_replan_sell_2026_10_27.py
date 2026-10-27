@@ -315,7 +315,9 @@ def test_validate_order_batch_accepts_a_clean_batch() -> None:
 
 def test_validate_order_batch_accepts_float_quantities_on_the_increment_grid() -> None:
     rules = {"BTC": AssetTradingRules(0.0001, 0.1, 1.0)}
-    order = _order("BTC", PortfolioOrderSide.BUY, 0.30000000000000004, price=100.0)
+    # 0.3 is the value floor_increment returns for three steps of 0.1. Float
+    # noise such as 0.30000000000000004 is off the decimal grid (F-1).
+    order = _order("BTC", PortfolioOrderSide.BUY, 0.3, price=100.0)
     assert validate_order_batch((order,), rules, minimum_order_notional=1.0) == []
 
 

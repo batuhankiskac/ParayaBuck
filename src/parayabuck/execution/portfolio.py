@@ -7,7 +7,7 @@ from bisect import bisect_right
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from enum import StrEnum
 from functools import lru_cache
 
@@ -213,6 +213,15 @@ def gain_band_bypass_metadata(
 
 
 @lru_cache(maxsize=32)
+def _cached_december_season_sessions(year: int) -> tuple[date, ...]:
+    """Cached calendar read. It raises instead of returning a failure, because
+    ``lru_cache`` stores only calls that return."""
+    sessions = tuple(day for day, _, _ in nyse_sessions(date(year, 11, 1), date(year, 12, 31)))
+    if not sessions:
+        raise RuntimeError(f"NYSE calendar returned no November/December sessions for {year}")
+    return sessions
+
+
 def _december_season_sessions(year: int) -> tuple[date, ...]:
     """NYSE November/December session dates of ``year``, ascending.
 
@@ -221,9 +230,10 @@ def _december_season_sessions(year: int) -> tuple[date, ...]:
     list. An unavailable calendar returns ``()``: the deferral then never
     applies and the ordinary rule executes, exactly like the gain band's
     constant-band fallback (a tax-timing rule must not be able to stop a sell).
+    The failure is not cached, so a later call reads the calendar again.
     """
     try:
-        return tuple(day for day, _, _ in nyse_sessions(date(year, 11, 1), date(year, 12, 31)))
+        return _cached_december_season_sessions(year)
     except Exception:
         log.warning("December deferral window unavailable for %s; the ordinary rule applies", year, exc_info=True)
         return ()
@@ -405,15 +415,20 @@ def portfolio_execution_policy_from_config(execution: ExecutionConfig) -> Portfo
     )
 
 
+# The shipped account limits. A caller that omits ``PortfolioRiskLimits`` must
+# get the limits the bot actually runs with, not an older set of numbers.
+_SHIPPED_RISK = RiskLimits()
+
+
 @dataclass(frozen=True)
 class PortfolioRiskLimits:
-    daily_loss_limit: float = 0.005
-    drawdown_halt: float = 0.05
-    maximum_gross: float = 0.60
-    maximum_equity: float = 0.50
-    maximum_equity_asset: float = 0.10
-    minimum_cash: float = 0.40
-    maximum_positions: int = 6
+    daily_loss_limit: float = _SHIPPED_RISK.daily_loss_limit_pct
+    drawdown_halt: float = _SHIPPED_RISK.max_drawdown_pct
+    maximum_gross: float = _SHIPPED_RISK.max_gross_exposure_pct
+    maximum_equity: float = _SHIPPED_RISK.max_gross_exposure_pct
+    maximum_equity_asset: float = _SHIPPED_RISK.max_position_pct
+    minimum_cash: float = _SHIPPED_RISK.cash_buffer_pct
+    maximum_positions: int = _SHIPPED_RISK.max_positions
 
 
 def _validate_unique_account_positions(account: AccountSnapshot) -> None:
@@ -1059,6 +1074,12 @@ class TargetToOrderPlanner:
                 continue
             if quantity * price < max(self.policy.minimum_order_notional, rule.minimum_order_notional):
                 continue
+            # The runtime sizes a BUY at max(reference, mark) and validates it
+            # again at the reference alone. Carry the same max here so the
+            # notional that was sized is the notional that is validated.
+            reference_price = price
+            if side == PortfolioOrderSide.BUY and position is not None:
+                reference_price = max(price, position.current_price)
             orders.append(
                 PortfolioOrderRequest(
                     client_order_id=_client_order_id(decision_id, symbol, side, client_order_salt),
@@ -1067,7 +1088,7 @@ class TargetToOrderPlanner:
                     market=market,
                     side=side,
                     quantity=quantity,
-                    reference_price=price,
+                    reference_price=reference_price,
                     decision_timestamp=target.decision_timestamp,
                     strategy_name=target.strategy_name,
                     strategy_version=target.strategy_version,
@@ -1240,8 +1261,13 @@ def validate_order_batch(
         if rule.quantity_increment <= 0:
             problems.append((order.client_order_id, f"non-positive quantity increment for {order.symbol}"))
             continue
-        steps = quantity / rule.quantity_increment
-        if abs(steps - round(steps)) > 1e-6:
+        # Exact grid test on the decimal values: a float quotient cannot tell a
+        # 9-decimal quantity from one off the grid when the increment is 1e-9.
+        try:
+            off_grid = Decimal(str(quantity)) % Decimal(str(rule.quantity_increment)) != 0
+        except InvalidOperation:
+            off_grid = True
+        if off_grid:
             problems.append(
                 (
                     order.client_order_id,

@@ -62,8 +62,9 @@
   "research/hrp_sleeve_v1/sleeve_data.py": "4b8aefe83d29c786309186ed0b326d6bbedcbf174434ac80bd915463094b0940",
   "research/hrp_sleeve_v1/alloc.py": "d23ce2642f5b46b5e26d3c0c886e18b11eda1f1ce0095c9c471cbfac95da8296",
   "research/hrp_sleeve_v1/hs_sim.py": "e4e081f5391131d9e294792d494ad501654492eefcdc7d1f595083c7b27a2919",
-  "research/hrp_sleeve_v1/screen.py": "32981ae369b4f7c9361fdf0399492e56c8cd9f10c3845f7225ea0b80b05e7b16",
+  "research/hrp_sleeve_v1/screen.py": "5a7ce193b054d7475e2b3a37ba64bbcfbdd5d9deca05c8ae3f2efc2a35e7b3db",
   "research/hrp_sleeve_v1/PREREGISTRATION.md": "9af63595d17a385a94ec6e6cba10f14dcb38e960a07aef2c62402c7e60e90776"
  },
- "amendment_1": "reporting-only: DSR, weight statistics, provenance stamp and SUMMARY.txt added to screen.py after the first --run; no arm, parameter, gate or data input changed"
+ "amendment_1": "reporting-only: DSR, weight statistics, provenance stamp and SUMMARY.txt added to screen.py after the first --run; no arm, parameter, gate or data input changed",
+ "amendment_2": "reporting/parity-only: four-leg band-off parity cell added to --harness; no arm, parameter, gate or input changed"
 }

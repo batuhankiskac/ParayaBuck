@@ -103,6 +103,17 @@ def harness(days, o, c, w_r2, fx, ufe, R, P):
                         r_new[k] == r_old[k] for k in r_old
                         if isinstance(r_old[k], float) and k in r_new),
                     "nav_bitwise_equal": same}
+    # multi-leg parity: the four-leg D1 panels with every leg at the production band must equal fe3_sim
+    Wm = monthly_weights(days, R, "hrp")
+    ops, cls, wts = leg_panels(w_r2, Wm, o, c, P)
+    i0, i1 = fe_study.window_indices(days, *C.TAX_WINDOWS["2000_03_to_2026_09"])
+    env = fe_sim.RunEnv(days, fx, ufe, i0, i1)
+    r_new = hs_sim.simulate3(ops, cls, wts, env, 100_000.0, i0, i1, arm="K", mode=MODE, m=2,
+                             band_legs=np.full(4, fe_sim.C0_BAND))
+    r_old = fe3_sim.simulate3(ops, cls, wts, env, 100_000.0, i0, i1, arm="K", mode=MODE, m=2)
+    res["D1_four_leg_band_off"] = {"nav_bitwise_equal": bool(np.array_equal(r_new["_nav"], r_old["_nav"])),
+                                   "cagr_new": r_new["cagr_usd_liquidated"],
+                                   "cagr_old": r_old["cagr_usd_liquidated"]}
     return res
 
 

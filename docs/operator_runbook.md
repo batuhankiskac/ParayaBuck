@@ -324,17 +324,23 @@ risk:
     cooldown_sessions: 5
 ```
 
-Limitations, read before enabling:
+State and wiring, read before enabling:
 
-- The overlay is stateless by default. Without a persisted state object the
-  brake holds only while drawdown is at or above the threshold, so a recovered
-  account is re-admitted at once and there is no cooldown.
-- The liquidation state is not yet persisted or passed by the runtime. Until a
-  runtime change wires it in, setting `enabled: true` has no effect on the
+- The RED-state is stored per account and market in the runtime database table
+  `portfolio_drawdown_liquidation_states`. It is written in the same transaction
+  as the decision that produced it, so a restart reloads the latched state and
+  cannot re-enter a position inside the cooldown. The table is created at start
+  up even while the brake is off, but it is never read or written while off.
+- `PortfolioRuntime` accepts the block (`drawdown_liquidation=`) and applies it.
+  The engine (`runtime.py`) does not pass `config.risk.drawdown_liquidation`
+  yet. Until that change lands, setting `enabled: true` has no effect on the
   running engine.
-- Changing any setting, including this block, changes the loaded configuration
-  fingerprint. A standing LIVE authorization bound to the old fingerprint must
-  be re-approved.
+- While the brake is off, the configuration digest and the loaded configuration
+  fingerprint are unchanged. Enabling the block changes both, so a standing LIVE
+  authorization bound to the old values must be re-approved.
+- Without a persisted state the overlay is stateless: it holds RED only while
+  drawdown is at or above the threshold, so a recovered account is re-admitted
+  at once and there is no cooldown.
 - A managed position whose gap to zero is below `execution.rebalance_band_pct`
   (0.5 % of equity by default) is not sold by the planner, so a small residual
   may stay after a liquidation.

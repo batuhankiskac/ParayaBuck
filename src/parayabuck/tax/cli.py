@@ -37,6 +37,22 @@ from parayabuck.tax.rates import (
     load_rate_book,
 )
 
+# Exit codes of the parayabuck CLI (docs/operations.md, "Exit codes"): 1 is a refused or
+# failed command, 64 a bad argument or value. 2 is reserved for CRITICAL health (D2-6-5).
+EXIT_FAILURE = 1
+EXIT_USAGE = 64
+
+
+class _UsageError(Exception):
+    """A bad argument or value; the command exits EXIT_USAGE."""
+
+
+def _date_arg(value: str, option: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise _UsageError(f"{option} must be YYYY-MM-DD, got {value!r}") from exc
+
 
 def add_tax_parser(commands: Any) -> None:
     """Register the ``tax`` command group on the top-level subparsers."""
@@ -68,7 +84,11 @@ def add_tax_parser(commands: Any) -> None:
 
 
 def run_tax(args: argparse.Namespace) -> int:
-    """Dispatch a parsed ``tax`` command; returns the process exit code."""
+    """Dispatch a parsed ``tax`` command; returns the process exit code.
+
+    No command is a usage error, and a failure is exit 1; neither leaves a traceback
+    on the console (D2-6-5).
+    """
     command = getattr(args, "tax_cmd", None)
     try:
         if command == "rates-fetch":
@@ -77,11 +97,17 @@ def run_tax(args: argparse.Namespace) -> int:
             return _import_activities(args)
         if command == "export":
             return _export(args)
-    except (TaxDataError, OSError) as exc:
+    except _UsageError as exc:
         print(f"tax {command}: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
+    except (TaxDataError, OSError, sqlite3.Error) as exc:
+        print(f"tax {command}: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
+    except Exception as exc:  # any other failure is still a failed command, not a traceback
+        print(f"tax {command}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return EXIT_FAILURE
     print("usage: parayabuck tax {rates-fetch,import-activities,export} ...", file=sys.stderr)
-    return 2
+    return EXIT_USAGE
 
 
 def _database_path(config_path: str | None, *, live: bool = False, writing: bool = False) -> Path:
@@ -99,12 +125,13 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
     PAPER ledger. A PAPER import (``writing``) into a LIVE configuration's ledger
     also refuses, for the reverse reason. Refusals raise before any network call.
     """
-    from parayabuck.config import DEFAULT_LIVE_DECISION_DB_PATH, RuntimeConfig, RuntimeMode
+    from parayabuck.config import DEFAULT_LIVE_DECISION_DB_PATH, RuntimeConfig, RuntimeMode, same_ledger_path
 
     configured = Path(runtime.decision_db_path)
     if live:
         target = Path(RuntimeConfig(mode=RuntimeMode.LIVE, decision_db_path=str(configured)).decision_db_path)
-        if runtime.mode != RuntimeMode.LIVE and os.path.normpath(str(target)) == os.path.normpath(str(configured)):
+        # Symlinks and absolute spellings of the PAPER ledger must refuse too (S2-5-2).
+        if runtime.mode != RuntimeMode.LIVE and same_ledger_path(target, configured):
             raise TaxDataError(
                 f"the config's ledger {configured} is the PAPER ledger; LIVE activities need the LIVE ledger, "
                 "so use a LIVE configuration"
@@ -115,7 +142,7 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
             f"the config is LIVE, so its ledger {configured} is the LIVE ledger; PAPER activities are not "
             "stored there (use --live)"
         )
-    if writing and os.path.normpath(str(configured)) == os.path.normpath(DEFAULT_LIVE_DECISION_DB_PATH):
+    if writing and same_ledger_path(configured, DEFAULT_LIVE_DECISION_DB_PATH):
         raise TaxDataError(
             f"the config's ledger {configured} is the LIVE ledger path; PAPER activities must not be stored "
             "there (use a PAPER configuration with its own ledger)"
@@ -131,8 +158,8 @@ def _rates_fetch(args: argparse.Namespace) -> int:
     if not key:
         print(f"tax rates-fetch: set {EVDS_KEY_ENV} to an EVDS API key first", file=sys.stderr)
         return 1
-    start = date.fromisoformat(args.start)
-    end = date.fromisoformat(args.end) if args.end else datetime.now(TURKEY_TIME).date()
+    start = _date_arg(args.start, "--start")
+    end = _date_arg(args.end, "--end") if args.end else datetime.now(TURKEY_TIME).date()
     counts = fetch_rates_to_files(
         start,
         end,
@@ -141,7 +168,9 @@ def _rates_fetch(args: argparse.Namespace) -> int:
         api_key=key,
         confirmed_series=bool(args.confirm_yiufe_series),
     )
-    print(json.dumps({"start": start.isoformat(), "end": end.isoformat(), **counts}, indent=2))
+    # The files written are named in the output, so the operator sees which rate files changed (F2-9-8).
+    written = {"usdtry_file": str(Path(args.usdtry)), "yiufe_file": str(Path(args.yiufe))}
+    print(json.dumps({"start": start.isoformat(), "end": end.isoformat(), **written, **counts}, indent=2))
     return 0
 
 
@@ -166,7 +195,7 @@ def _import_activities(args: argparse.Namespace) -> int:
     if not key or not secret:
         print("tax import-activities: Alpaca credentials are not configured for this mode", file=sys.stderr)
         return 1
-    since = date.fromisoformat(args.since)
+    since = _date_arg(args.since, "--since")
     imported_on = datetime.now(TURKEY_TIME).date()
     adapter = AlpacaClient(key, secret, paper=not args.live)
     try:
@@ -222,7 +251,7 @@ def _latest_account(connection: sqlite3.Connection) -> str:
 
 def _export(args: argparse.Namespace) -> int:
     if args.year < 2000 or args.year > 2100:
-        raise TaxDataError(f"--year {args.year} is out of range")
+        raise _UsageError(f"--year {args.year} is out of range")
     database = _database_path(args.config, live=bool(args.live))
     try:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=5.0)

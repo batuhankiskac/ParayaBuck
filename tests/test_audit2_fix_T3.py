@@ -187,13 +187,10 @@ def test_test_peers_are_refused_when_pytest_is_not_running(monkeypatch: pytest.M
 # --- Q2-5-4: a test-built backtest manager must not target the repo reports ---
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Q2-5-4: BacktestManager defaults to the repo-relative reports/ root and "
-    "reports/ is not a guarded state dir, so start() in a test prunes reports/web-*",
-)
 def test_a_backtest_manager_built_in_a_test_does_not_target_the_repo_reports_dir() -> None:
-    assert BacktestManager().reports_root.resolve() != (REPO_ROOT / "reports").resolve()
+    # No root is chosen at construction; a run resolves backtest.output_dir from the config
+    # at start, so a test that names no root must set one before it starts a run.
+    assert BacktestManager().reports_root is None
 
 
 # --- Q2-6-2 / Q2-6-3 / Q2-6-4: the fake client mirrors the SDK -------------

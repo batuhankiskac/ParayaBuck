@@ -21,7 +21,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     return values
 
 
-def test_backtest_start_and_status(monkeypatch: Any) -> None:
+def test_backtest_start_and_status(monkeypatch: Any, tmp_path: Any) -> None:
     thread_box: dict[str, Any] = {}
 
     class FakeThread:
@@ -36,6 +36,8 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
             return False
 
     backtests = BacktestManager()
+    # Explicit root: a run must never prune the repository's reports/ (Q2-5-4).
+    backtests.reports_root = tmp_path
     backtests._thread_factory = FakeThread
     client = web_client(SimpleNamespace(current_engine_state=lambda: "stopped"), backtest_manager=backtests)
     response = client.post("/api/backtest/run", json=_payload()).json()
@@ -55,7 +57,7 @@ def test_backtest_start_and_status(monkeypatch: Any) -> None:
     status = client.get("/api/backtest/status").json()
     assert status["state"] in {"running", "idle", "done"}
     assert status["run_id"] == response["run_id"]
-    assert status["output_dir"].startswith("reports/")
+    assert status["output_dir"].startswith(str(tmp_path) + "/")
 
 
 def test_backtest_rejects_second_run_while_running(monkeypatch: Any) -> None:

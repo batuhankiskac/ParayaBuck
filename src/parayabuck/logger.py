@@ -21,7 +21,7 @@ class RedactingFormatter(logging.Formatter):
     """Formatter that scrubs the complete formatted record, traceback included.
 
     The scrub runs at the sink, so a ``log.exception`` traceback or a ``%s`` of an
-    exception text is redacted before stdout, the log file or journald sees it,
+    exception text is redacted before stderr, the log file or journald sees it,
     whatever the call site logged.
     """
 
@@ -41,13 +41,18 @@ def _pin_library_loggers() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
-def _install_stdout_handler(logger: logging.Logger) -> None:
+def _install_stream_handler(logger: logging.Logger) -> None:
+    """Send log lines to stderr (journald captures both streams under systemd).
+
+    WARNING lines on stdout made ``--json`` output unparseable on the paths that
+    warn (D2-6-1), so the console sink never shares stdout with command results.
+    """
     global _configured
     _pin_library_loggers()
     if _configured:
         return
     logger.propagate = False
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(RedactingFormatter(LOG_FORMAT, DATE_FORMAT))
     logger.addHandler(handler)
     _configured = True
@@ -61,7 +66,7 @@ def setup_logging(level: str = "INFO", log_file: str | None = None) -> logging.L
     optional file sink) must be re-applied here instead of being ignored.
     """
     logger = logging.getLogger("parayabuck")
-    _install_stdout_handler(logger)
+    _install_stream_handler(logger)
     _pin_library_loggers()
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
     if log_file:
@@ -85,7 +90,7 @@ def setup_logging(level: str = "INFO", log_file: str | None = None) -> logging.L
 def get_logger(name: str = "parayabuck") -> logging.Logger:
     if not _configured:
         root = logging.getLogger("parayabuck")
-        _install_stdout_handler(root)
+        _install_stream_handler(root)
         if root.level == logging.NOTSET:
             root.setLevel(logging.INFO)
     return logging.getLogger(name)

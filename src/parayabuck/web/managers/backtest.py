@@ -32,6 +32,22 @@ _RETAINED_WEB_RUNS = 20
 _WEB_RUN_ID = re.compile(r"web-\d{8}T\d{6}Z-[0-9a-f]{8}")
 
 
+def _configured_reports_root() -> Path:
+    """The Web backtest report directory: ``backtest.output_dir`` of the loaded configuration.
+
+    Read when a run starts, not at construction, so a manager built without a root
+    never falls back to a hard-coded ``reports/`` (Q2-5-4). An unreadable
+    configuration refuses the run.
+    """
+    from parayabuck.config import load_config
+
+    try:
+        configured = load_config().backtest.output_dir
+    except Exception as exc:
+        raise ValueError("The Web backtest report directory could not be read from the configuration") from exc
+    return Path(configured)
+
+
 class BacktestManager:
     """Runs the production-strategy backtest CLI in a background thread."""
 
@@ -52,7 +68,9 @@ class BacktestManager:
         # a 90-day figure is never read as a multi-year one.
         self.period: dict[str, Any] | None = None
         self._engine_state_provider = engine_state_provider
-        self.reports_root = Path("reports")
+        # None until a run starts: then the configured ``backtest.output_dir`` is used.
+        # An explicit path (tests, a composition root) is kept as given.
+        self.reports_root: Path | None = None
 
     def bind_engine_state_provider(self, provider: Callable[[], str]) -> None:
         self._engine_state_provider = provider
@@ -86,8 +104,11 @@ class BacktestManager:
                 )
             if engine_state not in _BACKTEST_ALLOWED_ENGINE_STATES:
                 raise ValueError("The trading engine state could not be verified; refusing to start a Web backtest")
+            if self.reports_root is None:
+                self.reports_root = _configured_reports_root()
+            reports_root = self.reports_root
             run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
-            output_dir = str(self.reports_root / run_id)
+            output_dir = str(reports_root / run_id)
             # Validate all user input before any published status changes: a
             # rejected request must leave the previous run's status intact.
             argv = self._build_argv(payload, output_dir)
@@ -102,7 +123,7 @@ class BacktestManager:
             self.progress = []
             try:
                 self.period = self._period_from_argv(argv)
-                self._prune_web_runs()
+                self._prune_web_runs(reports_root)
                 thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
                 self._thread = thread
                 self.state = "running"
@@ -113,7 +134,8 @@ class BacktestManager:
                 raise
             return self.run_id
 
-    def _prune_web_runs(self) -> None:
+    @staticmethod
+    def _prune_web_runs(reports_root: Path) -> None:
         """Keep the newest ``_RETAINED_WEB_RUNS - 1`` web runs before a new one.
 
         Only directories named like a Web run id are touched; the run ids
@@ -122,7 +144,7 @@ class BacktestManager:
         try:
             runs = sorted(
                 entry
-                for entry in self.reports_root.iterdir()
+                for entry in reports_root.iterdir()
                 if entry.is_dir() and not entry.is_symlink() and _WEB_RUN_ID.fullmatch(entry.name)
             )
         except OSError:

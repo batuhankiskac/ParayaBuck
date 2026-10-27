@@ -334,7 +334,8 @@ class AccountService:
             if position_key in seen_position_keys:
                 raise OwnershipDriftError(
                     f"Duplicate broker position for {canonical} ({market.value}); "
-                    "reconciliation is required before trading resumes"
+                    "reconciliation is required before trading resumes",
+                    symbols=(canonical,),
                 )
             seen_position_keys.add(position_key)
             raw_qty = float(raw.qty)
@@ -350,7 +351,8 @@ class AccountService:
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: the broker reports a short position "
                     f"qty={raw_qty} on a bot-traded symbol (portfolio owned qty={total_owned}). "
-                    "Close the foreign short at the broker; reconciliation is required before trading resumes"
+                    "Close the foreign short at the broker; reconciliation is required before trading resumes",
+                    symbols=(canonical,),
                 )
             current_price = self._price(raw.current_price, symbol=canonical, tolerate_missing=not bot_symbol)
             average_price = self._price(raw.avg_entry_price, symbol=canonical, tolerate_missing=not bot_symbol)
@@ -405,17 +407,30 @@ class AccountService:
                     managed_qty=managed_qty,
                 )
             )
+        # Per-symbol drift lock (runtime.per_symbol_drift_lock, default off): an
+        # unexplained quantity shortfall is collected instead of raised, so the
+        # snapshot still builds and the other symbols keep trading. The runtime
+        # locks exactly these symbols and unlocks them once the broker again
+        # covers the owned quantity (this same comparison, next pass).
+        per_symbol_lock = getattr(broker, "per_symbol_drift_lock", False) is True
+        locked_shortfalls: list[str] = []
         if drift_candidates:
             repo_orders = sell_orders()
             for canonical, owned_qty, raw_qty, market in drift_candidates:
                 if self._open_order_explains_drift(canonical, owned_qty, raw_qty, market, repo_orders):
                     continue
+                if per_symbol_lock:
+                    locked_shortfalls.append(canonical)
+                    continue
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: repository managed "
                     f"qty={owned_qty} exceeds broker position qty={raw_qty}. "
                     "Confirm the broker position, then adopt it explicitly with "
-                    "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty> --confirm`"
+                    "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty> --confirm`",
+                    symbols=(canonical,),
                 )
+        if per_symbol_lock:
+            broker.drift_locked_symbols = frozenset(locked_shortfalls)
         # Account-scoped peak reconciliation (serialized: the peak is shared
         # mutable state across the account, trade-update and decision threads).
         # The lock is created in ``AlpacaBroker.__init__``; the fallback below

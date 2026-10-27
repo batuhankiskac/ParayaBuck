@@ -34,7 +34,11 @@ from parayabuck.execution.alpaca import (
     OwnershipDriftError,
     ProtectionReconciliationError,
 )
-from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES, EmptyPositionsReadError
+from parayabuck.execution.alpaca_models import (
+    TERMINAL_BROKER_ORDER_STATUSES,
+    DefiniteOrderRejection,
+    EmptyPositionsReadError,
+)
 from parayabuck.execution.alpaca_reconciliation import (
     _WORKING_BROKER_STATUSES,
     ReconciliationReport,
@@ -345,6 +349,34 @@ def _stored_signal_series(runtimes: Any, symbol: str) -> list[Any]:
     return stored
 
 
+class _SymbolDriftOrderGate:
+    """Refuses portfolio orders for symbols locked by per-symbol drift.
+
+    Installed in front of the broker handed to the portfolio runtime, and only
+    when ``runtime.per_symbol_drift_lock`` is on. Every portfolio submit goes
+    through ``submit_portfolio_order``, so a locked symbol gets neither a BUY nor
+    a SELL from the bot while other symbols submit normally. A refused order
+    never reaches the broker; it is raised as ``DefiniteOrderRejection``, which
+    the portfolio runtime books as ``rejected`` and keeps running on.
+    """
+
+    def __init__(self, broker: Any, is_locked: Callable[[str, Market], bool]) -> None:
+        self._broker = broker
+        self._is_locked = is_locked
+
+    def __getattr__(self, name: str) -> Any:
+        # Everything except order submission is the real broker's.
+        return getattr(self._broker, name)
+
+    def submit_portfolio_order(self, order: Any) -> str:
+        if self._is_locked(order.symbol, order.market):
+            raise DefiniteOrderRejection(
+                f"Ownership drift lock on {order.symbol}: order refused locally until the broker "
+                "and the ledger agree again; no broker call was made"
+            )
+        return self._broker.submit_portfolio_order(order)
+
+
 class EngineRuntime:
     """Web-manageable streaming runtime for the ParayaBuck engine."""
 
@@ -469,6 +501,10 @@ class EngineRuntime:
         self.broker.portfolio_owned_cost_bases = lambda symbol, market: self._portfolio_repository.owned_cost_bases(
             self.broker.account_id or "unknown", symbol, market
         )
+        if self._per_symbol_drift_lock_enabled():
+            # Read by AccountService.account(): shortfall drift is collected
+            # into ``drift_locked_symbols`` instead of raised. Off = unchanged.
+            self.broker.per_symbol_drift_lock = True
         self._portfolio_runtimes: tuple[PortfolioRuntime, ...] = ()
         self.stream = AlpacaBarStream(api_key, secret_key, config.alpaca.stock_stream_feed)
         self.trading_updates = AlpacaTradingUpdateStream(api_key, secret_key, self.paper, self._on_trade_update)
@@ -1385,7 +1421,7 @@ class EngineRuntime:
                 PortfolioRuntime(
                     strategy,
                     symbols,
-                    self.broker,
+                    self._portfolio_order_broker(),
                     self._portfolio_repository,
                     mode=self.mode.value,
                     maximum_allocation=maximum_allocation,
@@ -2209,6 +2245,11 @@ class EngineRuntime:
                     account = self.broker.account()
                     fetched = True
                     self._consecutive_account_failures = 0
+                    if self._per_symbol_drift_lock_enabled():
+                        # Lock newly short symbols and clear locks the broker
+                        # now covers. Runs on every successful pass, so an
+                        # unlock is decided by the same comparison as the lock.
+                        self._sync_symbol_drift_locks(frozenset(getattr(self.broker, "drift_locked_symbols", ())))
                     now = datetime.now(UTC)
                     if not self._publish_account_snapshot(
                         account,
@@ -2397,6 +2438,74 @@ class EngineRuntime:
                     message="Ownership drift detected; runtime halted and safety state persisted",
                     reason="ownership_drift",
                 )
+
+    def _per_symbol_drift_lock_enabled(self) -> bool:
+        """True only when ``runtime.per_symbol_drift_lock`` is literally true."""
+        runtime_config = getattr(getattr(self, "app_config", None), "runtime", None)
+        return getattr(runtime_config, "per_symbol_drift_lock", False) is True
+
+    def _symbol_drift_lock_map(self) -> dict[str, dict[str, object]]:
+        """Per-symbol ownership-drift locks, in memory only (never persisted)."""
+        locks = getattr(self, "_symbol_drift_locks", None)
+        if locks is None:
+            locks = {}
+            self._symbol_drift_locks = locks
+        return locks
+
+    def _symbol_locked_for_order(self, symbol: str, market: Market) -> bool:
+        """True while the symbol carries an ownership-drift lock (order gate)."""
+        with getattr(self, "_state_lock", threading.RLock()):
+            return canonical_symbol(symbol, market) in self._symbol_drift_lock_map()
+
+    def _portfolio_order_broker(self) -> Any:
+        """The broker the portfolio runtimes submit through.
+
+        Flag off returns the broker itself (today's object). Flag on returns the
+        order gate in front of it, so a locked symbol is refused at submit.
+        """
+        if not self._per_symbol_drift_lock_enabled():
+            return self.broker
+        return _SymbolDriftOrderGate(self.broker, self._symbol_locked_for_order)
+
+    def _sync_symbol_drift_locks(self, drifting: frozenset[str]) -> None:
+        """Make the lock set match the symbols the broker reports as short.
+
+        A symbol newly in ``drifting`` is locked: one ``circuit_breaker`` alert
+        (reason ``symbol_ownership_drift``) and one reconcile scheduled for the
+        batch. A locked symbol no longer in ``drifting`` is unlocked with a log
+        line and a recovery alert. The runtime state, the circuit breaker and
+        the global entry latch are NOT touched: other symbols keep trading.
+        """
+        newly_locked: list[str] = []
+        unlocked: list[str] = []
+        with getattr(self, "_state_lock", threading.RLock()):
+            locks = self._symbol_drift_lock_map()
+            for symbol in sorted(drifting - set(locks)):
+                locks[symbol] = {"first_seen_at": datetime.now(UTC), "reason": "symbol_ownership_drift"}
+                newly_locked.append(symbol)
+            for symbol in sorted(set(locks) - drifting):
+                locks.pop(symbol, None)
+                unlocked.append(symbol)
+        if newly_locked:
+            # Scheduled, not latched: the reconcile-pending latch would hold
+            # every symbol's entries, which is what this lock avoids.
+            self._schedule_reconcile()
+        for symbol in newly_locked:
+            log.critical("Ownership drift on %s: that symbol is locked; other symbols keep trading", symbol)
+            alerts.emit(
+                "circuit_breaker",
+                message=f"Ownership drift on {symbol}: symbol locked, reconcile scheduled",
+                reason="symbol_ownership_drift",
+                symbol=symbol,
+            )
+        for symbol in unlocked:
+            log.warning("Ownership drift on %s cleared: broker covers the owned quantity; symbol unlocked", symbol)
+            alerts.emit(
+                "reconciliation_recovered",
+                message=f"Ownership drift on {symbol} cleared; symbol unlocked",
+                reason="symbol_ownership_drift_cleared",
+                symbol=symbol,
+            )
 
     def _persist_safety_state(self, reason: str) -> None:
         """Persist the halted circuit-breaker reason with the last known

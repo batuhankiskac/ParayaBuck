@@ -55,6 +55,7 @@ def live_configuration_digests(config: Any) -> tuple[str, ...]:
             equity_universe_digest(equity_universe),
             portfolio_risk_limits_from_config(config.risk),
             portfolio_execution_policy_from_config(config.execution),
+            config.risk.drawdown_liquidation,
         ),
     )
 

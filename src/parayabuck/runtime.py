@@ -582,6 +582,7 @@ class EngineRuntime:
                     universe_version,
                     risk_limits,
                     execution_policy,
+                    self.app_config.risk.drawdown_liquidation,
                 )
             )
         return tuple(digests)
@@ -1368,6 +1369,7 @@ class EngineRuntime:
                     execution_policy=portfolio_execution_policy_from_config(self.app_config.execution),
                     sip_embargo=timedelta(minutes=self.app_config.signal_cross_check.sip_embargo_minutes),
                     live_buy_gap_margin=self.app_config.live.buy_gap_margin_pct,
+                    drawdown_liquidation=self.app_config.risk.drawdown_liquidation,
                 )
             )
         self._portfolio_runtimes = tuple(portfolio_runtimes)

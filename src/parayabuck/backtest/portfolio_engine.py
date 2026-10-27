@@ -8,7 +8,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from itertools import pairwise
 from types import EllipsisType
-from typing import Literal
+from typing import Any, Literal
 
 from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
@@ -16,6 +16,7 @@ from parayabuck.core.models import AccountSnapshot, Bar, Market, PositionSnapsho
 from parayabuck.data.market_dataset import CorporateAction, CorporateActionType
 from parayabuck.execution.portfolio import (
     DecemberDeferralHold,
+    DrawdownLiquidationState,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioRiskLimits,
@@ -330,6 +331,7 @@ class PortfolioBacktestEngine:
         fill_basis: Literal["open", "close"] = "open",
         allow_same_bar_close: bool = False,
         impact_coefficient: float = 0.0,
+        drawdown_liquidation: Any = None,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -430,7 +432,18 @@ class PortfolioBacktestEngine:
         self.universe_version = universe_version or EQUITY_UNIVERSE_VERSION
         self.allow_static_universe = bool(allow_static_universe)
         self.terminal_lifecycles = self._validated_terminal_lifecycles(terminal_lifecycles)
-        self.risk_overlay = PortfolioRiskOverlay(risk_limits) if risk_limits is not None else None
+        # Optional drawdown liquidation brake (config.risk.drawdown_liquidation).
+        # Its latched state is carried across decisions like the runtime's
+        # persisted row; disabled or None leaves the overlay unchanged.
+        self.drawdown_liquidation = drawdown_liquidation
+        self._drawdown_liquidation_state: DrawdownLiquidationState | None = (
+            DrawdownLiquidationState() if getattr(drawdown_liquidation, "enabled", False) else None
+        )
+        self.risk_overlay = (
+            PortfolioRiskOverlay(risk_limits, drawdown_liquidation=drawdown_liquidation)
+            if risk_limits is not None
+            else None
+        )
         # The cash buffer a cash-limited BUY may not spend into.
         self.minimum_cash = risk_limits.minimum_cash if risk_limits is not None else 0.0
         self.maximum_allocation = maximum_allocation
@@ -1264,7 +1277,17 @@ class PortfolioBacktestEngine:
                 # enforced halt would freeze the alpha curve permanently.
                 # Production-policy simulations set the ctor flag to enforce.
                 enforce_drawdown_halt=self.enforce_drawdown_halt,
+                **(
+                    {
+                        "drawdown_liquidation_state": self._drawdown_liquidation_state,
+                        "session_date": session_date_for(target.decision_timestamp),
+                    }
+                    if self._drawdown_liquidation_state is not None
+                    else {}
+                ),
             )
+            if self._drawdown_liquidation_state is not None and risk.drawdown_liquidation_state is not None:
+                self._drawdown_liquidation_state = risk.drawdown_liquidation_state
             target = risk.target
         self._rebalance_number += 1
         self._apply_target(target)

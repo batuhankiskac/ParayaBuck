@@ -1438,6 +1438,7 @@ class EngineManager:
                         universe_version,
                         portfolio_risk_limits_from_config(cfg.risk),
                         portfolio_execution_policy_from_config(cfg.execution),
+                        cfg.risk.drawdown_liquidation,
                     )
                 )
             return tuple(digests), None

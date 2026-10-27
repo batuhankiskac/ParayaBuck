@@ -434,6 +434,7 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
                 universe_version,
                 portfolio_risk_limits_from_config(config.risk),
                 portfolio_execution_policy_from_config(config.execution),
+                config.risk.drawdown_liquidation,
             )
         )
     now = datetime.now(UTC)

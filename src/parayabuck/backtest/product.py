@@ -590,6 +590,7 @@ def run_product_backtest(
         fill_basis=fill_basis,
         allow_same_bar_close=allow_same_bar_close,
         impact_coefficient=impact_coefficient,
+        drawdown_liquidation=config.risk.drawdown_liquidation,
     )
     result = engine.run(
         filtered,

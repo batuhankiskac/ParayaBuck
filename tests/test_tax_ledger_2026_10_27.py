@@ -261,7 +261,7 @@ def test_evds_fetch_uses_injected_http_and_keeps_key_out_of_url() -> None:
                     {"Tarih": "10-03-2026", "TP_DK_USD_A_YTL": None},
                 ]
             }
-        return {"items": [{"Tarih": "2026-01", "TP_FG_J0": "3100.5"}]}
+        return {"items": [{"Tarih": "2026-01", "TP_TUFE1YI_T1": "3100.5"}]}
 
     rates = fetch_usd_try(date(2026, 3, 1), date(2026, 3, 31), "secret-key", fake_get)
     indices = fetch_yiufe(date(2026, 1, 1), date(2026, 1, 31), "secret-key", fake_get)
@@ -292,7 +292,7 @@ def test_fetch_rates_to_files_merges_and_writes_loadable_csv(tmp_path: Path) -> 
     def fake_get(url: str, headers: dict[str, str]) -> dict[str, Any]:
         if "TP.DK.USD.A.YTL" in url:
             return {"items": [{"Tarih": "09-03-2026", "TP_DK_USD_A_YTL": "43.1"}]}
-        return {"items": [{"Tarih": "2026-02", "TP_FG_J0": "3050.0"}]}
+        return {"items": [{"Tarih": "2026-02", "TP_TUFE1YI_T1": "3050.0"}]}
 
     counts = fetch_rates_to_files(
         date(2026, 3, 1),

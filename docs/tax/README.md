@@ -51,7 +51,7 @@ export PARAYABUCK_EVDS_KEY='...'
 parayabuck tax rates-fetch --start 2020-01-01
 ```
 
-The command fetches USD buying (`TP.DK.USD.A.YTL`) and Yİ-ÜFE (`TP.FG.J0`). It
+The command fetches USD buying (`TP.DK.USD.A.YTL`) and Yİ-ÜFE (`TP.TUFE1YI.T1`; not confirmed against the EVDS code list, override with `PARAYABUCK_EVDS_YIUFE_SERIES`, and check the fetched values against TÜİK before use). It
 merges the results into the two CSV files: existing rows stay, and fetched values
 replace older ones for the same date or month. The key is sent in a request header,
 not in the URL. Check the series codes in the EVDS data-code list before relying on

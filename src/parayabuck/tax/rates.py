@@ -36,9 +36,18 @@ DEFAULT_YIUFE_PATH = Path("data/tax/yiufe.csv")
 EVDS_KEY_ENV = "PARAYABUCK_EVDS_KEY"
 EVDS_BASE_URL = "https://evds2.tcmb.gov.tr/service/evds/"
 # EVDS series codes: USD buying (döviz alış kuru, TL) and Yİ-ÜFE (2003=100).
-# Verify the exact code against the EVDS data-code list before relying on a fetch.
+# TP.FG.J0 is the consumer index (TÜFE), not Yİ-ÜFE. The Yİ-ÜFE code is not
+# confirmed against the EVDS data-code list, so it can be overridden by env;
+# the CSV files remain the primary, operator-checked source.
 EVDS_USD_BUYING_SERIES = "TP.DK.USD.A.YTL"
-EVDS_YIUFE_SERIES = "TP.FG.J0"
+EVDS_YIUFE_SERIES = "TP.TUFE1YI.T1"
+EVDS_YIUFE_SERIES_ENV = "PARAYABUCK_EVDS_YIUFE_SERIES"
+
+
+def evds_yiufe_series(env: Mapping[str, str] | None = None) -> str:
+    """Yİ-ÜFE series code: ``PARAYABUCK_EVDS_YIUFE_SERIES`` when set, else the default."""
+    source = os.environ if env is None else env
+    return str(source.get(EVDS_YIUFE_SERIES_ENV) or "").strip() or EVDS_YIUFE_SERIES
 
 USDTRY_COLUMN = "usdtry_forex_buying"
 YIUFE_COLUMN = "yiufe_index"
@@ -234,7 +243,7 @@ def fetch_usd_try(start: date, end: date, api_key: str, http_get: HttpGet = defa
 def fetch_yiufe(start: date, end: date, api_key: str, http_get: HttpGet = default_http_get) -> dict[str, float]:
     """Monthly Yİ-ÜFE indices from EVDS between ``start`` and ``end`` (inclusive)."""
     indices: dict[str, float] = {}
-    for label, value in _evds_items(EVDS_YIUFE_SERIES, start, end, api_key, http_get):
+    for label, value in _evds_items(evds_yiufe_series(), start, end, api_key, http_get):
         period = _evds_date(label)
         month = period.strftime("%Y-%m") if isinstance(period, date) else period
         indices[month] = _parse_positive(str(value), f"EVDS Yİ-ÜFE {label}")
@@ -278,7 +287,7 @@ def fetch_rates_to_files(
     _write_csv_atomic(
         Path(yiufe_path),
         ["month", YIUFE_COLUMN, "source"],
-        [[month, repr(indices[month]), f"TCMB EVDS {EVDS_YIUFE_SERIES}"] for month in sorted(indices)],
+        [[month, repr(indices[month]), f"TCMB EVDS {evds_yiufe_series()}"] for month in sorted(indices)],
     )
     return {"usdtry_rows": len(usd), "yiufe_rows": len(indices)}
 

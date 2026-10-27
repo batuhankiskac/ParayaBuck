@@ -12,7 +12,7 @@ import traceback
 from datetime import UTC, datetime, timedelta
 from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
@@ -42,6 +42,23 @@ log = get_logger("parayabuck.cli")
 # every older automatic backup, so a fraction of a day is refused.
 _MIN_BACKUP_RETENTION_DAYS = 1.0
 
+# Exit codes of the parayabuck CLI (documented in docs/operations.md, "Exit codes").
+# 2 is reserved for CRITICAL health, so argparse usage errors and missing inputs
+# never share it with a monitor's page-worthy result (D2-6-4).
+EXIT_OK = 0
+EXIT_FAILURE = 1  # refused, failed, DEGRADED / BLOCKED / UNKNOWN health, a doctor blocker
+EXIT_CRITICAL = 2  # CRITICAL health only (ops status, ops doctor)
+EXIT_MISSING = 3  # a file or database the command needs does not exist
+EXIT_USAGE = 64  # bad arguments or values (sysexits EX_USAGE)
+
+
+class _UsageParser(argparse.ArgumentParser):
+    """Argument parser whose usage errors exit EXIT_USAGE instead of argparse's 2."""
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_USAGE, f"{self.prog}: error: {message}\n")
+
 
 def _retention_days_arg(value: str) -> float:
     """--retention-days: a finite number of days, at least one day."""
@@ -57,7 +74,7 @@ def _retention_days_arg(value: str) -> float:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="parayabuck", description="ParayaBuck trading bot")
+    parser = _UsageParser(prog="parayabuck", description="ParayaBuck trading bot")
     parser.add_argument("--config", default=None, help="configuration YAML path")
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("web", help="start the local operations console")
@@ -108,14 +125,19 @@ def _parser() -> argparse.ArgumentParser:
     authorize.add_argument(
         "--revoke-standing",
         action="store_true",
-        help="delete the standing LIVE authorization (LIVE then needs a manual re-arm after every restart)",
+        help="delete the standing LIVE authorization (LIVE then needs a manual re-arm after every restart). "
+        "A LIVE engine that is already running keeps trading until it is stopped",
     )
     halt = commands.add_parser(
         "halt",
         help="set the sticky operator halt: engine starts are refused until `parayabuck resume`",
     )
     halt.add_argument("--reason", default="operator halt", help="free-text reason stored in the halt marker")
-    commands.add_parser("resume", help="clear the operator halt so the engine may start again")
+    commands.add_parser(
+        "resume",
+        help="remove the operator halt marker so the engine may start again. A persisted operator_halt incident "
+        "row is reported, not removed: it still starts the engine halted until the console reset releases it",
+    )
     backtest = commands.add_parser("backtest", help="run a production-strategy backtest")
     _add_backtest_arguments(backtest, include_cost_stress=True)
     optimize = commands.add_parser("optimize", help="grid search on TRAIN and optional OOS data")
@@ -144,8 +166,12 @@ def _parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--db", default=None)
     doctor_p.add_argument("--journal", default=None, help="journal file to check (default: configured path)")
     events_p = ops_sub.add_parser("events", help="query operational event journal")
-    events_p.add_argument("--since", default=None, help="since time (ISO or 30m,2h,1d)")
-    events_p.add_argument("--until", default=None, help="until time (ISO or relative)")
+    events_p.add_argument(
+        "--since", default=None, help="since time: ISO or 30m, 2h, 1d. A naive ISO time is read as UTC, not New York"
+    )
+    events_p.add_argument(
+        "--until", default=None, help="until time: ISO or 30m, 2h, 1d. A naive ISO time is read as UTC, not New York"
+    )
     events_p.add_argument("--kind", default=None)
     # The journal matches severity exactly against the upper-case vocabulary,
     # so the flag is normalised and validated instead of silently matching
@@ -236,6 +262,13 @@ def _parser() -> argparse.ArgumentParser:
         help="write the adjustment. OWNED is the owned quantity the dry run printed; the write is refused if the "
         "ledger now holds a different quantity. Without --confirm nothing is written",
     )
+    rebase_p.add_argument(
+        "--plan-digest",
+        default=None,
+        metavar="DIGEST",
+        help="the 'Plan digest' the dry run printed for the same flags. Required with --confirm: the write is refused "
+        "when the plan differs (for example a --broker-average-cost that the dry run did not have)",
+    )
     return parser
 
 
@@ -308,7 +341,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"Backup skipped: configuration could not be loaded: {exc}",
                 reason="config_invalid",
             )
-        return 1
+        if args.command in {"halt", "resume"}:
+            # F2-9-5: the marker lives in the directory the settings name, so a
+            # broken settings file means no marker is written or removed. Say so
+            # on stderr (the log line goes to stdout), rather than letting the
+            # operator assume the halt took effect.
+            print(
+                f"Operator halt NOT changed: the configuration could not be loaded ({exc}). "
+                "Fix config/settings.yaml or pass --config; no marker was written or removed.",
+                file=sys.stderr,
+            )
+        return EXIT_FAILURE
     if args.command == "authorize-live":
         return _authorize_live(config, args)
     if args.command in {"halt", "resume"}:
@@ -378,7 +421,11 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             print(f"Standing LIVE authorization revoked: {standing_file}")
         else:
             print("No standing LIVE authorization to revoke")
-        return 0
+        # F2-9-7: revoking only stops an unattended LIVE start after the next restart.
+        print(
+            "A LIVE engine that is already running keeps trading. Stop it with `systemctl stop parayabuck` if it must stop."
+        )
+        return EXIT_OK
     if not args.operator or not str(args.operator).strip():
         raise SystemExit("--operator is required")
     if not config.live.enabled or config.live.hard_dollar_cap <= 0:
@@ -516,6 +563,20 @@ def _emit_ops_alert(kind: str, message: str, **fields: Any) -> None:
 _EMAIL_FLUSH_SECONDS = 60.0
 
 
+def _disk_cost_line(directory: Path, pattern: str, what: str) -> str:
+    """One printout line: the files and bytes ``pattern`` holds in ``directory`` (R2-10-7).
+
+    Labelled backups and ops bundles have no retention, so the operator sees what
+    they cost on disk each time one is written.
+    """
+    try:
+        sizes = [item.stat().st_size for item in directory.glob(pattern) if item.is_file()]
+    except OSError as exc:
+        return f"{what}: could not be counted in {directory} ({exc})"
+    megabytes = sum(sizes) / (1024 * 1024)
+    return f"{what}: {len(sizes)} file(s), {megabytes:.1f} MB in {directory}. No automatic retention applies: delete old ones by hand."
+
+
 def _run_backup_with_email(config: Config, args: argparse.Namespace) -> int:
     """Run the backup with the runtime's e-mail sink installed, so ``backup_failed`` is mailed.
 
@@ -548,14 +609,14 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
     the ``backup_failed`` alert: the timer runs unattended, so a silent
     failure would only surface when a restore is already needed.
     """
-    from parayabuck.backup import backup_database, verify_backup_set
+    from parayabuck.backup import KEEP_PREFIX, backup_database, verify_backup_set
 
     if args.verify_only:
         target = Path(args.verify_only).absolute()
         if not target.is_file():
             # Nothing to verify is not a corrupt backup: no alert, exit 2.
             print(f"Backup not found: {target}", file=sys.stderr)
-            return 2
+            return EXIT_MISSING
         # The set's peak sidecars and halt copy are part of the restore candidate.
         ok = verify_backup_set(target)
         if ok:
@@ -581,7 +642,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
             source_path=str(source),
             backup_dir=str(config.backup.path),
         )
-        return 2
+        return EXIT_MISSING
     retention_days = args.retention_days if args.retention_days is not None else config.backup.retention_days
     try:
         destination = backup_database(
@@ -610,6 +671,9 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
         raise SystemExit(f"Backup failed integrity check: {destination}")
     print(f"Backup written: {Path(destination).absolute()}")
     print(f"Retention: {retention_days:g} day(s); older automatic backups pruned")
+    if getattr(args, "label", None):
+        # R2-10-7: labelled snapshots are never pruned, so show what they cost on disk.
+        print(_disk_cost_line(Path(config.backup.path), f"{KEEP_PREFIX}*", "Labelled backups"))
     _prune_decision_receipts()
     return 0
 
@@ -655,26 +719,113 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
     # marker path, and refuse to create a marker in a directory that is not the
     # runtime data directory (a halt run from $HOME would halt nothing).
     marker = _operator_halt_marker(config).absolute()
+    mode = config.runtime.mode.value
     if args.command == "halt":
         if not marker.parent.is_dir():
             print(f"Operator halt NOT set: directory {marker.parent} does not exist", file=sys.stderr)
-            return 2
+            return EXIT_MISSING
         try:
             user = getpass.getuser()
         except Exception:
             user = "unknown"
         record = write_operator_halt(marker, reason=args.reason, user=user)
         print(f"Operator halt set: {marker}")
-        print(f"reason={record['reason']} user={record['user']} created_at={record['created_at']}")
+        # The mode and the marker path name the engine this marker stops: the one
+        # whose configuration (runtime directory) this command loaded.
+        print(f"mode={mode} (the engine that reads this marker) reason={record['reason']} user={record['user']}")
+        print(f"created_at={record['created_at']}")
         print("Engine starts are refused while the marker exists. Stop a running engine with the console stop")
-        print("control or `systemctl stop parayabuck`; `parayabuck resume` clears the halt.")
-        return 0
+        print("control or `systemctl stop parayabuck`; `parayabuck resume` removes the marker.")
+        _journal_operator_action(
+            config,
+            "operator_halt_set",
+            f"Operator halt set for {mode}: {record['reason']}",
+            fields={"mode": mode, "marker": str(marker), "user": record["user"]},
+        )
+        return EXIT_OK
     previous = read_operator_halt(marker)
-    if clear_operator_halt(marker):
+    cleared = clear_operator_halt(marker)
+    if cleared:
         print(f"Operator halt cleared: {marker} (was: {previous.get('reason') if previous else 'n/a'})")
     else:
         print(f"No operator halt present at {marker}; nothing to clear.")
-    return 0
+    # resume removes only the marker. A persisted operator_halt incident row still
+    # starts the engine halted, so say whether one is there (R2-9-6).
+    database = config.runtime.decision_db_path
+    rows = _persisted_operator_halt_rows(config)
+    if rows is None:
+        print(f"Persisted operator_halt incident: could not be read from {database}. Check it before a start.")
+    elif rows:
+        print(f"A persisted operator_halt incident row still exists in {database}: the engine still starts halted.")
+        print("Release it from the operator console (safety reset) once the marker is gone.")
+    else:
+        print(f"No persisted operator_halt incident row in {database}.")
+    if cleared:
+        _journal_operator_action(
+            config,
+            "operator_halt_cleared",
+            f"Operator halt marker removed for {mode}",
+            fields={"mode": mode, "marker": str(marker), "persisted_incident_rows": rows},
+        )
+    return EXIT_OK
+
+
+def _persisted_operator_halt_rows(config: Config) -> int | None:
+    """Rows of the persisted ``operator_halt`` safety incident in the decision database.
+
+    None when the database exists but cannot be read. The runtime writes this row
+    under the reason ``operator_halt`` (``runtime._OPERATOR_HALT_REASON``).
+    """
+    database = Path(config.runtime.decision_db_path)
+    if not database.is_file():
+        return 0
+    try:
+        connection = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True, timeout=5)
+    except sqlite3.Error:
+        return None
+    try:
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'safety_incidents'"
+        ).fetchone()
+        if table is None:
+            return 0
+        row = connection.execute(
+            "SELECT COUNT(*) FROM safety_incidents WHERE reason = ?", ("operator_halt",)
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return None
+    finally:
+        connection.close()
+
+
+def _journal_operator_action(
+    config: Config,
+    kind: str,
+    message: str,
+    *,
+    fields: dict[str, object],
+    account_id: str | None = None,
+) -> None:
+    """Write one operator action (halt, resume, ownership rebase) to the event journal.
+
+    The action has already happened when this runs, so a journal failure is logged
+    and never changes the exit code.
+    """
+    try:
+        from parayabuck.monitoring.journal import emit_journal
+        from parayabuck.monitoring.operational_event import Severity, create_event
+
+        event = create_event(
+            kind=kind,
+            message=message,
+            severity=Severity.WARNING,
+            account_id=account_id,
+            fields=fields,
+        )
+        emit_journal(event, path=config.observability.journal_path)
+    except Exception:
+        log.warning("Could not journal the operator action %s", kind, exc_info=True)
 
 
 def _configured_config_path(args: argparse.Namespace) -> str | None:
@@ -769,6 +920,33 @@ def _unit_only_keys_in_env_file(path: Path) -> list[str]:
             line = line[len("export ") :].lstrip()
         key = line.split("=", 1)[0].strip()
         if key in _UNIT_ONLY_ENV_KEYS and key not in found:
+            found.append(key)
+    return found
+
+
+def _inline_comment_keys_in_env_file(path: Path) -> list[str]:
+    """Names (never values) of the env-file keys whose unquoted value holds a ``#``.
+
+    systemd's EnvironmentFile= keeps everything after ``=``, an inline comment
+    included, while python-dotenv drops it. The unit and the engine then read
+    different credentials (D2-7-4: the SMTP password gained a comment and the
+    mail server answered 535).
+    """
+    if not path.is_file():
+        return []
+    found: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not separator or not key or value[:1] in {'"', "'"}:
+            continue
+        if "#" in value and key not in found:
             found.append(key)
     return found
 
@@ -875,6 +1053,23 @@ def _run_doctor(args: argparse.Namespace) -> int:
             checks.append(("credential file owner-only", *permission_row))
             if permission_row[0] == "FAIL":
                 blocker = True
+        # D2-7-4: a '#' inside an unquoted value is read by systemd but not by the engine.
+        # Names only; the values stay out of the output. A WARN, never a start blocker.
+        if dotenv_path().is_file():
+            try:
+                inline_keys = _inline_comment_keys_in_env_file(dotenv_path())
+            except Exception as exc:
+                checks.append(("credential file inline comments", "WARN", f"scan could not run: {exc}"))
+            else:
+                if inline_keys:
+                    checks.append(
+                        (
+                            "credential file inline comments",
+                            "WARN",
+                            f"{', '.join(inline_keys)}: '#' inside an unquoted value; move the comment to its own "
+                            "line (systemd keeps it in the value)",
+                        )
+                    )
         from parayabuck.live_safety import credential_env_names, mode_credentials
 
         live_mode_config = config.runtime.mode == RuntimeMode.LIVE
@@ -903,12 +1098,30 @@ def _run_doctor(args: argparse.Namespace) -> int:
             p = Path(path_str)
             try:
                 p.mkdir(parents=True, exist_ok=True)
-                test = p / ".doctor_write_test"
-                test.write_text("ok")
-                test.unlink()
-                add(label, True, str(p))
+                if label == "backup path writable":
+                    # S2-10-5 prerequisite: a probe file here would be a write the trading
+                    # process makes into its own restore points. Check the permission only.
+                    writable = os.access(p, os.W_OK)
+                    add(label, writable, str(p) if writable else f"{p}: not writable")
+                else:
+                    test = p / ".doctor_write_test"
+                    test.write_text("ok")
+                    test.unlink()
+                    add(label, True, str(p))
             except Exception as exc:
-                add(label, False, f"{p}: {exc}")
+                if label == "reports path writable" and not p.exists():
+                    # D2-7-5: under ProtectSystem=strict the reports directory may be missing
+                    # and uncreatable. A note, not a start blocker; the fix is a one-time install.
+                    checks.append(
+                        (
+                            label,
+                            "WARN",
+                            f"{p} is missing and cannot be created here ({exc}); create it once with: "
+                            f"install -d -m 0700 -o <service user> {p}",
+                        )
+                    )
+                else:
+                    add(label, False, f"{p}: {exc}")
         # Backup freshness. Reported as a WARN row only, never as a blocker
         # or a strict warning: the unit runs `doctor --strict` as
         # ExecStartPre, and a stale backup must never keep the engine down.
@@ -1202,7 +1415,9 @@ def _parse_time_arg(value: str | None) -> datetime | None:
         # rewritten to UTC first or the window is shifted by the offset.
         return dt.astimezone(UTC)
     except Exception:
-        raise SystemExit(f"Invalid time value: {value} (use ISO or 30m/2h/1d)")
+        # A bad argument is a usage error (EXIT_USAGE), not a degraded-health exit 1 (D2-6-5).
+        print(f"Invalid time value: {value} (use ISO or 30m/2h/1d)", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE) from None
 
 
 def _run_ops(args: argparse.Namespace) -> int:
@@ -1224,7 +1439,7 @@ def _run_ops(args: argparse.Namespace) -> int:
     if cmd == "test-email":
         return _ops_test_email(args)
     print(f"Unknown ops command: {cmd}", file=sys.stderr)
-    return 2
+    return EXIT_USAGE
 
 
 def _ops_test_email(args: argparse.Namespace) -> int:
@@ -1318,7 +1533,9 @@ def _ops_status(args: argparse.Namespace) -> int:
     # Load config optionally
     try:
         config = load_config(getattr(args, "config", None))
-    except Exception:
+    except Exception as exc:
+        # D2-6-7: a broken settings file must not pass as the defaults in silence.
+        print(f"Settings could not be loaded ({exc}); the default paths and limits are shown.", file=sys.stderr)
         config = Config()
     # Explicit flags win; only an absent flag falls back to the configured paths.
     # Dropping them here made the relative data/runtime defaults answer for a
@@ -1361,7 +1578,10 @@ def _ops_status(args: argparse.Namespace) -> int:
         summary = c.get("summary", "")
         return f"{label:<14} {status:<8} — {summary}"
 
-    print(f"ParayaBuck {str(mode).upper()}")
+    # F2-7-11: without a snapshot the mode is the configured one, not the running one.
+    snapshot_mode = snap_data.get("mode") if isinstance(snap_data, dict) else None
+    mode_note = "" if snapshot_mode else " (configured mode; no health snapshot to confirm it)"
+    print(f"ParayaBuck {str(mode).upper()}{mode_note}")
     print("=" * 16)
     print(f"Runtime       {overall}")
     print(f"Trading       {trading}")
@@ -1399,6 +1619,15 @@ def _ops_status(args: argparse.Namespace) -> int:
         delivered = alert_counts.get("delivered")
         emitted = sum(int(v or 0) for v in delivered.values()) if isinstance(delivered, dict) else 0
         print(f"  emitted {emitted}, throttled repeats {int(alert_counts.get('suppressed') or 0)}")
+        # D2-8-5 follow-up: the e-mail channel's delivery counters, when the engine has one.
+        email_status = alert_counts.get("email")
+        if isinstance(email_status, dict):
+            last_success = email_status.get("last_success_age_seconds")
+            last_text = f"{last_success:.0f}s ago" if isinstance(last_success, (int, float)) else "never"
+            print(
+                f"  e-mail sent {email_status.get('sent', 0)}, failed {email_status.get('failed', 0)}, "
+                f"dropped {email_status.get('dropped', 0)}, last success {last_text}"
+            )
     print(f"  {_check_line('observability', 'journal').strip()}")
     # Active incidents summary if present
     try:
@@ -1418,16 +1647,17 @@ def _ops_status(args: argparse.Namespace) -> int:
 
 
 def _health_exit_code(overall: object) -> int:
-    """Exit code for an overall health label, as ``ops doctor`` maps it.
+    """Exit code for an overall health label, shared by ``ops status`` and ``ops doctor``.
 
-    CRITICAL is 2; BLOCKED, DEGRADED and UNKNOWN are 1; OK is 0. A script that
-    polls ``ops status`` must not read a CRITICAL runtime as success.
+    CRITICAL is EXIT_CRITICAL (2); BLOCKED, DEGRADED and UNKNOWN are EXIT_FAILURE
+    (1); OK is EXIT_OK (0). One mapping for both commands (D2-6-7): a script that
+    polls either must not read a CRITICAL runtime as success, or a BLOCKED one as OK.
     """
     if overall == "CRITICAL":
-        return 2
+        return EXIT_CRITICAL
     if overall in {"BLOCKED", "DEGRADED", "UNKNOWN"}:
-        return 1
-    return 0
+        return EXIT_FAILURE
+    return EXIT_OK
 
 
 def _ops_doctor(args: argparse.Namespace) -> int:
@@ -1463,8 +1693,9 @@ def _ops_doctor(args: argparse.Namespace) -> int:
             config_path=config_path, snapshot_path=snapshot_path, journal_path=journal_path, decision_db_path=db_path
         )
     except Exception as exc:
+        # An internal failure of the tool is not a CRITICAL runtime (exit 2).
         print(f"Doctor failed: {exc}", file=sys.stderr)
-        return 2
+        return EXIT_FAILURE
     if getattr(args, "json", False):
         print(json.dumps(result, indent=2, default=str))
     else:
@@ -1473,14 +1704,8 @@ def _ops_doctor(args: argparse.Namespace) -> int:
         for chk in result.get("checks", []):
             print(f"{chk.get('status', 'UNKNOWN'):9} {chk.get('code', '')}: {chk.get('summary', '')}")
         print(f"\nOverall: {result.get('overall', 'UNKNOWN')}")
-    overall = result.get("overall", "UNKNOWN")
-    if overall == "CRITICAL":
-        return 2
-    if overall in {"DEGRADED", "UNKNOWN"}:
-        # UNKNOWN is degraded for script friendliness? spec says 1=degraded/warnings, 2=critical
-        # Map UNKNOWN to 1 unless caller expects 2
-        return 1
-    return 0
+    # UNKNOWN maps to 1 (no evidence is not OK); the mapping is shared with ops status.
+    return _health_exit_code(result.get("overall", "UNKNOWN"))
 
 
 def _ops_events(args: argparse.Namespace) -> int:
@@ -1631,10 +1856,26 @@ def _ops_timeline(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_explain_empty(args: argparse.Namespace, message: str) -> None:
-    """Report that there is no decision to explain; --json stays one JSON object."""
+def _print_explain_empty(args: argparse.Namespace, message: str, decision_id: str | None = None) -> None:
+    """Report that there is no decision to explain; --json stays one JSON object.
+
+    The object keeps the normal explain keys (D2-6-6), so a script reads the same shape
+    whether or not a decision exists.
+    """
     if getattr(args, "json", False):
-        print(json.dumps({"decision": None, "message": message}))
+        payload: dict[str, object] = {
+            "decision_id": decision_id,
+            "decision": None,
+            "orders": [],
+            "fills": [],
+            "rebalance": None,
+            "no_trade_reason": None,
+            "detail": "",
+            "reconstruction": None,
+            "summary_events": [],
+            "message": message,
+        }
+        print(json.dumps(payload))
     else:
         print(message)
 
@@ -1720,6 +1961,12 @@ def _ops_explain(args: argparse.Namespace) -> int:
         if Path(str(journal_path)).exists():
             j = EventJournal.open_readonly(str(journal_path))
             summary_events = [e for e in j.query(decision_id=decision_id, limit=20) if e.kind == "decision_summary"]
+        if target != "latest" and decision is None and not orders and not summary_events:
+            # D2-6-6: an id that names nothing is a failed explain, not a NO TRADE with exit 0.
+            _print_explain_empty(
+                args, f"Decision {decision_id} was not found in the decision DB or the journal.", decision_id
+            )
+            return EXIT_FAILURE
         # Determine no-trade reason
         no_trade_reason = None
         detail = ""
@@ -1866,11 +2113,100 @@ def _ops_bundle(args: argparse.Namespace) -> int:
             print(f"Size: {sz} bytes")
         except Exception:
             pass
-        return 0
+        # R2-10-7: bundles have no retention either; show what the directory holds.
+        print(_disk_cost_line(out.parent, "parayabuck_bundle_*.zip", "Ops bundles"))
+        return EXIT_OK
     except Exception as exc:
         print(f"Bundle failed: {exc}", file=sys.stderr)
         traceback.print_exc()
         return 1
+
+
+# A health snapshot younger than this (or three snapshot intervals) counts as a live engine.
+_ENGINE_HEARTBEAT_MIN_SECONDS = 60.0
+
+
+def _engine_may_be_running(config: Config) -> bool:
+    """True while the engine may be live; fails closed (F2-9-3).
+
+    The same rule as scripts/repair_local_state.py: a systemd unit that is neither
+    inactive nor failed is live, and so is a health snapshot that is fresh and not
+    ``stopped``, an unreadable snapshot, or a systemd answer that cannot be read.
+    With no systemd on the host only the snapshot is consulted.
+    """
+    unit_state: str | None
+    try:
+        completed = subprocess.run(
+            ["systemctl", "is-active", "parayabuck"], capture_output=True, text=True, timeout=10, check=False
+        )
+    except FileNotFoundError:
+        unit_state = None  # no systemd on this host
+    except (OSError, subprocess.TimeoutExpired):
+        return True
+    else:
+        lines = (completed.stdout or "").strip().splitlines()
+        unit_state = lines[0].strip() if lines else "unknown"
+    if unit_state is not None and unit_state not in {"inactive", "failed"}:
+        return True
+    path = Path(config.observability.snapshot_path)
+    if not path.exists():
+        return False
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if not isinstance(snapshot, dict):
+        return True
+    if str(snapshot.get("runtime_state") or "").lower() == "stopped":
+        return False
+    try:
+        written_at = datetime.fromisoformat(str(snapshot["written_at"]))
+    except (KeyError, TypeError, ValueError):
+        return True
+    if written_at.tzinfo is None:
+        written_at = written_at.replace(tzinfo=UTC)
+    ttl = max(_ENGINE_HEARTBEAT_MIN_SECONDS, float(config.observability.snapshot_interval_seconds) * 3)
+    age_seconds = (datetime.now(UTC) - written_at).total_seconds()
+    return age_seconds <= ttl
+
+
+def _pinned_account_mismatch(config: Config, account_id: str, pinned: str) -> str | None:
+    """Why ``broker.expected_account_id`` does not name the ledger account, None when it does (F2-9-2).
+
+    The ledger stores the account UUID, but the pin is documented as the PA account
+    number. A PA pin is therefore checked against the broker the configured mode
+    uses, the way ``live_safety.verify_account_environment`` checks it: the number
+    must belong to this same account UUID. Fails closed when the broker cannot be read.
+    """
+    if not pinned.strip().upper().startswith("PA"):
+        return f"account {account_id} is not the configured broker.expected_account_id ({pinned})."
+    from parayabuck.live_safety import mode_credentials
+
+    live = config.runtime.mode == RuntimeMode.LIVE
+    key, secret = mode_credentials(live=live)
+    if not key or not secret:
+        return (
+            f"broker.expected_account_id ({pinned}) is an account number and this mode's broker credentials are not "
+            "set, so the pin cannot be verified."
+        )
+    try:
+        broker = AlpacaBroker(key, secret, paper=not live)
+    except Exception as exc:
+        return f"broker.expected_account_id ({pinned}): the broker could not be reached to verify the pin ({exc})."
+    try:
+        broker.account()
+        observed_id = str(broker.account_id or "").strip()
+        observed_number = str(broker.account_number or "").strip()
+    except Exception as exc:
+        return f"broker.expected_account_id ({pinned}): the broker account could not be read to verify the pin ({exc})."
+    finally:
+        broker.close()
+    if observed_id == account_id and observed_number.upper() == pinned.strip().upper():
+        return None
+    return (
+        f"account {account_id} is not the configured broker.expected_account_id ({pinned}); the broker reports "
+        f"{observed_id or 'no id'} / {observed_number or 'no number'} for these credentials."
+    )
 
 
 def _ops_rebase_ownership(args: argparse.Namespace) -> int:
@@ -1883,18 +2219,19 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
     booking rules are those of ``PortfolioStateRepository.plan_ownership_rebase``.
     A dry run opens the database read-only and never creates or migrates it.
     """
-    from parayabuck.portfolio.ownership_rebase import format_quantity
+    from parayabuck.portfolio.ownership_rebase import ACQUISITION_KIND, format_quantity
     from parayabuck.portfolio.runtime_repository import (
         NO_BOOKING,
         OwnershipRebaseRefused,
         PortfolioStateRepository,
+        ownership_rebase_plan_digest,
     )
 
     symbol = canonical_symbol(str(args.symbol).strip().upper(), Market.EQUITY)
     broker_qty = float(args.broker_qty)
     if not isfinite(broker_qty) or broker_qty < 0:
         print(f"Invalid --broker-qty {args.broker_qty!r}: must be finite and >= 0", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
     broker_average_cost = getattr(args, "broker_average_cost", None)
     if broker_average_cost is not None:
         broker_average_cost = float(broker_average_cost)
@@ -1903,7 +2240,7 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 f"Invalid --broker-average-cost {args.broker_average_cost!r}: must be finite and > 0",
                 file=sys.stderr,
             )
-            return 2
+            return EXIT_USAGE
     unit_cost = getattr(args, "acquisition_unit_cost", None)
     if unit_cost is not None:
         unit_cost = float(unit_cost)
@@ -1912,7 +2249,7 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 f"Invalid --acquisition-unit-cost {args.acquisition_unit_cost!r}: must be finite and > 0",
                 file=sys.stderr,
             )
-            return 2
+            return EXIT_USAGE
     confirm_value = getattr(args, "confirm", None)
     confirmed = confirm_value is not None
     expected_owned: float | None = None
@@ -1922,14 +2259,22 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 "--confirm needs the owned quantity the dry run printed, e.g. --confirm 100",
                 file=sys.stderr,
             )
-            return 2
+            return EXIT_USAGE
         try:
             expected_owned = float(str(confirm_value))
         except ValueError:
             expected_owned = float("nan")
         if not isfinite(expected_owned) or expected_owned < 0:
             print(f"Invalid --confirm {confirm_value!r}: must be the owned quantity, finite and >= 0", file=sys.stderr)
-            return 2
+            return EXIT_USAGE
+    plan_digest = getattr(args, "plan_digest", None)
+    if confirmed and not plan_digest:
+        # F2-9-1: the write must book exactly the plan the dry run printed.
+        print(
+            "--confirm needs --plan-digest with the 'Plan digest' the dry run printed for the same flags",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
     try:
         config = load_config(getattr(args, "config", None))
     except Exception as exc:
@@ -1937,11 +2282,19 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
         # rebase ownership in a different database than the engine's, and the
         # symbol and account checks below need the configuration.
         print(f"Cannot load the configuration ({exc}); fix it or pass --config explicitly.", file=sys.stderr)
-        return 2
+        return EXIT_FAILURE
     db_path = getattr(args, "db", None) or config.runtime.decision_db_path
     if not Path(db_path).is_file():
         print(f"Decision database not found: {db_path}. Nothing was created.", file=sys.stderr)
-        return 1
+        return EXIT_MISSING
+    if confirmed and _engine_may_be_running(config):
+        # F2-9-3: a write while the engine runs races its ledger and its open orders.
+        print(
+            "Refusing: the engine heartbeat is live (or cannot be read). Stop the engine first "
+            "(`systemctl stop parayabuck`), wait for a 'stopped' health snapshot, then confirm.",
+            file=sys.stderr,
+        )
+        return EXIT_FAILURE
     repository = PortfolioStateRepository(db_path) if confirmed else PortfolioStateRepository.open_read_only(db_path)
     try:
         account_id = getattr(args, "account_id", None) or repository.latest_account_id()
@@ -1953,11 +2306,10 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             return 1
         pinned_account = config.broker.expected_account_id
         if pinned_account and account_id != pinned_account:
-            print(
-                f"Refusing: account {account_id} is not the configured broker.expected_account_id ({pinned_account}).",
-                file=sys.stderr,
-            )
-            return 1
+            mismatch = _pinned_account_mismatch(config, account_id, pinned_account)
+            if mismatch:
+                print(f"Refusing: {mismatch}", file=sys.stderr)
+                return 1
         plan = repository.plan_ownership_rebase(
             account_id,
             symbol,
@@ -1980,6 +2332,11 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
         print(f"Database    : {db_path}")
         print(f"Owned now   : {format_quantity(plan.owned_quantity)}")
         print(f"Broker says : {format_quantity(broker_qty)}")
+        # F2-8-3: the broker average cost is the only split proof; show what the plan had.
+        if broker_average_cost is None:
+            print("Broker avg  : not given (no split proof: a decrease is booked as a sale)")
+        else:
+            print(f"Broker avg  : {broker_average_cost:g} per share (split proof)")
         if plan.booking_kind == NO_BOOKING:
             print("Nothing to do: ownership already matches the broker quantity.")
             return 0
@@ -1990,11 +2347,35 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
         print(f"Adjustment  : {format_quantity(plan.adjustment_quantity)} ({direction})")
         print(f"Booking     : {_REBASE_BOOKING_TEXT[plan.booking_kind]}")
         print(f"Reason      : {plan.reason}")
+        if plan.booking_kind == ACQUISITION_KIND and broker_average_cost is None:
+            print(
+                "Warning     : an increase booked as an acquisition rescales no lots. If the broker count is a forward "
+                "split, rerun with --broker-average-cost instead of --acquisition-unit-cost."
+            )
+        digest = ownership_rebase_plan_digest(
+            account_id,
+            symbol,
+            Market.EQUITY,
+            broker_qty,
+            plan,
+            broker_average_cost=broker_average_cost,
+            unit_cost=unit_cost,
+        )
+        print(f"Plan digest : {digest}")
         if not confirmed:
             print(
-                f"Dry run. Re-run with --confirm {format_quantity(plan.owned_quantity)} to write the audited adjustment."
+                f"Dry run. Re-run with --confirm {format_quantity(plan.owned_quantity)} --plan-digest {digest} "
+                "to write the audited adjustment."
             )
             return 0
+        if plan_digest != digest:
+            # F2-9-1: the confirm run must carry the same flags as the dry run it reviews.
+            print(
+                f"Refusing: the plan digest is {digest}, not the {plan_digest} given. The flags or the ledger changed "
+                "since the dry run; run the dry run again.",
+                file=sys.stderr,
+            )
+            return 1
         try:
             repository.rebase_ownership_to_broker_quantity(
                 account_id,
@@ -2005,6 +2386,7 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 broker_average_cost=broker_average_cost,
                 unit_cost=unit_cost,
                 expected_owned=expected_owned,
+                plan_digest=plan_digest,
             )
         except OwnershipRebaseRefused as exc:
             print(f"Refusing: {exc}", file=sys.stderr)
@@ -2017,8 +2399,27 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             format_quantity(broker_qty),
             plan.booking_kind,
         )
+        # F2-9-4: the operator write leaves a journal row with the proof it rested on.
+        _journal_operator_action(
+            config,
+            "ownership_rebased",
+            f"Operator ownership rebase {symbol}: {format_quantity(plan.owned_quantity)} -> "
+            f"{format_quantity(broker_qty)} ({plan.booking_kind})",
+            account_id=account_id,
+            fields={
+                "symbol": symbol,
+                "owned_before": plan.owned_quantity,
+                "broker_quantity": broker_qty,
+                "booking_kind": plan.booking_kind,
+                "adjustment_quantity": plan.adjustment_quantity,
+                "broker_average_cost": broker_average_cost,
+                "unit_cost": unit_cost,
+                "plan_digest": digest,
+                "database": str(db_path),
+            },
+        )
         print("Ownership rebased. Reset the safety lock once reconciliation is clean.")
-        return 0
+        return EXIT_OK
     finally:
         repository.close()
 

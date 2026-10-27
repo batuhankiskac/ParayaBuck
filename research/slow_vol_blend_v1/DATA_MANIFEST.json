@@ -1,0 +1,55 @@
+{
+  "study": "slow_vol_blend_v1",
+  "restored_from": {
+    "engine_harness_and_dsr": "git tag archive/research/vol-regime-leverage-v1-2026-10 (research/fast_engine, research/band_h2_combo_v1, research/gates_v1, research/gates_v2, research/trend_robustness_v2, research/vol_regime_leverage_v1 as the K-anchor template, data/historical)",
+    "restore_commands": [
+      "git checkout archive/research/vol-regime-leverage-v1-2026-10 -- research data/historical"
+    ]
+  },
+  "new_market_data_downloaded": false,
+  "inputs": {
+    "data/historical/stress_robustness_v1_daily.csv": {
+      "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+      "bytes": 2671225,
+      "content": "QQQ, SPY, QLD daily bars with dividends (Yahoo chart API, 1999-03-10 onward)"
+    },
+    "data/historical/ewma_band_v1_index.csv": {
+      "sha256": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+      "bytes": 4114163,
+      "content": "^IXIC and the M1-M5 OOS index windows (Yahoo chart API); fe_config.MARKETS"
+    },
+    "data/historical/ewma_band_v1_gspc.csv": {
+      "sha256": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+      "bytes": 1145471,
+      "content": "^GSPC daily 1950-1999 (Yahoo chart API), OOS window GSPC_1957_1999"
+    },
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": {
+      "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+      "bytes": 172726,
+      "content": "USD-TRY (CBRT)"
+    },
+    "data/historical/after_tax_tr_v1_yiufe.csv": {
+      "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+      "bytes": 17845,
+      "content": "Turkish YI-UFE index (TCMB), indexation rule of the progressive tax engine"
+    },
+    "data/historical/stress_robustness_v1_dtb3.csv": {
+      "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+      "bytes": 301157,
+      "content": "3-month T-bill daily (FRED DTB3), base financing"
+    },
+    "data/historical/ewma_band_v1_tb3ms.csv": {
+      "sha256": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+      "bytes": 4439,
+      "content": "3-month T-bill monthly (FRED TB3MS), rate history for the OOS windows"
+    }
+  },
+  "windows": {
+    "main": "2000-03-09 to 2026-09-29 (QQQ calendar from 1999-03-10, measured from session START)",
+    "slow_vol_history": "EW-sigma and the 2,520-session mean start at the first QQQ (or OOS index) session; no pre-QQQ splice is used",
+    "calibration_s3": "sessions 2000-03-09 to 2009-12-31 only (vote-on days)",
+    "bootstrap_calendar": "2015-09-01 to 2026-09-30 (fe_config.TAX_BOOT_LO/HI), paths of 253 + 2,520 sessions",
+    "oos": "GSPC 1957-01-02 to 1999-12-31; M1 ^IXIC; M2 ^GSPC 1934-1956; M3 ^N225; M4 ^GDAXI; M5 ^FTSE (fe_config.MARKETS)"
+  },
+  "code_hashing": "screen.py, slowvol.py and PREREGISTRATION.md are hashed at run time into RESULTS.json provenance"
+}

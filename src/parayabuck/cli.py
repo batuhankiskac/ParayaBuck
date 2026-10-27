@@ -44,6 +44,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help="configuration YAML path")
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("web", help="start the local operations console")
+    from parayabuck.tax.cli import add_tax_parser
+
+    add_tax_parser(commands)
     backup = commands.add_parser("backup", help="consistent SQLite backup of the runtime decision database")
     backup.add_argument(
         "--retention-days",
@@ -245,6 +248,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_doctor(args)
     if args.command == "ops":
         return _run_ops(args)
+    if args.command == "tax":
+        from parayabuck.tax.cli import run_tax
+
+        return run_tax(args)
     try:
         config = load_config(args.config)
     except Exception as exc:

@@ -598,6 +598,32 @@
       renderUniverse(data.universe);
       renderStory();
     }
+    let taxBusy = false;
+    async function refreshTax() {
+      if (taxBusy) return;
+      taxBusy = true;
+      try { renderTax(await api.fetchJson("/api/dashboard/tax-ytd")); }
+      catch (e) { console.error("tax", e); }
+      finally { taxBusy = false; }
+    }
+    function renderTax(t) {
+      const set = function (id, text) { const el = document.getElementById(id); if (el) el.textContent = text; };
+      if (!t || t.unavailable) { set("taxStatus", "—"); return; }
+      if (t.status !== "ok") {
+        set("taxStatus", t.status === "rates_missing" ? "oran eksik" : "bekliyor");
+        set("taxNote", t.error || "");
+        return;
+      }
+      const tl = function (v) {
+        return v == null ? "—" : Number(v).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " TL";
+      };
+      set("taxStatus", String(t.year));
+      set("taxNetGain", tl(t.net_gain_tl));
+      set("taxEstimate", tl(t.estimated_tax_tl));
+      set("taxDividends", tl(t.dividend_gross_tl) + " / " + tl(t.dividend_withheld_tl));
+      set("taxThreshold", t.income_declaration_required ? "aşıldı, beyan gerekir" : "aşılmadı");
+      set("taxNote", "Tahmini değerlerdir; yalnızca bu yılın net kazancı üzerinden hesaplanır.");
+    }
     let overviewBusy = false;
     async function refreshOverview() {
       if (overviewBusy) return;
@@ -627,9 +653,11 @@
     api.fetchJson("/api/account").then(renderAccount).catch(function () {});
     refreshOverview();
     refreshOps();
+    refreshTax();
     loadPerformance();
     global.setInterval(refreshOverview, 5000);
     global.setInterval(refreshOps, 10000);
+    global.setInterval(refreshTax, 60000);
     global.setInterval(loadPerformance, 60000);
   });
 })(window);

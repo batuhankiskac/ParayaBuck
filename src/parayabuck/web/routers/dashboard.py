@@ -25,6 +25,12 @@ async def dashboard_overview(request: Request) -> dict[str, Any]:
     return await asyncio.to_thread(svc.get_overview_payload, _require_state(request))
 
 
+@router.get("/api/dashboard/tax-ytd")
+async def dashboard_tax_ytd(request: Request) -> dict[str, Any]:
+    """Year-to-date TL tax estimate; kept apart from the overview payload."""
+    return await asyncio.to_thread(svc.get_tax_ytd_payload, _require_state(request))
+
+
 @router.get("/api/performance")
 async def dashboard_performance(request: Request, period: str = "1M") -> dict[str, Any]:
     """Broker equity history plus a VOO benchmark for the performance chart."""

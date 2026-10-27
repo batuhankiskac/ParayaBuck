@@ -874,6 +874,47 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
     }
 
 
+_DASHBOARD_TAX_TTL_SECONDS = 60.0
+_dashboard_tax_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def get_tax_ytd_payload(state: Any | None = None) -> dict[str, Any]:
+    """Year-to-date TL tax estimate for ``/api/dashboard/tax-ytd`` (separate from the overview)."""
+    try:
+        with _dashboard_context_scope(_context(state)):
+            return _dashboard_tax_ytd(_dashboard_account_id())
+    except Exception as exc:
+        log.exception("Dashboard tax payload failed: %s", exc)
+        return {"unavailable": True, "error": str(exc)}
+
+
+def _dashboard_tax_ytd(account_id: str) -> dict[str, Any]:
+    """Year-to-date TL tax estimate (display only; cached for one minute).
+
+    Reads the ledger through the shared read-only connection and the operator's
+    USD/TRY and Yİ-ÜFE CSVs. Missing rates report ``status: rates_missing``.
+    """
+    import time
+    from datetime import datetime
+
+    from parayabuck.tax.export import ytd_status
+    from parayabuck.tax.ledger import TURKEY_TIME
+
+    year = datetime.now(TURKEY_TIME).year
+    key = f"{account_id}:{year}"
+    cached = _dashboard_tax_cache.get(key)
+    now = time.monotonic()
+    if cached is not None and now - cached[0] < _DASHBOARD_TAX_TTL_SECONDS:
+        return cached[1]
+    connection = _dashboard_readonly_connection()
+    try:
+        status = ytd_status(connection, account_id, year)
+    finally:
+        _dashboard_release(connection)
+    _dashboard_tax_cache[key] = (now, status)
+    return status
+
+
 def _dashboard_account() -> dict[str, Any]:
     fetch = getattr(_dashboard_manager(), "fetch_account_snapshot", None)
     if fetch is not None:

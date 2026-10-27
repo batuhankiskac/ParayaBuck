@@ -292,7 +292,9 @@ def test_websocket_loggers_get_the_ticket_redaction_filter() -> None:
     for name in ("websockets", "websockets.server", "websockets.client"):
         assert any(isinstance(f, TicketRedactionFilter) for f in logging.getLogger(name).filters), name
 
-    record = logging.LogRecord("websockets.server", logging.DEBUG, __file__, 1, "GET /ws/logs?ticket=abc123 HTTP/1.1", None, None)
+    record = logging.LogRecord(
+        "websockets.server", logging.DEBUG, __file__, 1, "GET /ws/logs?ticket=abc123 HTTP/1.1", None, None
+    )
     TicketRedactionFilter().filter(record)
     assert "abc123" not in record.getMessage()
 

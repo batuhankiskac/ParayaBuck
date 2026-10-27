@@ -1374,6 +1374,14 @@ class PortfolioBacktestEngine:
                 ),
             )
         if self.risk_overlay is not None:
+            liquidation_kwargs: dict[str, Any] = (
+                {
+                    "drawdown_liquidation_state": self._drawdown_liquidation_state,
+                    "session_date": session_date_for(target.decision_timestamp),
+                }
+                if self._drawdown_liquidation_state is not None
+                else {}
+            )
             risk = self.risk_overlay.apply(
                 target,
                 self._account_snapshot(),
@@ -1386,14 +1394,7 @@ class PortfolioBacktestEngine:
                 # enforced halt would freeze the alpha curve permanently.
                 # Production-policy simulations set the ctor flag to enforce.
                 enforce_drawdown_halt=self.enforce_drawdown_halt,
-                **(
-                    {
-                        "drawdown_liquidation_state": self._drawdown_liquidation_state,
-                        "session_date": session_date_for(target.decision_timestamp),
-                    }
-                    if self._drawdown_liquidation_state is not None
-                    else {}
-                ),
+                **liquidation_kwargs,
             )
             if self._drawdown_liquidation_state is not None and risk.drawdown_liquidation_state is not None:
                 self._drawdown_liquidation_state = risk.drawdown_liquidation_state

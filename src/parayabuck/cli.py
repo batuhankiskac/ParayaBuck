@@ -926,9 +926,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
                 pins_checked, pin_differences = _locked_pin_mismatches(lock_path)
                 if pin_differences:
                     shown = "; ".join(pin_differences[:5])
-                    checks.append(
-                        ("locked pins", "WARN", f"{len(pin_differences)} of {pins_checked} differ: {shown}")
-                    )
+                    checks.append(("locked pins", "WARN", f"{len(pin_differences)} of {pins_checked} differ: {shown}"))
                 else:
                     checks.append(("locked pins", "PASS", f"{pins_checked} installed versions match the lock"))
             except Exception as exc:
@@ -1797,7 +1795,7 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             )
             return 2
         try:
-            expected_owned = float(confirm_value)
+            expected_owned = float(str(confirm_value))
         except ValueError:
             expected_owned = float("nan")
         if not isfinite(expected_owned) or expected_owned < 0:

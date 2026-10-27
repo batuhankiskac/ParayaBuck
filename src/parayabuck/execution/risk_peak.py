@@ -428,7 +428,10 @@ class RiskPeakService:
         if persisted_epoch is not None:
             current_epoch = max(current_epoch, int(persisted_epoch))
         new_epoch = current_epoch + 1
-        atomic_write(self._peak_state_path, json.dumps({"account_id": resolved, "peak_equity": float(equity), "epoch": new_epoch}))
+        atomic_write(
+            self._peak_state_path,
+            json.dumps({"account_id": resolved, "peak_equity": float(equity), "epoch": new_epoch}),
+        )
         self._peak_epoch, self._peak_equity, self._peak_account_id, self._peak_reconciled = (
             new_epoch,
             float(equity),

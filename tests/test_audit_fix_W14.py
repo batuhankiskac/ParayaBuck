@@ -91,7 +91,9 @@ class _Repository:
         self.resets.append((account_id, equity))
 
 
-def _epoch_setup(tmp_path: Path, *, repository: _Repository | None = None) -> tuple[EngineRuntime, _ServiceBroker, Path, ExecutionLedger]:
+def _epoch_setup(
+    tmp_path: Path, *, repository: _Repository | None = None
+) -> tuple[EngineRuntime, _ServiceBroker, Path, ExecutionLedger]:
     """A running engine shell on a real ledger and a real peak sidecar, drawn down to 94k from a 100k peak."""
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     sidecar = tmp_path / "paper_equity_peak.json"
@@ -250,9 +252,7 @@ def test_bootstrap_without_sidecar_or_history_alerts_and_records_the_first_equit
     ledger.close()
 
 
-def test_restart_with_a_sidecar_does_not_announce_a_bootstrap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_restart_with_a_sidecar_does_not_announce_a_bootstrap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     sidecar = tmp_path / "peak.json"
     sidecar.write_text(json.dumps({"account_id": "acct", "peak_equity": 100_000.0, "epoch": 0}), encoding="utf-8")
@@ -356,9 +356,12 @@ def test_tracked_placeholder_key_cannot_sign_or_verify_a_live_approval(tmp_path:
             path, secret=placeholder, account_id="acct", configuration_digests=("digest-a",), now=now
         )
     # ... and the same file verifies with the real key (the check is not a blanket refusal).
-    assert LiveOperatorApproval.load_verified(
-        path, secret=_KEY, account_id="acct", configuration_digests=("digest-a",), now=now
-    ).nonce == "n1"
+    assert (
+        LiveOperatorApproval.load_verified(
+            path, secret=_KEY, account_id="acct", configuration_digests=("digest-a",), now=now
+        ).nonce
+        == "n1"
+    )
 
 
 def test_tracked_placeholder_key_cannot_sign_a_standing_authorization() -> None:

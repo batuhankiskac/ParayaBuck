@@ -67,9 +67,7 @@ async def get_ops_incidents(request: Request, limit: int = Query(100, ge=1, le=1
     # Scoped to the dashboard's account: a pre-rotation account's incidents are not shown as current.
     account_id = await asyncio.to_thread(dashboard.account_id_for, resolve_web_state(request))
     try:
-        inc = await asyncio.to_thread(
-            svc.get_incidents, limit, await _request_config(request), account_id=account_id
-        )
+        inc = await asyncio.to_thread(svc.get_incidents, limit, await _request_config(request), account_id=account_id)
     except svc.OpsReadUnavailable:
         return _unavailable({"incidents": [], "error": "incidents unavailable"})
     return {"incidents": inc}

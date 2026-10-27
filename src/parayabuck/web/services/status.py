@@ -92,8 +92,8 @@ def _cached_config(manager: Any) -> tuple[Any, dict[str, Any] | None]:
 
     config_path = str(manager.config_path)
     try:
-        cache: dict[str, tuple[tuple[int | None, int | None], Any, dict[str, Any]]] = manager.__dict__.setdefault(
-            "_status_config_cache", {}
+        cache: dict[str, tuple[tuple[int | None, int | None], Any, dict[str, Any] | None]] = (
+            manager.__dict__.setdefault("_status_config_cache", {})
         )
     except AttributeError:
         cache = {}
@@ -158,7 +158,7 @@ def build_status_snapshot(manager: Any) -> dict[str, Any]:
         result["runtime"] = asdict(health)
         repository = getattr(runtime, "_portfolio_repository", None)
         if repository is not None:
-            account_id = getattr(runtime.broker, "account_id", None) or "unknown"
+            account_id = getattr(getattr(runtime, "broker", None), "account_id", None) or "unknown"
             try:
                 result["operations"] = repository.operations_snapshot(account_id)
             except Exception:

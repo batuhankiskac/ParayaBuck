@@ -157,7 +157,9 @@ class _FakeTradingSdk:
 
 def test_undecodable_trade_frame_is_handed_on_as_an_unknown_event_and_alerted(monkeypatch: Any) -> None:
     alerts: list[dict[str, Any]] = []
-    monkeypatch.setattr(alpaca_updates, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields}))
+    monkeypatch.setattr(
+        alpaca_updates, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields})
+    )
     received: list[Any] = []
 
     async def handler(update: Any) -> None:
@@ -290,7 +292,9 @@ def _attempt(stream: _FakeSdkStream) -> None:
 
 def test_repeated_auth_failures_back_off_close_the_socket_and_alert_once(monkeypatch: Any) -> None:
     alerts: list[dict[str, Any]] = []
-    monkeypatch.setattr(alpaca_stream, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields}))
+    monkeypatch.setattr(
+        alpaca_stream, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields})
+    )
     sleeps: list[float] = []
 
     async def fake_sleep(seconds: float) -> None:
@@ -313,7 +317,9 @@ def test_repeated_auth_failures_back_off_close_the_socket_and_alert_once(monkeyp
 
 def test_connect_failures_back_off_without_an_auth_alert(monkeypatch: Any) -> None:
     alerts: list[dict[str, Any]] = []
-    monkeypatch.setattr(alpaca_stream, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields}))
+    monkeypatch.setattr(
+        alpaca_stream, "emit_execution_alert", lambda kind, **fields: alerts.append({"kind": kind, **fields})
+    )
 
     async def fake_sleep(_seconds: float) -> None:
         return None

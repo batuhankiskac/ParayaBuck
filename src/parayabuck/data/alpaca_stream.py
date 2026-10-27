@@ -110,9 +110,7 @@ def supervise_sdk_stream(
     stream._start_ws = supervised_start
 
 
-async def _sleep_unless_stopped(
-    stream: Any, delay: float, sleep: Callable[[float], Awaitable[None]]
-) -> None:
+async def _sleep_unless_stopped(stream: Any, delay: float, sleep: Callable[[float], Awaitable[None]]) -> None:
     remaining = delay
     while remaining > 0 and getattr(stream, "_should_run", True):
         step = min(_SLEEP_STEP_SECONDS, remaining)

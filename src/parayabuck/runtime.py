@@ -406,7 +406,7 @@ class _SymbolDriftOrderGate:
                 f"Ownership drift lock on {order.symbol}: order refused locally until the broker "
                 "and the ledger agree again; no broker call was made"
             )
-        return self._broker.submit_portfolio_order(order)
+        return str(self._broker.submit_portfolio_order(order))
 
 
 class EngineRuntime:
@@ -943,9 +943,7 @@ class EngineRuntime:
             market_not_ready = symbols & not_ready_symbols
             ready_symbol_count = len(symbols) - len(market_not_ready)
             ready = not enabled or not symbols or ready_symbol_count > 0
-            stream_healthy = (
-                not enabled or not symbols or self._stream_worker_delivering(worker, now, heartbeat_ttl)
-            )
+            stream_healthy = not enabled or not symbols or self._stream_worker_delivering(worker, now, heartbeat_ttl)
             market_health[market.value] = {
                 "enabled": enabled,
                 "symbol_count": len(symbols),
@@ -3109,6 +3107,7 @@ class EngineRuntime:
                     _TRADE_UPDATE_LOCK_ATTEMPTS,
                 )
                 await asyncio.sleep(_TRADE_UPDATE_LOCK_BACKOFF_SECONDS * (attempt + 1))
+        return None
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
         # Freshness stamp for the stale-feed check, before any early return.
@@ -3942,7 +3941,7 @@ class EngineRuntime:
                 if getattr(self, "_reconcile_failed", False)
                 else getattr(self, "_reconcile_pending_reason", None)
             )
-            return not self._defer_portfolio_bars(bars, reason)
+            return not self._defer_portfolio_bars(bars, str(reason or "reconciliation_pending"))
         # Fail-closed: a pending reconciliation (material drift detected) blocks
         # new portfolio orders until a verified ``reconcile()`` clears it.
         # This is the engine-side complement to the broker's 7-category
@@ -5882,7 +5881,7 @@ class EngineRuntime:
             except Exception:
                 # Roll back: the peak returns to its pre-reset epoch and the
                 # drawdown halt the operator still sees stays on record.
-                if prior is not None:
+                if prior is not None and peak_service is not None:
                     peak_service.restore_peak_state(prior)
                 if self._entry_risk_latch.get(Market.EQUITY) == "portfolio_drawdown_halt":
                     self.ledger.save_safety_incident(account_id, "portfolio_drawdown_halt")
@@ -6252,7 +6251,7 @@ class EngineRuntime:
                     # never seeded: the decision-time verifier cannot see a hole that
                     # was never stored, so the signals would read one session further
                     # back. The symbol stays not ready and the warmup retry covers it.
-                    incomplete = getattr(history, "last_incomplete_symbols", frozenset())
+                    incomplete: frozenset[str] = getattr(history, "last_incomplete_symbols", frozenset())
                     for symbol in symbol_batch:
                         if symbol in incomplete:
                             log.warning(

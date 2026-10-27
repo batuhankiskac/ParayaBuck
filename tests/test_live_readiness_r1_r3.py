@@ -221,7 +221,9 @@ def test_engine_retries_only_at_a_safe_opportunity() -> None:
     from parayabuck.runtime import EngineRuntime
 
     calls: list[object] = []
-    portfolio = SimpleNamespace(market=Market.EQUITY, retry_rejected_exit_sells=lambda account, **_: calls.append(account))
+    portfolio = SimpleNamespace(
+        market=Market.EQUITY, retry_rejected_exit_sells=lambda account, **_: calls.append(account)
+    )
     runtime = EngineRuntime.__new__(EngineRuntime)
     runtime._portfolio_runtimes = (portfolio,)
     runtime._portfolio_lock = __import__("threading").RLock()

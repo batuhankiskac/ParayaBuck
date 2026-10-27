@@ -44,7 +44,9 @@ class SettingsPayload(BaseModel):
     # Upper bound is a schema sanity limit, not a trading policy; the shipped default stays 0.
     live_dollar_cap: float = Field(0.0, ge=0, le=1_000_000, allow_inf_nan=False)
     live_operator_approval_path: str = Field("", max_length=4096)
-    expected_config_digest: str | None = Field(default=None, max_length=128, description="Optimistic concurrency digest")
+    expected_config_digest: str | None = Field(
+        default=None, max_length=128, description="Optimistic concurrency digest"
+    )
 
     @field_validator("daily_loss_limit_pct", "max_drawdown_pct")
     @classmethod

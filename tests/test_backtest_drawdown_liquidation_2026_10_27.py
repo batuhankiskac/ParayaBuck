@@ -103,9 +103,7 @@ def test_disabled_brake_reproduces_the_engine_without_it() -> None:
 
 
 def test_enabled_brake_sells_out_and_latches_its_state() -> None:
-    brake = DrawdownLiquidationConfig(
-        enabled=True, threshold_pct=0.30, rearm_recovery_pct=0.20, cooldown_sessions=5
-    )
+    brake = DrawdownLiquidationConfig(enabled=True, threshold_pct=0.30, rearm_recovery_pct=0.20, cooldown_sessions=5)
     engine, result = _run(brake)
     _, baseline = _run(None)
     assert _held(result) == 0.0, "the brake sells the whole managed position"

@@ -294,7 +294,7 @@ class SettingsService:
                     old_daily_loss_f = float(old_daily_loss)
                 except Exception:
                     old_daily_loss_f = 100 * _RISK_DEFAULTS.daily_loss_limit_pct
-                if float(payload.daily_loss_limit_pct) != old_daily_loss_f:
+                if payload.daily_loss_limit_pct is not None and float(payload.daily_loss_limit_pct) != old_daily_loss_f:
                     has_runtime_change = True
             if "max_drawdown_pct" in config_fields_set:
                 old_max_dd: float = (
@@ -306,7 +306,7 @@ class SettingsService:
                     old_max_dd_f = float(old_max_dd)
                 except Exception:
                     old_max_dd_f = 100 * _RISK_DEFAULTS.max_drawdown_pct
-                if float(payload.max_drawdown_pct) != old_max_dd_f:
+                if payload.max_drawdown_pct is not None and float(payload.max_drawdown_pct) != old_max_dd_f:
                     has_runtime_change = True
             if "equity_trading_enabled" in config_fields_set:
                 try:

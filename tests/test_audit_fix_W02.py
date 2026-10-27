@@ -64,9 +64,7 @@ def _settings(tmp_path: Path, decision_db: str | None = None) -> Path:
     return path
 
 
-def _doctor_env(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, scan_stdout: bytes | None = b"README.md\0"
-) -> None:
+def _doctor_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, scan_stdout: bytes | None = b"README.md\0") -> None:
     """Deterministic doctor host: no .env, stub keys, scripted tracked-file scan.
 
     ``scan_stdout=None`` makes ``git ls-files`` fail, as it does when the service
@@ -340,9 +338,7 @@ def test_cli_entry_point_sets_an_owner_only_umask(tmp_path: Path) -> None:
 def test_ops_status_exit_code_follows_the_overall_health(
     overall: str, expected: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        health_module, "evaluate_health", lambda **kwargs: {"overall_health": overall, "checks": []}
-    )
+    monkeypatch.setattr(health_module, "evaluate_health", lambda **kwargs: {"overall_health": overall, "checks": []})
     config = _settings(tmp_path)
     paths = ["--db", str(tmp_path / "d.sqlite3"), "--snapshot", str(tmp_path / "s.json")]
 

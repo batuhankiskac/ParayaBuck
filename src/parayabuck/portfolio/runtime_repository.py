@@ -1845,7 +1845,8 @@ class PortfolioStateRepository:
         or ``()`` when nothing is open (see ``open_position_cost_bases``)."""
         try:
             return open_position_cost_bases(
-                (kind, quantity, price) for _, kind, quantity, price, _ in self._owned_events(account_id, symbol, market)
+                (kind, quantity, price)
+                for _, kind, quantity, price, _ in self._owned_events(account_id, symbol, market)
             )
         except LotBookInconsistency as error:
             # An inconsistent book cannot corroborate a split: callers treat

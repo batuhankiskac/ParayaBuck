@@ -2188,6 +2188,8 @@ class PortfolioRuntime:
         if candidates:
             decision = self.repository.decision_row(decision_id)
             try:
+                if decision is None:
+                    raise KeyError(decision_id)
                 target = TargetPortfolio.from_dict(json.loads(str(decision["target_json"])))
             except (KeyError, TypeError, ValueError):
                 log.error("Residual SELL skipped: decision %s target unreadable; rebalance blocked", decision_id)
@@ -2665,7 +2667,8 @@ class PortfolioRuntime:
     def _submission_lookup_failures(self) -> dict[str, datetime]:
         failures: dict[str, datetime] | None = getattr(self, "_submission_lookup_failed_since", None)
         if failures is None:
-            failures = self._submission_lookup_failed_since = {}
+            failures = {}
+            self._submission_lookup_failed_since = failures
         return failures
 
     def _resolve_stale_submitting_rows(self) -> None:

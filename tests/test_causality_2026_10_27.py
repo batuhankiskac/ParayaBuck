@@ -278,9 +278,7 @@ def recorded_decisions(market_and_reference):  # type: ignore[no-untyped-def]
     return _recorded_run(bars)
 
 
-def test_truncated_history_reproduces_the_recorded_full_run_decision(
-    market_and_reference, recorded_decisions
-) -> None:
+def test_truncated_history_reproduces_the_recorded_full_run_decision(market_and_reference, recorded_decisions) -> None:
     bars, _ = market_and_reference
     timestamps = _session_timestamps(bars)
     states = set()

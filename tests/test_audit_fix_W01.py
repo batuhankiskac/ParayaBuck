@@ -65,7 +65,9 @@ def test_seeded_sweep_of_nine_decimal_quantities_is_never_rejected_as_off_grid()
 
 def test_a_quantity_off_the_1e9_grid_is_still_flagged() -> None:
     rules = {"QLD": AssetTradingRules(0.0, 1e-9, 0.0)}
-    problems = validate_order_batch((_order(10.0000000005, PortfolioOrderSide.SELL),), rules, minimum_order_notional=0.0)
+    problems = validate_order_batch(
+        (_order(10.0000000005, PortfolioOrderSide.SELL),), rules, minimum_order_notional=0.0
+    )
     assert len(problems) == 1
     assert "is not a multiple of increment" in problems[0][1]
 
@@ -73,7 +75,9 @@ def test_a_quantity_off_the_1e9_grid_is_still_flagged() -> None:
 def test_float_noise_off_the_decimal_grid_is_flagged() -> None:
     # 0.1 + 0.2 is 0.30000000000000004: off the 0.1 grid, so it is rejected.
     rules = {"BTC": AssetTradingRules(0.0001, 0.1, 1.0)}
-    problems = validate_order_batch((_order(0.1 + 0.2, PortfolioOrderSide.BUY, symbol="BTC"),), rules, minimum_order_notional=1.0)
+    problems = validate_order_batch(
+        (_order(0.1 + 0.2, PortfolioOrderSide.BUY, symbol="BTC"),), rules, minimum_order_notional=1.0
+    )
     assert len(problems) == 1 and "is not a multiple of increment" in problems[0][1]
 
 

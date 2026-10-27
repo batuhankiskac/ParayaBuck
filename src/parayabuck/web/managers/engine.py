@@ -329,7 +329,7 @@ class EngineManager:
         """
         if self.env_path.exists():
             try:
-                return dotenv_values(self.env_path).get("PARAYABUCK_ENABLE_LIVE") == "YES"
+                return bool(dotenv_values(self.env_path).get("PARAYABUCK_ENABLE_LIVE") == "YES")
             except OSError:
                 return False
         return os.getenv("PARAYABUCK_ENABLE_LIVE") == "YES"
@@ -652,10 +652,10 @@ class EngineManager:
             if not math.isfinite(payload.live_dollar_cap):
                 raise ValueError("live.hard_dollar_cap must be finite")
         if "daily_loss_limit_pct" in fields_set:
-            if not math.isfinite(payload.daily_loss_limit_pct):
+            if payload.daily_loss_limit_pct is None or not math.isfinite(payload.daily_loss_limit_pct):
                 raise ValueError("Risk ratios must be finite")
         if "max_drawdown_pct" in fields_set:
-            if not math.isfinite(payload.max_drawdown_pct):
+            if payload.max_drawdown_pct is None or not math.isfinite(payload.max_drawdown_pct):
                 raise ValueError("Risk ratios must be finite")
         # Write settings.yaml
         cfg_raw: dict[str, Any] = {}
@@ -724,9 +724,9 @@ class EngineManager:
             live["operator_approval_path"] = payload.live_operator_approval_path
         strategy = _yaml_block(cfg_raw, "strategy")
         risk = cfg_raw["risk"]
-        if "daily_loss_limit_pct" in fields_set:
+        if "daily_loss_limit_pct" in fields_set and payload.daily_loss_limit_pct is not None:
             risk["daily_loss_limit_pct"] = payload.daily_loss_limit_pct / 100
-        if "max_drawdown_pct" in fields_set:
+        if "max_drawdown_pct" in fields_set and payload.max_drawdown_pct is not None:
             risk["max_drawdown_pct"] = payload.max_drawdown_pct / 100
         if "equity_trading_enabled" in fields_set:
             _yaml_block(strategy, "equity")["enabled"] = payload.equity_trading_enabled

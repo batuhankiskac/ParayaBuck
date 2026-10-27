@@ -81,6 +81,12 @@ class AlpacaBroker:
         self.bot_tradable_symbols = bot_tradable_symbols
         self._account_id = ""
         self._account_number = ""
+        # Runtime-attached hooks and flags (defaults keep today's behaviour):
+        # the reconciliation cost-basis provider, runtime.per_symbol_drift_lock
+        # and risk.adjust_for_cash_flows.
+        self.portfolio_owned_cost_bases: Any = None
+        self.per_symbol_drift_lock = False
+        self.adjust_for_cash_flows = False
         # Peak read-modify-write is shared mutable state across the account,
         # trade-update and decision threads: the lock is created here so its
         # first use is never a racy lazy creation.
@@ -558,9 +564,7 @@ class AlpacaBroker:
         # is the earliest possible fill time, and a DAY order neither fills
         # before submission nor survives its session.
         filled_at_raw = (
-            self._field(order, "filled_at", None)
-            or self._field(order, "submitted_at", None)
-            or datetime.now(UTC)
+            self._field(order, "filled_at", None) or self._field(order, "submitted_at", None) or datetime.now(UTC)
         )
         try:
             occurred_at = parse_broker_timestamp(filled_at_raw)
@@ -763,7 +767,9 @@ class AlpacaBroker:
         broker_order_id = str(self._field(order, "id", "") or "")
         recovered = self._fill_from_broker_order(order, client_order_id, broker_order_id)
         if recovered is None:
-            log.warning("Filled order %s has no readable fill facts; reconciliation must book its fill", client_order_id)
+            log.warning(
+                "Filled order %s has no readable fill facts; reconciliation must book its fill", client_order_id
+            )
             return
         if fill_recovered := getattr(self, "portfolio_fill_recovered", None):
             fill_recovered(*recovered)

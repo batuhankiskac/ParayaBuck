@@ -193,7 +193,9 @@ def test_settings_save_succeeds_when_automatic_restart_times_out(tmp_path: Path,
     manager = _RestartFailureManagerStub(tmp_path)
     manager.config_path.write_text(yaml.safe_dump({"runtime": {"mode": "paper"}, "risk": {}, **_LOADABLE_MARKETS}))
 
-    result = asyncio.run(SettingsService(manager).save_settings(SettingsPayload(daily_loss_limit_pct=2.0, restart_engine=True)))
+    result = asyncio.run(
+        SettingsService(manager).save_settings(SettingsPayload(daily_loss_limit_pct=2.0, restart_engine=True))
+    )
 
     assert result["status"] == "success"
     assert result["engine_restarted"] is False

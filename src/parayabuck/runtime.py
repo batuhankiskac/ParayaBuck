@@ -556,7 +556,7 @@ class EngineRuntime:
             runtime_state_dir=runtime_state_dir,
         )
         # Attached after construction, as the cost-basis provider below.
-        self.broker.portfolio_surplus_cleared = self._clear_portfolio_surplus_alert
+        self.broker.portfolio_surplus_cleared = self._clear_portfolio_surplus_alert  # type: ignore[attr-defined]
         # Cost-basis drift check (alpaca_reconciliation._cost_basis_drift) reads
         # this provider. AlpacaBroker takes no constructor argument for it, so
         # it is attached right after construction.
@@ -3314,15 +3314,17 @@ class EngineRuntime:
         verified reset re-runs it. The alert throttles per market, and the count of
         consecutive failures is carried in its fields.
         """
-        failures = getattr(self, "_rebalance_advance_failures", None)
+        failures: dict[Market, int] | None = getattr(self, "_rebalance_advance_failures", None)
         if failures is None:
-            failures = self._rebalance_advance_failures = {}
+            failures = {}
+            self._rebalance_advance_failures = failures
         failures[market] = failures.get(market, 0) + 1
         with getattr(self, "_state_lock", threading.RLock()):
             if self._market_entry_halts.get(market) is None:
-                latched = getattr(self, "_advance_failure_latched", None)
+                latched: set[Market] | None = getattr(self, "_advance_failure_latched", None)
                 if latched is None:
-                    latched = self._advance_failure_latched = set()
+                    latched = set()
+                    self._advance_failure_latched = latched
                 latched.add(market)
             self._market_entry_halts[market] = "rebalance_reconciliation_required"
         try:

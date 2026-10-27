@@ -259,7 +259,7 @@ class AlertingConfig:
     def __post_init__(self) -> None:
         if isinstance(self.email, dict):
             object.__setattr__(self, "email", EmailAlertConfig(**self.email))
-        elif self.email is None or self.email is False:
+        elif self.email is None or self.email is False:  # type: ignore[comparison-overlap]
             # ``email: false`` is the explicit off switch; ``email: true`` is still refused.
             object.__setattr__(self, "email", EmailAlertConfig())
         elif not isinstance(self.email, EmailAlertConfig):

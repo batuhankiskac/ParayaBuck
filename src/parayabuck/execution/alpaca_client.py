@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.models import Order
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import normalize_symbol
@@ -21,7 +22,9 @@ _DEFAULT_TIMEOUT = 15.0
 _MAX_ORDERS_PAGE_SIZE = 500
 # Asset metadata is re-read from Alpaca at least once a day.
 _ASSET_CACHE_TTL_SECONDS = 24 * 60 * 60.0
-_ORDER_LIST_ADAPTER: TypeAdapter[list[Order]] = TypeAdapter(list[Order])
+_ORDER_ADAPTER: TypeAdapter[Order] = TypeAdapter(Order)
+# Broker timestamps carry nanoseconds, which ``datetime.fromisoformat`` rejects.
+_FRACTION_BEYOND_MICROSECONDS = re.compile(r"(\.\d{6})\d+")
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,18 @@ class BrokerClock:
     is_open: bool
     next_open: datetime
     next_close: datetime
+
+
+def parse_broker_timestamp(value: Any) -> datetime:
+    """An Alpaca timestamp as an aware datetime; a naive value is taken as UTC."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _FRACTION_BEYOND_MICROSECONDS.sub(r"\1", str(value).strip().replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def _aware_datetime(value: Any, name: str) -> datetime:
@@ -156,7 +171,7 @@ class AlpacaClient:
             if cursor is not None:
                 page_query[cursor_parameter] = cursor
             page_payload = get("/orders", page_query)
-            page = _ORDER_LIST_ADAPTER.validate_python(page_payload)
+            page = [self._order_row(row) for row in page_payload]
             if len(page) > _MAX_ORDERS_PAGE_SIZE:
                 raise RuntimeError("Alpaca returned more orders than the requested page size")
 
@@ -187,6 +202,52 @@ class AlpacaClient:
                 raise RuntimeError("Alpaca order pagination cursor did not advance")
             seen_cursors.add(next_cursor)
             cursor = next_cursor
+
+    def order_by_client_id(self, client_order_id: str) -> Any:
+        """One order by client id; see :meth:`_single_order`."""
+        return self._single_order(
+            lambda: self._client.get_order_by_client_id(client_order_id),
+            "/orders:by_client_order_id",
+            {"client_order_id": client_order_id},
+        )
+
+    def order_by_id(self, broker_order_id: str) -> Any:
+        """One order by broker id; see :meth:`_single_order`."""
+        return self._single_order(
+            lambda: self._client.get_order_by_id(broker_order_id),
+            f"/orders/{broker_order_id}",
+            None,
+        )
+
+    def _single_order(self, read: Callable[[], Any], path: str, query: dict[str, Any] | None) -> Any:
+        """Read one order, surviving a status the pinned SDK model rejects.
+
+        The SDK parses the response into a strict model, so one unknown status
+        fails every read of that order. On a validation error the same endpoint
+        is read again as a raw row, which keeps the broker's own status.
+        """
+        try:
+            return read()
+        except ValidationError:
+            log.warning("Alpaca order read %s did not match the SDK model; reading the raw row", path)
+        return self._order_row(self._client.get(path, query))
+
+    @staticmethod
+    def _order_row(row: Any) -> Any:
+        """An order row as the SDK model, or the raw row when the model rejects it.
+
+        Alpaca can report a status or enum the pinned SDK does not know. The raw
+        row keeps the broker's string, which reconciliation reports as an
+        unrecognized status and leaves unchanged. Non-mapping rows (SDK objects)
+        pass through untouched.
+        """
+        if not isinstance(row, dict):
+            return row
+        try:
+            return _ORDER_ADAPTER.validate_python(row)
+        except ValidationError:
+            log.warning("Alpaca order %s has a value the SDK does not recognize; keeping the raw row", row.get("id"))
+            return row
 
     # -- normalization helpers (kept at SDK boundary) -------------------
 

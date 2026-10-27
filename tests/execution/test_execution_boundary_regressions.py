@@ -56,7 +56,6 @@ def _guarded_broker(tmp_path: Path, *, open_order: bool = False, tradable: bool 
                 min_order_size="1",
                 min_trade_increment="0.5",
                 price_increment="0.01",
-                min_order_notional="10",
             ),
         ),
     )
@@ -69,7 +68,7 @@ def _guarded_broker(tmp_path: Path, *, open_order: bool = False, tradable: bool 
     ("order", "kwargs", "reason"),
     [
         (_order(quantity=0.9), {}, "below minimum size"),
-        (_order(quantity=1.0, reference_price=5.0), {}, "below minimum notional"),
+        (_order(quantity=1.0, reference_price=0.5), {}, "below minimum notional"),
         (_order(), {"open_order": True}, "open order already exists"),
         (_order(), {"tradable": False}, "not tradable"),
     ],

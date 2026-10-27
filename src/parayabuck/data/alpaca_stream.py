@@ -1,15 +1,130 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from parayabuck.core.models import Bar, Market
+from parayabuck.execution.alerting import emit_execution_alert
+from parayabuck.logger import get_logger
+
+log = get_logger("parayabuck.data.alpaca_stream")
 
 BarHandler = Callable[[Bar], Awaitable[None]]
+
+# Reconnect backoff for alpaca-py's stream loops: 1s, 2s, 4s ... capped.
+_BACKOFF_BASE_SECONDS = 1.0
+_BACKOFF_CAP_SECONDS = 60.0
+_BACKOFF_MAX_EXPONENT = 6
+# Consecutive failed authentications before the operator is alerted.
+_AUTH_ALERT_AFTER = 3
+# Backoff sleeps in steps this long so a stop request is noticed promptly.
+_SLEEP_STEP_SECONDS = 1.0
+
+
+def guard_sdk_cast(stream: Any, fallback: Callable[[Any, Exception], Any]) -> None:
+    """Make an undecodable frame non-fatal inside alpaca-py's dispatch.
+
+    alpaca-py casts each frame before its handler runs, and a cast error
+    escapes the consume loop, aborting the rest of the frame. The wrapped
+    cast returns ``fallback(frame, error)`` to the handler instead.
+    """
+    cast = stream._cast
+
+    def guarded_cast(frame: Any) -> Any:
+        try:
+            return cast(frame)
+        except Exception as exc:
+            return fallback(frame, exc)
+
+    stream._cast = guarded_cast
+
+
+def supervise_sdk_stream(
+    stream: Any,
+    *,
+    label: str,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> None:
+    """Wrap alpaca-py's connect step with backoff, socket cleanup and alerts.
+
+    alpaca-py retries a failed connect or authentication after about 10 ms
+    (trading) or with no delay (data) and never closes the half-open socket.
+    The wrapped step closes that socket, waits an exponentially growing delay
+    (interrupted by a stop request), then re-raises so the SDK loop retries.
+    Repeated authentication failures raise one alert per streak.
+    """
+    start = getattr(stream, "_start_ws", None)
+    if start is None:
+        return
+    state: dict[str, Any] = {"failures": 0, "auth_failures": 0, "auth_failed": False}
+    auth = getattr(stream, "_auth", None)
+    if auth is not None:
+
+        async def audited_auth() -> None:
+            try:
+                await auth()
+            except Exception:
+                state["auth_failed"] = True
+                raise
+
+        stream._auth = audited_auth
+
+    async def supervised_start() -> None:
+        state["auth_failed"] = False
+        try:
+            await start()
+        except Exception as exc:
+            state["failures"] += 1
+            state["auth_failures"] = state["auth_failures"] + 1 if state["auth_failed"] else 0
+            try:
+                await stream.close()
+            except Exception:
+                log.warning("Could not close the failed %s stream socket", label, exc_info=True)
+            if state["auth_failures"] == _AUTH_ALERT_AFTER:
+                emit_execution_alert(
+                    "paper_incident",
+                    message=(
+                        f"Alpaca {label} stream failed authentication {_AUTH_ALERT_AFTER} times in a row; "
+                        "it keeps retrying with backoff. Check the API credentials."
+                    ),
+                    category="stream_auth_failed",
+                    incident_id=f"stream_auth_failed:{label}",
+                )
+            delay = min(
+                _BACKOFF_CAP_SECONDS,
+                _BACKOFF_BASE_SECONDS * 2 ** min(state["failures"] - 1, _BACKOFF_MAX_EXPONENT),
+            )
+            log.warning(
+                "Alpaca %s stream connect failed (attempt %d); retrying in %.0fs: %s",
+                label,
+                state["failures"],
+                delay,
+                exc,
+            )
+            await _sleep_unless_stopped(stream, delay, sleep)
+            raise
+        state["failures"] = 0
+        state["auth_failures"] = 0
+
+    stream._start_ws = supervised_start
+
+
+async def _sleep_unless_stopped(
+    stream: Any, delay: float, sleep: Callable[[float], Awaitable[None]]
+) -> None:
+    remaining = delay
+    while remaining > 0 and getattr(stream, "_should_run", True):
+        step = min(_SLEEP_STEP_SECONDS, remaining)
+        await sleep(step)
+        remaining -= step
 
 
 class AlpacaBarStream:
     """Thin Alpaca equity WebSocket adapter. REST is intentionally not used for polling."""
+
+    # Malformed bars dropped by this stream; instances count into their own copy.
+    malformed_bar_count = 0
 
     def __init__(self, api_key: str, secret_key: str, stock_stream_feed: str = "iex") -> None:
         from alpaca.data.enums import DataFeed
@@ -31,6 +146,31 @@ class AlpacaBarStream:
             feed=DataFeed(stock_stream_feed),
             websocket_params=websocket_params,
         )
+        self._install_guards()
+
+    def _install_guards(self) -> None:
+        guard_sdk_cast(self.stock, self._drop_malformed_frame)
+        supervise_sdk_stream(self.stock, label="stock data")
+
+    def _drop_malformed_frame(self, frame: Any, exc: BaseException) -> None:
+        """Log and count one malformed frame; the frame's other messages still flow."""
+        self.malformed_bar_count += 1
+        log.error(
+            "Malformed Alpaca stock stream bar dropped (%d so far): %s: %.300r",
+            self.malformed_bar_count,
+            exc,
+            frame,
+        )
+        return None
+
+    def _convert_or_drop(self, raw: Any, timeframe: str) -> Bar | None:
+        if raw is None:  # the cast guard already logged and counted this frame
+            return None
+        try:
+            return self._convert(raw, timeframe)
+        except Exception as exc:
+            self._drop_malformed_frame(raw, exc)
+            return None
 
     @staticmethod
     def _convert(raw: Any, timeframe: str) -> Bar:
@@ -54,11 +194,15 @@ class AlpacaBarStream:
         updated_handler: BarHandler | None = None,
     ) -> None:
         async def stock_handler(raw: Any) -> None:
-            await handler(self._convert(raw, timeframe))
+            bar = self._convert_or_drop(raw, timeframe)
+            if bar is not None:
+                await handler(bar)
 
         async def stock_updated_handler(raw: Any) -> None:
-            target = updated_handler or handler
-            await target(self._convert(raw, timeframe))
+            bar = self._convert_or_drop(raw, timeframe)
+            if bar is not None:
+                target = updated_handler or handler
+                await target(bar)
 
         if stock_symbols:
             self.stock.subscribe_bars(stock_handler, *stock_symbols)

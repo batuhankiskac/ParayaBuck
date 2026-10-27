@@ -401,16 +401,17 @@ def test_definite_broker_rejection_is_typed_not_ambiguous(tmp_path: Path) -> Non
     assert isinstance(excinfo.value.__cause__, HTTPError)
 
 
-def test_a_non_http_submit_failure_keeps_its_original_type(tmp_path: Path) -> None:
-    """Without a broker status there is no 4xx to classify, so the caller's
-    existing fail-closed handling is unchanged."""
+def test_a_non_http_submit_failure_with_a_404_lookup_is_a_definite_non_submission(tmp_path: Path) -> None:
+    """A 404 lookup proves the client id never reached the broker, whatever the
+    submit error was. The caller gets the definite non-submission (it does not
+    cancel the legs queued after it), not the raw submit error."""
     submit_error = ValueError("insufficient buying power")
     broker = _rejected_submit_broker(tmp_path, submit_error)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(DefiniteOrderRejection) as excinfo:
         OrderService(broker)._submit_with_recovery(SimpleNamespace(), "cid-1")
 
-    assert excinfo.value is submit_error
+    assert excinfo.value.__cause__ is submit_error
 
 
 class _RejectingRuntimeBroker:

@@ -25,6 +25,20 @@ _SLEEP_STEP_SECONDS = 1.0
 # a fresh backoff. A shorter session counts as a failure, so a server that
 # accepts and then drops each connection cannot force a zero-delay loop.
 _STABLE_SESSION_SECONDS = 60.0
+# Longest a stop() waits for the SDK event loop that a racing run() is about to create.
+_SDK_LOOP_WAIT_SECONDS = 1.0
+
+
+def wait_for_sdk_loop(stream: Any) -> None:
+    """Wait briefly for alpaca-py's event loop, which its run() creates on entry.
+
+    A stop that races a run() start cannot reach the loop yet, and the SDK's
+    stop() dereferences it. The wait is bounded, so a run() that never builds
+    a loop cannot hold stop() up.
+    """
+    deadline = time.monotonic() + _SDK_LOOP_WAIT_SECONDS
+    while getattr(stream, "_loop", None) is None and time.monotonic() < deadline:
+        time.sleep(0.01)
 
 
 def _backoff_seconds(failures: int) -> float:
@@ -164,6 +178,8 @@ class AlpacaBarStream:
     malformed_bar_count = 0
     # Set by stop(); a run() that starts after it returns without connecting.
     _stop_requested = False
+    # Set by run_stock() before it reads _stop_requested (see stop()).
+    _run_entered = False
 
     def __init__(self, api_key: str, secret_key: str, stock_stream_feed: str = "iex") -> None:
         from alpaca.data.enums import DataFeed
@@ -260,6 +276,9 @@ class AlpacaBarStream:
                 subscribe_updated(stock_updated_handler, *stock_symbols)
 
     def run_stock(self) -> None:
+        # The mark is set before the flag is read: a stop() that sets the flag
+        # after this read still sees the mark and waits for the SDK loop.
+        self._run_entered = True
         # A stop that arrived before this run began must not be lost: the SDK
         # forgets it, and the run would then consume until process exit.
         if self._stop_requested:
@@ -276,4 +295,6 @@ class AlpacaBarStream:
 
     def stop(self) -> None:
         self._stop_requested = True
+        if self._run_entered:
+            wait_for_sdk_loop(self.stock)
         self._stop_sdk_stream(self.stock)

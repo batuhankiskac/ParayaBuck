@@ -196,9 +196,10 @@ def test_stale_trade_feed_with_open_orders_latches_and_reconciles(
 ) -> None:
     runtime, _worker, schedule_calls = _stream_runtime()
     runtime.broker = SimpleNamespace(account_id="acct")
-    orders = (object(),) if has_open_orders else ()
+    orders = (SimpleNamespace(client_order_id="c-1"),) if has_open_orders else ()
     runtime._portfolio_repository = SimpleNamespace(open_orders=lambda _account_id: orders)
-    runtime._last_trade_update_at = moment - timedelta(seconds=silent_seconds)
+    # The silence clock is per open order (C2-5-2): the order's own last update.
+    runtime._order_update_at = {"c-1": moment - timedelta(seconds=silent_seconds)}
     runtime._trade_feed_probe_at = None
 
     runtime._maybe_check_trade_feed_freshness(now=moment)

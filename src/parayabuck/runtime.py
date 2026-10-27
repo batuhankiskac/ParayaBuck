@@ -329,6 +329,12 @@ _STREAM_STILL_FAILING_ALERT_SECONDS = 3600.0
 # long during the regular session may hide a missed fill: the runtime then
 # latches new entries and reconciles (see _maybe_check_trade_feed_freshness).
 _TRADE_FEED_STALE_SECONDS = 300.0
+# Stop budget for the stream threads. The Alpaca SDK stream loops wait up to 5 s
+# in recv before they check their stop request, then close the socket (2 s
+# close_timeout). A shorter join returns while the old consumer can still book
+# fills, so the join covers both plus a margin. The unit's stop budget is 180 s.
+_STREAM_STOP_JOIN_SECONDS = 8
+_STREAM_THREAD_NAMES = frozenset({"pb-stocks", "pb-trade-updates"})
 # Consecutive failed account fetches (pb-account) before the breaker trips.
 _ACCOUNT_FETCH_FAILURE_LIMIT = 5
 _ACCOUNT_FETCH_HALT_REASON = "account_fetch_failures"
@@ -693,6 +699,8 @@ class EngineRuntime:
         self._reconcile_pending_reason: str | None = None
         self._reconcile_pending_seq = 0
         self._last_trade_update_at: datetime | None = None
+        # Last stream update per client order id: the silence clock of each open order.
+        self._order_update_at: dict[str, datetime] = {}
         self._trade_feed_probe_at: datetime | None = None
         self._consecutive_account_failures = 0
         self._live_startup_proof = live_startup_proof
@@ -2140,7 +2148,7 @@ class EngineRuntime:
             reconcile_thread = getattr(self, "_reconcile_thread", None)
             warmup_thread = getattr(self, "_warmup_retry_thread", None)
         for thread in threads_snapshot:
-            _join_started(thread, 5)
+            _join_started(thread, _STREAM_STOP_JOIN_SECONDS if thread.name in _STREAM_THREAD_NAMES else 5)
         alive = [thread.name for thread in threads_snapshot if thread.is_alive()]
         if reconcile_thread is not None:
             _join_started(reconcile_thread, 30)
@@ -3418,8 +3426,12 @@ class EngineRuntime:
         return None
 
     async def _handle_trade_update(self, update: TradeUpdate) -> None:
-        # Freshness stamp for the stale-feed check, before any early return.
-        self._last_trade_update_at = datetime.now(UTC)
+        # Freshness stamps for the stale-feed check, before any early return.
+        stamp = datetime.now(UTC)
+        self._last_trade_update_at = stamp
+        order_stamps = getattr(self, "_order_update_at", None)
+        if order_stamps is not None and update.client_order_id:
+            order_stamps[update.client_order_id] = stamp
         portfolio_repository = getattr(self, "_portfolio_repository", None)
         # Repository reads and writes are synchronous SQLite: they run off the
         # event loop, like the booking below.
@@ -3693,7 +3705,7 @@ class EngineRuntime:
                         exc,
                     )
                     # Interruptible backoff: stop() joins stream workers with
-                    # a 5 s timeout, shorter than the 16 s max delay.
+                    # _STREAM_STOP_JOIN_SECONDS, shorter than the 16 s max delay.
                     if self._stop_event.wait(delay):
                         return
                     worker.last_heartbeat = datetime.now(UTC)
@@ -6247,13 +6259,16 @@ class EngineRuntime:
             log.exception("Premarket probe could not run")
 
     def _maybe_check_trade_feed_freshness(self, now: datetime | None = None) -> None:
-        """Latch and reconcile when open orders outlive a silent trade feed.
+        """Latch and reconcile when an open order outlives a silent trade feed.
 
         Only during the NYSE regular session, and only while the account holds
-        non-terminal portfolio orders. The reference is the later of the last
-        trade update and the last trigger, so one silent window causes at most
-        one reconcile. Resting orders that simply have no fills also go quiet;
-        that costs one reconcile per TTL, never a halt. Never raises.
+        non-terminal portfolio orders. Silence is judged per open order: each
+        order's clock runs from its own last stream update (or from the first
+        check that saw it open), so a fill on one order cannot hide a missed
+        update on another. The later of that clock and the last trigger is the
+        reference, so one silent window causes at most one reconcile. Resting
+        orders that simply have no fills also go quiet; that costs one reconcile
+        per TTL, never a halt. Never raises.
         """
         try:
             now = now or datetime.now(UTC)
@@ -6263,26 +6278,29 @@ class EngineRuntime:
             if repository is None:
                 return
             account_id = getattr(getattr(self, "broker", None), "account_id", None) or "unknown"
-            if not repository.open_orders(account_id):
+            open_orders = repository.open_orders(account_id)
+            stamps = getattr(self, "_order_update_at", None)
+            if stamps is None:
+                stamps = self._order_update_at = {}
+            open_ids = {str(getattr(order, "client_order_id", "") or "") for order in open_orders}
+            # Orders that closed no longer need a clock.
+            for client_order_id in [key for key in list(stamps) if key not in open_ids]:
+                stamps.pop(client_order_id, None)
+            if not open_orders:
                 return
-            references = [
-                stamp
-                for stamp in (
-                    getattr(self, "_last_trade_update_at", None),
-                    getattr(self, "_trade_feed_probe_at", None),
-                )
-                if stamp is not None
-            ]
-            if not references:
-                # First observation of open orders: start the silence clock.
-                self._trade_feed_probe_at = now
-                return
-            silent_seconds = (now - max(references)).total_seconds()
+            trigger = getattr(self, "_trade_feed_probe_at", None)
+            silent_seconds = 0.0
+            for order in open_orders:
+                client_order_id = str(getattr(order, "client_order_id", "") or "")
+                # setdefault: the first check that sees an order starts its clock.
+                last_seen = stamps.setdefault(client_order_id, now)
+                reference = max(last_seen, trigger) if trigger is not None else last_seen
+                silent_seconds = max(silent_seconds, (now - reference).total_seconds())
             if silent_seconds < _TRADE_FEED_STALE_SECONDS:
                 return
             self._trade_feed_probe_at = now
             log.warning(
-                "No trade update for %.0fs with open orders; latching entries and reconciling",
+                "No trade update for %.0fs on an open order; latching entries and reconciling",
                 silent_seconds,
             )
             self._set_reconcile_pending("trade_feed_stale")

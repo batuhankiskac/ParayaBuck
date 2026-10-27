@@ -23,7 +23,7 @@ from parayabuck.markets.timeframes import (
     weekday_count,
 )
 from parayabuck.utils import is_crypto
-from parayabuck.utils.http import patch_session_timeout
+from parayabuck.utils.http import is_network_failure, patch_session_timeout
 
 log = get_logger("parayabuck.data.alpaca")
 
@@ -74,6 +74,21 @@ _REQUEST_URL = re.compile(r"https?://\S+")
 # tries SIP again, so granting the entitlement (or a data-plan change) heals
 # without a restart.
 _SIP_REPROBE_INTERVAL = timedelta(hours=6)
+
+# A failed provider request opens a cool-down: requests inside it are answered
+# from the local cache or fail closed, without another provider call. The
+# delay doubles per consecutive failure and is capped, so a long outage costs
+# a bounded number of slow timeouts instead of one per caller.
+_PROVIDER_COOLDOWN_BASE = timedelta(seconds=30)
+_PROVIDER_COOLDOWN_CAP = timedelta(minutes=5)
+_PROVIDER_COOLDOWN_MAX_EXPONENT = 4
+# Relative tolerance for "the same close": the cache and the provider agree
+# to float noise unless the provider rebased the session (split or dividend).
+_BASIS_CLOSE_REL_TOL = 1e-6
+
+
+class HistoricalProviderCooldown(ConnectionError):
+    """A provider request skipped during the failure cool-down; callers fail closed."""
 
 
 def _normalize_row_timestamp(raw: object) -> datetime:
@@ -190,11 +205,16 @@ class AlpacaHistoricalData:
         # outage cache fallback or an empty response), so the split-basis
         # verifier never counts cache rows as provider coverage.
         self._provider_fallbacks: int = 0
+        # Consecutive failed provider requests, and the instant the cool-down
+        # ends (None when no cool-down is active). Reset by a provider answer.
+        self._provider_failure_streak: int = 0
+        self._provider_cooldown_until: datetime | None = None
 
     def feed_status(self) -> dict[str, object]:
         """Configured and effective equity historical feed for reporting."""
         bars_effective = "iex" if self._sip_fallback_active else self._configured_stock_feed
         fallback_since = getattr(self, "_sip_fallback_since", None)
+        cooldown_until = getattr(self, "_provider_cooldown_until", None)
         return {
             "configured": self._configured_stock_feed,
             "effective": bars_effective,
@@ -207,6 +227,10 @@ class AlpacaHistoricalData:
             # or after this instant re-probes and restores the configured feed.
             "sip_fallback_since": (fallback_since.isoformat() if isinstance(fallback_since, datetime) else None),
             "sip_reprobe_interval_minutes": int(_SIP_REPROBE_INTERVAL.total_seconds() // 60),
+            # Provider outage state for escalation: a streak that keeps growing
+            # is a sustained outage, not one blip.
+            "provider_failure_streak": int(getattr(self, "_provider_failure_streak", 0) or 0),
+            "provider_cooldown_until": (cooldown_until.isoformat() if cooldown_until is not None else None),
             "note": (
                 "IEX prints reflect one exchange, not the consolidated SIP/NBBO "
                 "tape; liquidity and spread proxies derived from IEX data are "
@@ -286,6 +310,36 @@ class AlpacaHistoricalData:
         """
         if getattr(self, "_sip_fallback_active", False):
             outcome.degraded = True
+
+    def _note_provider_failure(self, now: datetime) -> None:
+        """Count one failed provider request and open its cool-down."""
+        streak = int(getattr(self, "_provider_failure_streak", 0) or 0) + 1
+        self._provider_failure_streak = streak
+        exponent = min(streak - 1, _PROVIDER_COOLDOWN_MAX_EXPONENT)
+        delay = min(_PROVIDER_COOLDOWN_CAP, _PROVIDER_COOLDOWN_BASE * (2**exponent))
+        self._provider_cooldown_until = now + delay
+        log.warning(
+            "Historical API failure %d in a row; no provider request for %ds",
+            streak,
+            int(delay.total_seconds()),
+        )
+
+    @staticmethod
+    def _basis_changed(cached: list[Bar], fetched: list[Bar]) -> bool:
+        """Whether the provider disagrees with cached bars for an instant both hold.
+
+        The cache and the provider share the feed and adjustment keys, so on the
+        same instant they must agree to float noise. A close that moved is a
+        rebase of the cached session. Only overlapping instants are compared.
+        """
+        if not cached or not fetched:
+            return False
+        closes = {bar.timestamp: bar.close for bar in fetched}
+        for bar in cached:
+            close = closes.get(bar.timestamp)
+            if close is not None and not math.isclose(bar.close, close, rel_tol=_BASIS_CLOSE_REL_TOL):
+                return True
+        return False
 
     def get_session_daily_bars(
         self,
@@ -608,6 +662,19 @@ class AlpacaHistoricalData:
                 return fresh_cached
             return None
 
+        # Inside a failure cool-down the provider is not asked again: the
+        # feed-matched cache answers, and when it cannot cover the window the
+        # request fails closed. Every caller waits out the same bounded delay.
+        now = datetime.now(UTC)
+        cooldown_until = getattr(self, "_provider_cooldown_until", None)
+        if cooldown_until is not None and now < cooldown_until:
+            served = _fallback("Historical API in failure cool-down; using feed-matched local warmup cache")
+            if served is not None:
+                return served
+            raise HistoricalProviderCooldown(
+                f"Historical API in failure cool-down until {cooldown_until.isoformat()}; no cached window to serve"
+            )
+
         response: Any
         try:
             response = self._stock_client.get_stock_bars(
@@ -651,10 +718,17 @@ class AlpacaHistoricalData:
                     adjustment,
                     outcome,
                 )
+            if is_network_failure(exc):
+                # Only a transient, network-class failure is an outage. A 4xx
+                # or a bad answer is permanent and is not retried on a timer.
+                self._note_provider_failure(now)
             served = _fallback(f"Historical API failed ({exc}); using feed-matched local warmup cache")
             if served is not None:
                 return served
             raise
+        # A provider answer, even an empty one, ends the outage streak.
+        self._provider_failure_streak = 0
+        self._provider_cooldown_until = None
         frame = response.df
         if frame.empty:
             served = _fallback("Historical API returned no rows; using feed-matched local cache")
@@ -740,6 +814,21 @@ class AlpacaHistoricalData:
         for symbol, items in bars.items():
             deduped = {bar.timestamp: bar for bar in items}
             bars[symbol] = [deduped[key] for key in sorted(deduped)]
+        # A provider answer that moves the closes the cache holds for the same
+        # sessions has rebased them (split or dividend). The cached rows are
+        # then on the old basis: keeping them, even outside the answered window,
+        # would let a later cache read mix the two bases, so they are dropped.
+        rebased = sorted(
+            symbol for symbol in symbols if self._basis_changed(cached.get(symbol, []), bars.get(symbol, []))
+        )
+        for symbol in rebased:
+            self._cache.invalidate_symbol(symbol, feed=feed_name, timeframe=timeframe, adjustment=adjustment)
+        if rebased:
+            log.warning(
+                "Provider rebased cached %s bars for %s; cached rows on the old basis dropped",
+                timeframe,
+                ",".join(rebased),
+            )
         total = sum(len(items) for items in bars.values())
         # A daily bar for a session still inside the SIP embargo is partial (its
         # close is the last trade). It is answered to the caller, but never cached

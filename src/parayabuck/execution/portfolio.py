@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from bisect import bisect_right
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
@@ -119,21 +119,34 @@ class PortfolioExecutionPolicy:
 
 @dataclass(frozen=True)
 class GainBandHold:
-    """One downsize the gain-scaled band suppressed, at one decision."""
+    """One downsize the gain-scaled band suppressed, at one decision.
+
+    ``tl_fraction`` and ``tl_verdict`` are a metadata-only shadow: the same
+    gain fraction in TL (lots at their buy-date USD/TRY) and the verdict the
+    band would have reached on it. They never drive the USD decision and stay
+    ``None`` (absent from the metadata) when the TCMB rate files are missing.
+    """
 
     symbol: str
     g_frac: float
     band: float
     gap: float
+    tl_fraction: float | None = None
+    tl_verdict: str | None = None
 
     def as_metadata(self) -> dict[str, object]:
         """Round-trippable decision-metadata entry (``TargetPortfolio.metadata``)."""
-        return {
+        entry: dict[str, object] = {
             "symbol": self.symbol,
             "g_frac": float(self.g_frac),
             "band": float(self.band),
             "gap": float(self.gap),
         }
+        if self.tl_fraction is not None:
+            entry["gain_fraction_tl_shadow"] = float(self.tl_fraction)
+        if self.tl_verdict is not None:
+            entry["gain_band_tl_shadow_verdict"] = self.tl_verdict
+        return entry
 
 
 @dataclass(frozen=True)
@@ -290,6 +303,31 @@ def downsize_gain_fraction(
     if remaining > 1e-9:
         return None
     return max(0.0, gain) / (units * price)
+
+
+def downsize_gain_fraction_tl(
+    lots: Sequence[tuple[float, float, float]],
+    units: float,
+    price: float,
+    decision_usd_try: float,
+) -> float | None:
+    """TL shadow of :func:`downsize_gain_fraction`, for metadata only.
+
+    ``lots`` are ``(quantity, USD unit cost, USD/TRY on the lot's buy date)``,
+    oldest first; each lot's TL cost is its USD cost times that buy-date rate,
+    and the sale is valued at ``price * decision_usd_try``. Same FIFO walk and
+    zero floor as the USD fraction. Returns ``None`` when the lots do not cover
+    the sale or a rate is not usable.
+    """
+    if not (decision_usd_try > 0 and math.isfinite(decision_usd_try)):
+        return None
+    tl_lots = [(quantity, usd_cost * buy_rate) for quantity, usd_cost, buy_rate in lots]
+    return downsize_gain_fraction(tl_lots, units, price * decision_usd_try)
+
+
+def downsize_gain_band_tl_verdict(schedule: DownsizeGainBand, *, gap: float, tl_fraction: float) -> str:
+    """What the band would have decided on the TL fraction: ``"hold"`` or ``"sell"``."""
+    return "hold" if gap < schedule.band_for(tl_fraction) else "sell"
 
 
 def downsize_gain_band_verdict(
@@ -836,6 +874,8 @@ class TargetToOrderPlanner:
         open_lots: Mapping[str, Sequence[Sequence[float]]] | None = None,
         gain_band_holds: list[GainBandHold] | None = None,
         december_deferral_holds: list[DecemberDeferralHold] | None = None,
+        gain_band_tl_shadow: Callable[[str, Sequence[Sequence[float]], float, float, datetime], float | None]
+        | None = None,
     ) -> tuple[PortfolioOrderRequest, ...]:
         """Build rebalance orders from a target.
 
@@ -966,8 +1006,33 @@ class TargetToOrderPlanner:
                         )
                     if gap < verdict.band:
                         if verdict.applied and gap >= self.policy.rebalance_band_pct and gain_band_holds is not None:
+                            tl_fraction, tl_verdict = None, None
+                            if gain_band_tl_shadow is not None:
+                                # Metadata only: a shadow failure never changes the USD hold.
+                                try:
+                                    tl_fraction = gain_band_tl_shadow(
+                                        symbol,
+                                        (open_lots or {}).get(symbol) or (),
+                                        abs(delta),
+                                        price,
+                                        target.decision_timestamp,
+                                    )
+                                except Exception:
+                                    log.debug("TL gain shadow failed for %s", symbol, exc_info=True)
+                                    tl_fraction = None
+                                if tl_fraction is not None and self.policy.downsize_gain_band is not None:
+                                    tl_verdict = downsize_gain_band_tl_verdict(
+                                        self.policy.downsize_gain_band, gap=gap, tl_fraction=tl_fraction
+                                    )
                             gain_band_holds.append(
-                                GainBandHold(symbol, verdict.g_frac or 0.0, verdict.band, verdict.gap)
+                                GainBandHold(
+                                    symbol,
+                                    verdict.g_frac or 0.0,
+                                    verdict.band,
+                                    verdict.gap,
+                                    tl_fraction,
+                                    tl_verdict,
+                                )
                             )
                         continue
             elif gap < self.policy.rebalance_band_pct:
@@ -1115,8 +1180,10 @@ __all__ = [
     "PortfolioRiskOverlay",
     "RiskOverlayDecision",
     "TargetToOrderPlanner",
+    "downsize_gain_band_tl_verdict",
     "downsize_gain_band_verdict",
     "downsize_gain_fraction",
+    "downsize_gain_fraction_tl",
     "floor_increment",
     "floor_increment_decimal",
     "gain_band_bypass_metadata",

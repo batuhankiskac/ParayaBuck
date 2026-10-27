@@ -82,15 +82,26 @@ class TimeframeAggregator:
         if current is not None and current.timestamp == bucket_time:
             components = self._components[bar.symbol]
             if bar.timestamp not in components:
+                self._log_untracked_correction(bar)
                 return None
             components[bar.timestamp] = bar
             self._current[bar.symbol] = self._aggregate(components, bucket_time)
             return None
         previous_components = self._last_components.get(bar.symbol)
         if not previous_components or bar.timestamp not in previous_components:
+            self._log_untracked_correction(bar)
             return None
         previous_components[bar.timestamp] = bar
         return self._aggregate(previous_components, bucket_time)
+
+    def _log_untracked_correction(self, bar: Bar) -> None:
+        """A correction for a minute no longer held in an open or last bucket."""
+        log.warning(
+            "Correction for an untracked minute dropped: symbol=%s timeframe=%s minute=%s",
+            bar.symbol,
+            self.timeframe,
+            bar.timestamp.isoformat(),
+        )
 
     def _bucket(self, timestamp: datetime) -> datetime:
         """Session-anchored bucket: buckets start at the 09:30 ET open."""

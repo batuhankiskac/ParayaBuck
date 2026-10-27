@@ -372,6 +372,7 @@ maximum events and queue size come from the `observability:` block in
 parayabuck ops status [--json]            # overall health, trading state, per-check lines; exit 0 OK, 1 BLOCKED/DEGRADED/UNKNOWN, 2 CRITICAL
 parayabuck ops doctor [--json] [--journal PATH]   # exit 0 ok, 1 degraded, 2 critical
 parayabuck ops events --since 2h [--kind K] [--severity DEBUG|INFO|WARNING|CRITICAL] [--decision ID] [--order ID]
+    # --since / --until take ISO timestamps; a timestamp without an offset is read as UTC, not New York time
 parayabuck ops timeline --decision ID | --order ID
 parayabuck ops explain [latest|DECISION_ID]   # why a decision did or did not trade (latest = current account)
 parayabuck ops bundle [--output PATH]     # sanitized diagnostic zip (no keys or secrets; account ids masked)

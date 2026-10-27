@@ -95,7 +95,7 @@ class _HistoryOnlyFor:
         self.splits = splits
         self.requested: list[tuple[str, ...]] = []
 
-    def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment):  # noqa: ANN001
+    def get_bars_batch(self, symbols, timeframe, *, start, end, adjustment, outcome=None):  # noqa: ANN001
         self.requested.append(tuple(symbols))
         return {symbol: list(self.splits[symbol]) for symbol in symbols if symbol in self.splits}
 

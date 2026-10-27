@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from parayabuck.core.models import Bar, Market
-from parayabuck.data.alpaca import AlpacaHistoricalData
+from parayabuck.data.alpaca import AlpacaHistoricalData, BatchOutcome
 from parayabuck.data.cache import WarmupCache
 from parayabuck.markets.timeframes import is_regular_equity_time
 
@@ -556,14 +556,16 @@ def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: 
     history._provider_fallbacks = 0
     history._last_batch_degraded = False
 
-    complete = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end)
-    assert history._last_batch_degraded is False
+    outcome = BatchOutcome()
+    complete = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end, outcome=outcome)
+    assert outcome.degraded is False
     assert {symbol: len(bars) for symbol, bars in complete.items()} == {symbol: len(grid) for symbol in complete}
 
     history._stock_client = _FakeStockBars(omit=("SPY",))
-    partial = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end)
+    outcome = BatchOutcome()
+    partial = history.get_bars_batch(list(_OUTAGE_SYMBOLS), "1d", start, end, outcome=outcome)
 
-    assert history._last_batch_degraded is True
+    assert outcome.degraded is True
     assert [bar.timestamp for bar in partial["SPY"]] == grid
 
 

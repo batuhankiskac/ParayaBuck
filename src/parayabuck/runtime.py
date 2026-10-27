@@ -28,6 +28,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.data.adjustment import adequate_coverage, covers_session
+from parayabuck.data.alpaca import BatchOutcome
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
@@ -4941,8 +4942,11 @@ class EngineRuntime:
         # False from the except branch (always on the second attempt).
         adjusted: dict[str, list[Any]] = {}
         for attempt in range(2):
+            outcome = BatchOutcome()
             try:
-                adjusted = history_client.get_bars_batch(symbols, "1d", start=start, end=end, adjustment="splits")
+                adjusted = history_client.get_bars_batch(
+                    symbols, "1d", start=start, end=end, adjustment="splits", outcome=outcome
+                )
                 break
             except Exception as exc:
                 if not _is_transient_network_error(exc) or attempt == 1:
@@ -4956,15 +4960,19 @@ class EngineRuntime:
         # Counting it as a success is how an HTTP outage produced a FALSE
         # recovery alert and kept the staleness alarm quiet for days: nothing
         # was verified, so a cache-served response is unverified.
-        if getattr(history_client, "_last_batch_degraded", False):
+        if outcome.degraded:
             self._record_signal_adjustment_failure(
                 "provider unavailable: response served from the local warmup cache, not verified"
             )
             return False
+        # A provider window with a missing session or a dropped row is never
+        # adopted, even when the stored series is empty and so cannot show the
+        # hole: warmup refused to seed such a symbol, and so must the verifier.
         inadequate = [
             symbol
             for symbol in symbols
-            if not adequate_coverage(
+            if symbol in outcome.incomplete
+            or not adequate_coverage(
                 adjusted.get(symbol, ()),
                 required_oldest=required_oldest_by_symbol.get(symbol, fallback_oldest),
                 required_newest=required_through,
@@ -6241,17 +6249,19 @@ class EngineRuntime:
             for symbol_batch in _symbol_batches(group):
                 try:
                     start = _warmup_start(timeframe, requested_bars)
+                    outcome = BatchOutcome()
                     signal_bars = history.get_bars_batch(
                         symbol_batch,
                         timeframe,
                         start=start,
                         adjustment="splits",
+                        outcome=outcome,
                     )
                     # A provider window with a missing session or a dropped row is
                     # never seeded: the decision-time verifier cannot see a hole that
                     # was never stored, so the signals would read one session further
                     # back. The symbol stays not ready and the warmup retry covers it.
-                    incomplete: frozenset[str] = getattr(history, "last_incomplete_symbols", frozenset())
+                    incomplete = outcome.incomplete
                     for symbol in symbol_batch:
                         if symbol in incomplete:
                             log.warning(

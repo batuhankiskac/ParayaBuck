@@ -553,10 +553,11 @@ def test_cache_served_verification_is_not_a_success(monkeypatch: pytest.MonkeyPa
     engine._portfolio_runtimes = (equity,)
     # The outage path: the client answers from its local warmup cache and
     # says so, which is exactly what must NOT count as verified.
-    engine._historical = SimpleNamespace(
-        get_bars_batch=lambda *a, **k: {"AAA": [_daily_bar("AAA", _et(REGULAR, 0, 0), 100.0)]},
-        _last_batch_degraded=True,
-    )
+    def _served_from_cache(*_args, outcome, **_kwargs):
+        outcome.degraded = True
+        return {"AAA": [_daily_bar("AAA", _et(REGULAR, 0, 0), 100.0)]}
+
+    engine._historical = SimpleNamespace(get_bars_batch=_served_from_cache)
     engine._signal_adjustment_state().update({"healthy": True, "last_success_at": None})
     assert engine.verify_equity_signal_basis() is False
     assert engine._signal_adjustment_state()["healthy"] is False

@@ -21,7 +21,7 @@ from alpaca.data.enums import DataFeed
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data.aggregator import TimeframeAggregator
-from parayabuck.data.alpaca import AlpacaHistoricalData
+from parayabuck.data.alpaca import AlpacaHistoricalData, BatchOutcome
 from parayabuck.data.cache import WarmupCache
 from parayabuck.runtime import EngineRuntime
 
@@ -98,15 +98,17 @@ def test_bar_accepts_positive_prices_with_a_zero_volume() -> None:
 def test_a_daily_window_with_a_missing_session_is_flagged_incomplete(tmp_path) -> None:
     sessions = _weekday_sessions()
     complete = _history(tmp_path, _daily_frame(sessions))
-    bars = complete.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits")
+    outcome = BatchOutcome()
+    bars = complete.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits", outcome=outcome)
     assert len(bars["QLD"]) == len(sessions)
-    assert complete.last_incomplete_symbols == frozenset()
+    assert outcome.incomplete == set()
     complete.close()
 
     holed = _history(tmp_path, _daily_frame([day for day in sessions if day != date(2026, 10, 14)]))
-    bars = holed.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits")
+    outcome = BatchOutcome()
+    bars = holed.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits", outcome=outcome)
     assert len(bars["QLD"]) == len(sessions) - 1
-    assert holed.last_incomplete_symbols == frozenset({"QLD"})
+    assert outcome.incomplete == {"QLD"}
     holed.close()
 
 
@@ -116,9 +118,8 @@ def test_warmup_skips_a_symbol_whose_provider_window_is_incomplete() -> None:
     bar = Bar(datetime(2026, 10, 23, 4, 0, tzinfo=UTC), "QQQ", "1d", 1, 1, 1, 1, 1000, Market.EQUITY)
 
     class _History:
-        last_incomplete_symbols = frozenset({"QLD"})
-
-        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw"):
+        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw", outcome=None):
+            outcome.incomplete.add("QLD")
             return {symbol: [bar] for symbol in symbols}
 
     runtime._warmup_symbols(_History(), ["QQQ", "QLD"], retry=False)
@@ -142,10 +143,11 @@ def test_an_unparseable_row_timestamp_skips_one_row_and_keeps_the_batch(tmp_path
     }
     history = _history(tmp_path, _daily_frame(sessions, extra_rows=[bad_row]))
 
-    bars = history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits")
+    outcome = BatchOutcome()
+    bars = history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits", outcome=outcome)
 
     assert len(bars["QLD"]) == len(sessions)
-    assert history.last_incomplete_symbols == frozenset()
+    assert outcome.incomplete == set()
     history.close()
 
 
@@ -157,13 +159,15 @@ def test_an_iex_downgraded_answer_is_marked_degraded(tmp_path) -> None:
     history = _history(tmp_path, _daily_frame(sessions), stock_feed="sip")
     history._sip_fallback_active = True
     history._stock_feed = DataFeed("iex")
-    history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits")
-    assert history._last_batch_degraded is True
+    outcome = BatchOutcome()
+    history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits", outcome=outcome)
+    assert outcome.degraded is True
 
     history._sip_fallback_active = False
     history._stock_feed = DataFeed("sip")
-    history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits")
-    assert history._last_batch_degraded is False
+    outcome = BatchOutcome()
+    history.get_bars_batch(["QLD"], "1d", start=START, end=END, adjustment="splits", outcome=outcome)
+    assert outcome.degraded is False
     history.close()
 
 
@@ -178,7 +182,7 @@ def test_warmup_does_not_hold_the_ingestion_lock_while_seeding() -> None:
     bar = Bar(datetime(2026, 10, 23, 4, 0, tzinfo=UTC), "QQQ", "1d", 1, 1, 1, 1, 1000, Market.EQUITY)
 
     class _History:
-        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw"):
+        def get_bars_batch(self, symbols, timeframe, *, start=None, end=None, adjustment="raw", outcome=None):
             return {symbol: [bar] for symbol in symbols}
 
     ingestion_lock.acquire()  # a stream bar holding the ingestion lock

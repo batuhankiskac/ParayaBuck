@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import json
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -922,6 +923,19 @@ class PortfolioRuntime:
             series = self.history[symbol]
             if not series or series[-1].timestamp < bar.timestamp:
                 series.append(bar)
+            elif not any(
+                known.timestamp == bar.timestamp
+                or (
+                    bar.timeframe == "1d" and signal_session_date(known.timestamp) == signal_session_date(bar.timestamp)
+                )
+                for known in series
+            ):
+                # An older provider bar the history lacks: a live close was
+                # appended before any warmup seeded this symbol, so the retry
+                # must backfill in time order instead of being rejected. A
+                # daily bar of a session already held (stream and provider
+                # label the same session differently) is not a new bar.
+                bisect.insort(series, bar, key=lambda item: item.timestamp)
         timestamp_sets = [{bar.timestamp for bar in series} for series in self.history.values() if series]
         if len(timestamp_sets) == len(self.history):
             common_timestamps = set.intersection(*timestamp_sets)

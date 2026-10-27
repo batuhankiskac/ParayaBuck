@@ -3437,11 +3437,13 @@ class PortfolioRuntime:
         # no gap term (gap == 1).
         gap = 1.0 + float(getattr(self, "live_buy_gap_margin", 0.03)) if self.mode == "live" else 1.0
         committed_fill = (committed or 0.0) * gap
-        # Non-borrowed buying power: min(cash, non-marginable buying power)
-        # where the broker reports it, in both modes.
+        # Non-borrowed buying power. LIVE caps cash by the non-marginable
+        # buying power where the broker reports it; PAPER keeps raw cash so its
+        # sizing stays the validated PAPER/backtest basis (Alpaca's PAPER
+        # settlement semantics for that field are unverified, P2-10-4).
         spendable = account.cash
         non_marginable = getattr(account, "non_marginable_buying_power", None)
-        if non_marginable is not None and math.isfinite(non_marginable):
+        if self.mode == "live" and non_marginable is not None and math.isfinite(non_marginable):
             spendable = min(spendable, non_marginable)
         gross_headroom = max(0.0, limits.maximum_gross * account.equity - realized_gross - (committed or 0.0))
         cash_headroom = max(0.0, (spendable - limits.minimum_cash * account.equity - committed_fill) / gap)

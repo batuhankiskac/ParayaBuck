@@ -303,8 +303,10 @@ stream is down. Three events set the reconcile-pending latch
 | `account_fetch_failures` (breaker, not latch) | 5 account fetches in a row failed; the halt clears only through the operator reset, which reconciles first |
 
 While the latch is set, new BUYs wait and rejected-SELL retries wait, the same
-gate as `reconciliation_failed`. The session decision still runs, and its
-planned SELLs (exits and rebalance sells) go out; each BUY is held by the submit
+gate as `reconciliation_failed`. The session decision first waits and retries
+for a clean reconciliation, like a recoverable gate. If the latch is still set two
+retry intervals before the retry window closes, the decision runs anyway: its
+planned SELLs (exits and rebalance sells) go out, and each BUY is held by the submit
 gate before it is sent, whether it comes from the decision or a deferred BUY release.
 The startup catch-up is not run while the latch is set: it stays `blocked:` as
 before and the operator reset retries it. A deferred BUY side of a mixed rebalance stays deferred

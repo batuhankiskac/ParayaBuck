@@ -86,10 +86,10 @@ def _admitted(tmp_path, broker: _CashBroker, mode: str) -> float:  # type: ignor
     return sum(order.quantity for order in admission.orders)
 
 
-def test_paper_buy_sizing_uses_non_marginable_buying_power(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    # PAPER now reads min(cash, non-marginable buying power) like LIVE:
-    # (50k - 2k cash buffer) = 48k -> 480 shares. Without the report the 2 % buffer alone gives 980.
-    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "paper") == 480
+def test_paper_buy_sizing_is_unchanged(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # 0.98 x 100k from flat: the 2 % cash buffer alone bounds it; PAPER keeps
+    # raw cash even when the broker reports non-marginable buying power.
+    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), "paper") == 980
     assert _admitted(tmp_path, _CashBroker(), "paper") == 980
 
 

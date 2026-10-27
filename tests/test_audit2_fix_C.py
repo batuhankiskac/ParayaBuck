@@ -114,12 +114,11 @@ def test_gap_headroom_prices_committed_buys_at_the_gap(tmp_path, monkeypatch) ->
     assert (10_000.0 + admitted * 100.0) * 1.03 <= 100_000.0 - 2_000.0 + 1e-9
 
 
-# --- P2-10-4: PAPER uses non-marginable buying power when reported --------------
+# --- P2-10-4: PAPER keeps raw cash (validated basis); LIVE caps by it -----------
 
 
-def test_paper_cash_term_uses_non_marginable_buying_power(tmp_path) -> None:
-    # (50k - 2k buffer) = 48k -> 480 shares; without the report the buffer alone gives 980.
-    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), mode="paper", cap=0.0) == 480
+def test_paper_cash_term_ignores_non_marginable_buying_power(tmp_path) -> None:
+    assert _admitted(tmp_path, _CashBroker(non_marginable=50_000.0), mode="paper", cap=0.0) == 980
     assert _admitted(tmp_path, _CashBroker(), mode="paper", cap=0.0) == 980
 
 
@@ -254,6 +253,32 @@ def test_soft_reconcile_pending_runs_the_decision_and_gates_only_buys() -> None:
     gate = calls[0]["submit_gate"]
     assert gate(_live_buy(1)) == "buy_not_permitted"
     assert gate(_sell_order("decision", "exit-qld")) is None
+
+
+def test_soft_reconcile_pending_waits_while_the_retry_window_is_open() -> None:
+    # A recent session: the latch normally clears within minutes, so the batch
+    # is parked like any recoverable gate and the BUY is not lost.
+    calls: list[dict[str, Any]] = []
+    runtime = _batch_runtime(calls, _reconcile_pending_reason="trade_feed_stale")
+    deferred: list[str] = []
+    runtime._defer_portfolio_bars = lambda _bars, reason: deferred.append(reason) or True  # type: ignore[method-assign]
+    runtime._soft_latch_keeps_waiting = lambda _bars, now=None: True  # type: ignore[method-assign]
+
+    runtime._process_portfolio_timestamp([_qld_bar()])
+
+    assert calls == []
+    assert deferred == ["trade_feed_stale"]
+
+
+def test_soft_latch_wait_ends_two_retries_before_the_deadline() -> None:
+    runtime = EngineRuntime.__new__(EngineRuntime)
+    close = datetime(2026, 10, 27, 20, 0, tzinfo=UTC)
+    runtime._decision_retry_settings = lambda: (timedelta(minutes=1), timedelta(minutes=40))  # type: ignore[method-assign]
+    runtime._decision_session_close = lambda _session: close  # type: ignore[method-assign]
+    bar = Bar(close, "QLD", "1d", 100.0, 101.0, 99.0, 100.0, 1000.0, Market.EQUITY)
+
+    assert runtime._soft_latch_keeps_waiting([bar], now=close + timedelta(minutes=37)) is True
+    assert runtime._soft_latch_keeps_waiting([bar], now=close + timedelta(minutes=38)) is False
 
 
 def test_hard_reconcile_failure_still_defers_the_decision() -> None:

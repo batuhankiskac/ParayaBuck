@@ -3905,6 +3905,22 @@ class EngineRuntime:
             )
         return True
 
+    def _soft_latch_keeps_waiting(self, bars: list[Bar], now: datetime | None = None) -> bool:
+        """True while a soft reconcile-pending latch should still park the batch.
+
+        The batch waits like any recoverable gate until two retry intervals
+        before the session's retry deadline; after that it is decided with
+        its BUYs held by the submit gate, so a latch that outlives the window
+        never costs the session's exits (P2-10-1).
+        """
+        if not bars:
+            return False
+        now = now or datetime.now(UTC)
+        retry_interval, retry_window = self._decision_retry_settings()
+        session = max(bar.timestamp for bar in bars).astimezone(NEW_YORK).date()
+        last_chance = self._decision_session_close(session) + retry_window - 2 * retry_interval
+        return now < last_chance
+
     def _defer_portfolio_bars(self, bars: list[Bar], reason: str) -> bool:
         """Re-queue each market's share of a session-close batch.
 
@@ -4007,6 +4023,12 @@ class EngineRuntime:
             # submit gate until the latch clears (see the decision loop below).
             reason = breaker or "reconciliation_failed"
             return not self._defer_portfolio_bars(bars, str(reason or "reconciliation_pending"))
+        if self._reconcile_pending() and self._soft_latch_keeps_waiting(bars):
+            # The soft latch usually clears within minutes: wait for it like any
+            # recoverable gate so a BUY is not lost, and decide on the last
+            # retry with BUYs held if it is still set (exits must go out).
+            reason = getattr(self, "_reconcile_pending_reason", None) or "reconcile_pending"
+            return not self._defer_portfolio_bars(bars, str(reason))
         # Fail-closed: a pending reconciliation (material drift detected) holds
         # new BUY orders until a verified ``reconcile()`` clears it (the submit
         # gate passed below holds them; planned SELLs still go out).
@@ -4212,6 +4234,11 @@ class EngineRuntime:
                         if live_breaker is not None or getattr(self, "_reconcile_failed", False):
                             live_reason = live_breaker or "reconciliation_failed"
                             if self._defer_portfolio_batch(relevant, portfolio_runtime.market, live_reason):
+                                deferred_any = True
+                            continue
+                        if self._reconcile_pending() and self._soft_latch_keeps_waiting(relevant):
+                            live_reason = getattr(self, "_reconcile_pending_reason", None) or "reconcile_pending"
+                            if self._defer_portfolio_batch(relevant, portfolio_runtime.market, str(live_reason)):
                                 deferred_any = True
                             continue
                         live_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)

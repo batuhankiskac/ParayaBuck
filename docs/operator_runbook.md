@@ -343,9 +343,11 @@ state is not trusted, so no exit is sent on it either. Do not expect an exit to
 go out while `CIRCUIT_BREAKER` is active; it goes out after the verified reset
 and the retry window is still open, or the session is lost. The soft
 reconcile-pending latch (`trade_updates_restart`, `trade_feed_stale`,
-`premarket_probe_failed`) is not a halt and works differently: there the
-decision runs and its planned SELLs go out, and only BUYs wait for a clean
-reconciliation.
+`premarket_probe_failed`) is not a halt and works differently: the decision
+first waits and retries, like a recoverable gate, for a clean reconciliation.
+If the latch is still set two retry intervals before the retry window closes,
+the decision runs anyway: its planned SELLs go out, and only BUYs wait for a
+clean reconciliation.
 
 Review `active_incidents.json` in the bundle and the broker account, then
 reset. Restarting does not clear a persisted halt; the exceptions are listed under

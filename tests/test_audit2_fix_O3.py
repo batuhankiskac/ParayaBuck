@@ -95,7 +95,8 @@ def test_vm_paths_drop_in_keeps_the_preflight_and_the_backup_read_only_rule() ->
         "ExecStartPre=/home/batuhankiskac/ParayaBuck/.venv/bin/parayabuck doctor --strict --configured-mode --offline"
         in service
     )
-    assert not [line for line in service if line.startswith("ReadOnlyPaths")]
+    # S2-10-5 (M3): the read-only restore points land with the read-only doctor probe.
+    assert "ReadOnlyPaths=-/home/batuhankiskac/ParayaBuck/data/backups" in service
 
 
 # --- D2-7-2: the watchdog state is documented as a drop-in -----------------------------
@@ -128,15 +129,15 @@ def test_hardening_drop_in_matches_the_same_set() -> None:
 
 
 def test_engine_keeps_the_backup_path_writable_for_the_doctor_probe() -> None:
-    # S2-10-5 is blocked: ExecStartPre doctor writes a probe file into data/backups
-    # ("backup path writable" is a blocker), and systemd applies ReadOnlyPaths to
-    # ExecStartPre too. The read-only line may only come back together with a
-    # read-only probe in cli.py.
+    # S2-10-5 (M3): the engine mounts data/backups read-only, which the doctor's
+    # read-only "backup path writable" probe (os.access, a WARN under the mount)
+    # must tolerate. The read-only line and that probe land together.
     service = _directives(ENGINE, "Service")
-    assert not [line for line in service if line.startswith("ReadOnlyPaths")]
+    assert "ReadOnlyPaths=-/opt/parayabuck/data/backups" in service
     assert "ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data -/opt/parayabuck/reports" in service
     cli_text = (REPO / "src" / "parayabuck" / "cli.py").read_text(encoding="utf-8")
     assert '("backup path writable", config.backup.path)' in cli_text
+    assert "elif os.access(p, os.R_OK | os.X_OK):" in cli_text
 
 
 def test_memory_deny_write_execute_is_not_enabled_anywhere() -> None:

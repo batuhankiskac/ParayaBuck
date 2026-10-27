@@ -459,8 +459,10 @@ class SettingsService:
                 try:
                     await asyncio.to_thread(manager.start_engine, settings_restart=True)
                 except Exception as exc:
-                    restart_error = str(exc)
-                    log.warning("Settings saved, but automatic engine restart failed: %s", exc)
+                    # Redacted like every other engine error: the text may carry an Alpaca key.
+                    redact = getattr(manager, "redact_secrets", None)
+                    restart_error = redact(str(exc)) if callable(redact) else str(exc)
+                    log.warning("Settings saved, but automatic engine restart failed: %s", restart_error)
 
             _app_defaults = {"host": "127.0.0.1", "port": 8000, "open_browser": True, "log_level": "INFO"}
             app_restart_required = False

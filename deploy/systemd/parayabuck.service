@@ -47,10 +47,11 @@ ProtectHome=true
 # reports/ may be missing on a fresh host (the First install step creates it); the
 # '-' prefix keeps the namespace setup from failing before ExecStartPre runs.
 ReadWritePaths=/opt/parayabuck/config /opt/parayabuck/data -/opt/parayabuck/reports
-# data/backups stays writable here on purpose. The engine's ExecStartPre doctor
-# probes the backup path with a write (cli.py "backup path writable", a blocker),
-# so `ReadOnlyPaths=-/opt/parayabuck/data/backups` would stop every start. Add it
-# only after that probe uses a read-only check (blocked item S2-10-5, deployment.md).
+# The engine only reads the backups; parayabuck-backup.service writes them. The
+# read-only mount stops the trading process from rewriting or deleting its own
+# restore points (S2-10-5). The doctor's "backup path writable" row is a WARN
+# under this mount, not a blocker, so ExecStartPre still passes.
+ReadOnlyPaths=-/opt/parayabuck/data/backups
 CapabilityBoundingSet=
 PrivateDevices=true
 ProtectKernelTunables=true

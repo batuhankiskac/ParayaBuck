@@ -18,6 +18,7 @@ from parayabuck.logger import get_logger
 from parayabuck.web.managers.websocket import _LOG_QUEUE_MAXSIZE, add_log_queue, remove_log_queue
 from parayabuck.web.managers.websocket import consume_ws_ticket as _consume_shared
 from parayabuck.web.security import _trusted_browser_origin_for_middleware as _trusted_browser_origin
+from parayabuck.web.security import is_trusted_client, is_trusted_host
 
 log = get_logger("parayabuck.web.websocket")
 
@@ -28,6 +29,20 @@ def _web_state(websocket: WebSocket) -> Any | None:
     app = getattr(websocket, "app", None)
     app_state = getattr(app, "state", None)
     return getattr(app_state, "web", None)
+
+
+def _trusted_websocket_caller(websocket: WebSocket) -> bool:
+    """Loopback Host, loopback peer and a trusted Origin.
+
+    The HTTP middleware applies the Host and peer checks to every request, but
+    it does not run for WebSocket scopes, so the routes check them here.
+    """
+    client = getattr(websocket, "client", None)
+    return (
+        is_trusted_host(websocket.headers.get("host") or "")
+        and is_trusted_client(client.host if client is not None else None)
+        and _trusted_browser_origin(websocket.headers.get("origin"))
+    )
 
 
 def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) -> bool:
@@ -54,8 +69,9 @@ def _consume_ticket(ticket: str, kind: str, websocket: WebSocket | None = None) 
 @router.websocket("/ws/stream")
 async def websocket_stream(websocket: WebSocket) -> None:
     ticket = getattr(websocket, "query_params", {}).get("ticket", "")
-    origin_ok = _trusted_browser_origin(websocket.headers.get("origin"))
-    ticket_valid = _consume_ticket(ticket, "stream", websocket)
+    origin_ok = _trusted_websocket_caller(websocket)
+    # The ticket is consumed only for a trusted caller.
+    ticket_valid = origin_ok and _consume_ticket(ticket, "stream", websocket)
     if not origin_ok or not ticket_valid:
         try:
             close = getattr(websocket, "close", None)
@@ -91,8 +107,9 @@ async def websocket_stream(websocket: WebSocket) -> None:
 @router.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket) -> None:
     ticket = getattr(websocket, "query_params", {}).get("ticket", "")
-    origin_ok = _trusted_browser_origin(websocket.headers.get("origin"))
-    ticket_valid = _consume_ticket(ticket, "logs", websocket)
+    origin_ok = _trusted_websocket_caller(websocket)
+    # The ticket is consumed only for a trusted caller.
+    ticket_valid = origin_ok and _consume_ticket(ticket, "logs", websocket)
     if not origin_ok or not ticket_valid:
         try:
             close = getattr(websocket, "close", None)

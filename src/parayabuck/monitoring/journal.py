@@ -395,7 +395,8 @@ class EventJournal:
         order: str = "desc",
     ) -> list[OperationalEvent]:
         try:
-            limit = max(1, int(limit))
+            # Bounded here as well as in the CLI: an unbounded read of the journal is a memory risk.
+            limit = min(max(1, int(limit)), 1000)
         except Exception:
             limit = 100
         try:

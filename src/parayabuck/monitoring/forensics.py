@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -371,6 +372,13 @@ def decision_reconstruction(
 
 
 _RECEIPT_SCAN_MAX = 2000
+# Current decision ids are 24 hex characters; a shorter id is too weak to match a V1 receipt.
+_V1_RECEIPT_MIN_ID_LENGTH = 12
+
+
+def _contains_whole_token(token: str, text: str) -> bool:
+    """True when ``token`` occurs in ``text`` bounded by non-alphanumeric characters."""
+    return re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])", text) is not None
 
 
 def _find_receipt(receipt_dir: Path, decision_id: str) -> tuple[str, dict[str, Any]] | None:
@@ -400,8 +408,14 @@ def _find_receipt(receipt_dir: Path, decision_id: str) -> tuple[str, dict[str, A
             continue
         if data.get("decision_id") == decision_id or data.get("receipt_id") == decision_id:
             return str(path), data
-        # V1 receipts carry no id field; fall back to a substring probe
-        if "decision_id" not in data and "receipt_id" not in data and decision_id in json.dumps(data):
+        # V1 receipts carry no id field; fall back to a whole-token probe. A short
+        # or partial id must never attach an unrelated legacy receipt.
+        if (
+            "decision_id" not in data
+            and "receipt_id" not in data
+            and len(decision_id) >= _V1_RECEIPT_MIN_ID_LENGTH
+            and _contains_whole_token(decision_id, json.dumps(data))
+        ):
             return str(path), data
     return None
 

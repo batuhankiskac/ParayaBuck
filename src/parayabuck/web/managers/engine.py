@@ -25,6 +25,7 @@ from dotenv import dotenv_values
 from parayabuck.config import (
     DEFAULT_DECISION_DB_PATH,
     credential_file_mode_warning,
+    credential_from_directory,
     load_config,
     read_credential,
 )
@@ -358,7 +359,9 @@ class EngineManager:
         try:
             pairs = (self.get_paper_credentials(), self.get_live_credentials())
         except Exception:
-            return text
+            # Fail closed: when the credential source cannot be read the keys
+            # are unknown, so the text is withheld instead of returned raw.
+            return "[redacted: credential source unreadable]"
         for pair in pairs:
             for value in pair:
                 if value is None or len(value) < _SECRET_REDACTION_MIN_LENGTH:
@@ -687,17 +690,33 @@ class EngineManager:
             secret_key = payload.secret_key.strip() or current_secret or ""
         else:
             secret_key = current_secret or ""
-        if any(char in api_key + secret_key for char in "\r\n"):
-            raise ValueError("Credentials may not contain newlines")
         # Container credential immutability: in container mode credentials are external secrets.
         credentials_changed = (api_key, secret_key) != (
             current_key or "",
             current_secret or "",
         )
+        # Printable ASCII without spaces, for a NEW value only: Alpaca keys have
+        # that shape, and a control or non-ASCII character (U+2028, \v, \x1c, ...)
+        # would be written into the .env file. A stored value is carried over as is.
+        if credentials_changed and any(
+            not char.isascii() or not char.isprintable() or char.isspace() for char in api_key + secret_key
+        ):
+            raise ValueError("Alpaca anahtarları yalnızca boşluksuz, yazdırılabilir ASCII karakterleri içerebilir")
         if credentials_changed and os.getenv("PARAYABUCK_CONTAINER") == "YES":
             raise ValueError(
                 "Credential changes are not allowed in container mode; update the host .env or secret manager and recreate the container"
             )
+        if credentials_changed:
+            # A systemd credential file wins over .env on every read, so a key
+            # written to .env here would never reach the engine. Refuse instead
+            # of reporting a rotation that did not take effect.
+            for shadow_name, new_value in (("ALPACA_API_KEY", api_key), ("ALPACA_SECRET_KEY", secret_key)):
+                shadow = credential_from_directory(shadow_name)
+                if shadow and shadow != new_value:
+                    raise ValueError(
+                        f"{shadow_name} systemd kimlik dosyasından okunuyor; "
+                        "anahtarı .env yerine o kimlik dosyasında değiştirin"
+                    )
         # Live dollar cap finite check before assignment.
         if "live_dollar_cap" in fields_set:
             if not math.isfinite(payload.live_dollar_cap):
@@ -1625,7 +1644,12 @@ class EngineManager:
                 or pending.credential_fingerprint != self._credential_fingerprint(key, secret)
                 or pending.config_digest != self._config_digest(paper=False)
                 # Bytes: compare_digest raises TypeError on non-ASCII str (a 500, not a refusal).
-                or not secrets.compare_digest(phrase.strip().encode("utf-8"), f"LIVE {pending.account_suffix}".encode())
+                # errors="backslashreplace": a lone surrogate must reach the mismatch
+                # branch (invalidation), not raise UnicodeEncodeError before it.
+                or not secrets.compare_digest(
+                    phrase.strip().encode("utf-8", errors="backslashreplace"),
+                    f"LIVE {pending.account_suffix}".encode(),
+                )
             ):
                 self.invalidate_live_arming()
                 raise ValueError("Onay ifadesi doğrulanan hesapla eşleşmiyor; ifadeyi yeniden isteyip doğru yazın.")
@@ -2091,7 +2115,9 @@ def _atomic_update_credentials(path: Path, api_key: str, secret_key: str) -> Non
     managed = {"ALPACA_API_KEY": api_key, "ALPACA_SECRET_KEY": secret_key}
     seen: set[str] = set()
     lines: list[str] = []
-    for line in existing.splitlines():
+    # Only the dotenv line endings: str.splitlines() also splits on U+2028,
+    # \v, \f, \x1c-\x1e and \x85, which python-dotenv does not treat as breaks.
+    for line in re.split(r"\r\n|\n|\r", existing.rstrip("\r\n")) if existing else []:
         match = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
         if match and match.group(1) in managed:
             name = match.group(1)

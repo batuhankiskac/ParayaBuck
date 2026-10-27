@@ -83,8 +83,13 @@ class BacktestManager:
                 )
             if engine_state not in _BACKTEST_ALLOWED_ENGINE_STATES:
                 raise ValueError("The trading engine state could not be verified; refusing to start a Web backtest")
-            self.run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
-            self.output_dir = str(self.reports_root / self.run_id)
+            run_id = f"web-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
+            output_dir = str(self.reports_root / run_id)
+            # Validate all user input before any published status changes: a
+            # rejected request must leave the previous run's status intact.
+            argv = self._build_argv(payload, output_dir)
+            self.run_id = run_id
+            self.output_dir = output_dir
             self.started_at = datetime.now(UTC).isoformat()
             self.finished_at = None
             self.error = None
@@ -92,8 +97,6 @@ class BacktestManager:
             self.universe = None
             self.progress = []
             try:
-                # Validate all user input before publishing a running state.
-                argv = self._build_argv(payload, self.output_dir)
                 self._prune_web_runs()
                 thread = self._thread_factory(target=self._run, args=(argv,), daemon=True, name="web-backtest")
                 self._thread = thread

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -186,14 +187,14 @@ def _parser() -> argparse.ArgumentParser:
     events_p.add_argument("--decision", default=None)
     events_p.add_argument("--order", default=None)
     events_p.add_argument("--incident", default=None)
-    events_p.add_argument("--limit", type=int, default=50)
+    events_p.add_argument("--limit", type=_ops_limit_arg, default=50)
     events_p.add_argument("--json", action="store_true")
     events_p.add_argument("--journal", default=None)
     timeline_p = ops_sub.add_parser("timeline", help="correlation forensic view")
     timeline_p.add_argument("--decision", default=None)
     timeline_p.add_argument("--order", default=None)
     timeline_p.add_argument("--incident", default=None)
-    timeline_p.add_argument("--limit", type=int, default=100)
+    timeline_p.add_argument("--limit", type=_ops_limit_arg, default=100)
     timeline_p.add_argument("--json", action="store_true")
     timeline_p.add_argument("--journal", default=None)
     timeline_p.add_argument("--db", default=None)
@@ -1099,10 +1100,19 @@ def _run_doctor(args: argparse.Namespace) -> int:
             try:
                 p.mkdir(parents=True, exist_ok=True)
                 if label == "backup path writable":
-                    # S2-10-5 prerequisite: a probe file here would be a write the trading
-                    # process makes into its own restore points. Check the permission only.
-                    writable = os.access(p, os.W_OK)
-                    add(label, writable, str(p) if writable else f"{p}: not writable")
+                    # S2-10-5: no probe file here. The trading unit mounts data/backups
+                    # read-only, and a probe would be a write into its own restore points.
+                    # os.access reports that mount as not writable, which is the intended
+                    # engine state, so a readable but read-only path is a WARN row here
+                    # (not a blocker). The backup unit writes the set and alerts on failure.
+                    if os.access(p, os.W_OK):
+                        checks.append((label, "PASS", str(p)))
+                    elif os.access(p, os.R_OK | os.X_OK):
+                        checks.append(
+                            (label, "WARN", f"{p}: read-only for this process; parayabuck-backup.service writes it")
+                        )
+                    else:
+                        add(label, False, f"{p}: not readable")
                 else:
                     test = p / ".doctor_write_test"
                     test.write_text("ok")
@@ -1388,6 +1398,21 @@ def _doctor_email_checks(config: Config, add: Any, checks: list[tuple[str, str, 
 # ---------------------------------------------------------------------------
 
 
+# Most rows one ops query returns; the web API uses the same bound.
+_MAX_OPS_QUERY_LIMIT = 1000
+
+
+def _ops_limit_arg(value: str) -> int:
+    """argparse type for ``--limit``: an integer from 1 to _MAX_OPS_QUERY_LIMIT."""
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"--limit must be an integer, not {value!r}") from exc
+    if not 1 <= number <= _MAX_OPS_QUERY_LIMIT:
+        raise argparse.ArgumentTypeError(f"--limit must be between 1 and {_MAX_OPS_QUERY_LIMIT}")
+    return number
+
+
 def _parse_time_arg(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -1399,13 +1424,12 @@ def _parse_time_arg(value: str | None) -> datetime | None:
     if m:
         num = int(m.group(1))
         unit = m.group(2)
-        delta = {
-            "s": timedelta(seconds=num),
-            "m": timedelta(minutes=num),
-            "h": timedelta(hours=num),
-            "d": timedelta(days=num),
-        }[unit]
-        return datetime.now(UTC) - delta
+        seconds_per_unit = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+        try:
+            return datetime.now(UTC) - timedelta(seconds=num * seconds_per_unit)
+        except OverflowError:
+            # A window longer than datetime can represent covers every event.
+            return datetime.min.replace(tzinfo=UTC)
     # ISO
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -2574,6 +2598,19 @@ def _candidate_symbols(
     return list(config.universe.equity.symbols)
 
 
+# JSON float notation such as 5e-05. YAML 1.1 (PyYAML) needs a dot before the
+# exponent, so it reads these as strings; the web backtest sends them this way.
+_JSON_FLOAT_LITERAL = re.compile(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)[eE][-+]?\d+")
+
+
+def _override_scalar(text: str) -> object:
+    """One ``--param`` / ``--grid`` value as a YAML scalar, with JSON floats read as floats."""
+    value = yaml.safe_load(text)
+    if isinstance(value, str) and _JSON_FLOAT_LITERAL.fullmatch(value.strip()):
+        return float(value)
+    return value
+
+
 def _strategy_parameters(config: Config, raw_overrides: list[str]) -> dict[str, object]:
     selection = config.strategy.equity
     parameters = dict(selection.parameters)
@@ -2581,7 +2618,7 @@ def _strategy_parameters(config: Config, raw_overrides: list[str]) -> dict[str, 
         if "=" not in item:
             raise SystemExit(f"Invalid --param {item!r}; expected NAME=VALUE")
         name, value = item.split("=", 1)
-        parameters[name] = yaml.safe_load(value)
+        parameters[name] = _override_scalar(value)
     return parameters
 
 
@@ -2591,7 +2628,7 @@ def _parse_grid(items: list[str]) -> dict[str, list[object]]:
         if "=" not in item:
             raise SystemExit(f"Invalid --grid {item!r}; expected NAME=V1,V2")
         name, values = item.split("=", 1)
-        parsed = [yaml.safe_load(value) for value in values.split(",")]
+        parsed = [_override_scalar(value) for value in values.split(",")]
         if not name or not parsed:
             raise SystemExit(f"Invalid --grid {item!r}")
         grid[name] = parsed

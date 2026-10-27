@@ -96,6 +96,12 @@ def fetch_benchmark_bars(manager: Any, start: datetime, end: datetime, minutes: 
     return [(bar.timestamp, float(bar.close)) for bar in bars if bar.close]
 
 
+def _redacted(manager: Any, text: str) -> str:
+    """``text`` with the configured Alpaca keys removed (managers without the helper pass through)."""
+    redact = getattr(manager, "redact_secrets", None)
+    return redact(text) if callable(redact) else text
+
+
 def _ensure_broker(manager: Any) -> Any:
     broker = getattr(manager, "broker", None)
     if broker is None:
@@ -151,7 +157,7 @@ def portfolio_performance(
         points = history(broker_period, broker_timeframe)
     except Exception as exc:
         log.warning("Portfolio history failed: %s", exc)
-        payload["reason"] = f"Hesap geçmişi alınamadı: {exc}"
+        payload["reason"] = f"Hesap geçmişi alınamadı: {_redacted(manager, str(exc))}"
         return payload
     payload["available"] = True
     payload["equity"] = _series(points)
@@ -161,7 +167,7 @@ def portfolio_performance(
             payload["benchmark"] = _series(fetcher(manager, points[0][0], points[-1][0], bench_minutes))
         except Exception as exc:
             log.info("Benchmark bars unavailable: %s", exc)
-            payload["benchmark_error"] = str(exc)
+            payload["benchmark_error"] = _redacted(manager, str(exc))
     with _cache_lock:
         _cache[cache_key] = (now + CACHE_TTL_SECONDS, payload)
     return payload

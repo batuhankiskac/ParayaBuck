@@ -168,6 +168,20 @@ class WarmupCache:
             for row in rows
         ]
 
+    def prune_before(self, cutoff: datetime) -> int:
+        """Delete every cached bar stamped before ``cutoff``; returns the row count.
+
+        Retention for the derived cache: nothing else removes rows outside a
+        replaced window, so a long-running cache otherwise keeps every bar it
+        ever fetched. The caller chooses ``cutoff`` (it must stay behind the
+        longest lookback the warmup reads), so no schedule runs here.
+        """
+        threshold = cutoff.astimezone(UTC) if cutoff.tzinfo is not None else cutoff.replace(tzinfo=UTC)
+        with self._lock:
+            cursor = self.connection.execute("DELETE FROM bars WHERE timestamp < ?", (threshold.isoformat(),))
+            self.connection.commit()
+            return int(cursor.rowcount)
+
     def replace_window(
         self,
         bars: list[Bar],

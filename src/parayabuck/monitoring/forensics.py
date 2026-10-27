@@ -154,7 +154,15 @@ def find_stuck_rebalances(
         try:
             if not _table_exists(conn, "portfolio_rebalance_executions", strict=strict):
                 return []
-            rows = conn.execute("SELECT * FROM portfolio_rebalance_executions").fetchall()
+            # Only non-terminal rows of the markets this build runs can be
+            # stuck; filtering in SQL keeps the read off the finished history.
+            terminal_sql = ", ".join(f"'{phase}'" for phase in sorted(terminal_phases))
+            market_sql = ", ".join(f"'{market}'" for market in sorted(product_markets))
+            rows = conn.execute(
+                f"""SELECT * FROM portfolio_rebalance_executions
+                    WHERE COALESCE(market, '') IN ({market_sql})
+                      AND COALESCE(phase, '') NOT IN ({terminal_sql})"""
+            ).fetchall()
             now = datetime.now(UTC)
             for r in rows:
                 if str(r["market"] or "") not in product_markets:

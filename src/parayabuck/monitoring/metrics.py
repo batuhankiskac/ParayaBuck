@@ -242,35 +242,38 @@ def _risk_state_metrics(connection: sqlite3.Connection, account_id: str | None) 
     if not _table_exists(connection, "risk_state"):
         return {"latest": []}
     if account_id:
-        rows = _query_rows(
+        accounts = [account_id]
+    else:
+        accounts = [
+            str(row[0])
+            for row in _query_rows(connection, "SELECT DISTINCT account_id FROM risk_state ORDER BY account_id")
+        ]
+    latest: list[dict[str, object]] = []
+    # Each account is read through its (account_id, session_date) key, newest
+    # first, and only its first readable payload is kept. The table is not
+    # scanned as a whole.
+    for account in accounts:
+        for row in _query_rows(
             connection,
             "SELECT account_id, session_date, payload, updated_at FROM risk_state "
             "WHERE account_id=? ORDER BY session_date DESC, updated_at DESC",
-            (account_id,),
-        )
-    else:
-        rows = _query_rows(
-            connection,
-            "SELECT account_id, session_date, payload, updated_at FROM risk_state "
-            "ORDER BY session_date DESC, updated_at DESC",
-        )
-    latest_by_account: dict[str, dict[str, object]] = {}
-    for row in rows:
-        account = str(row[0])
-        if account in latest_by_account:
-            continue
-        try:
-            payload = json.loads(str(row[2]))
-        except (TypeError, ValueError):
-            log.warning("Ignoring corrupt risk_state payload for account=%s", account)
-            continue
-        latest_by_account[account] = {
-            "account_id": account,
-            "session_date": row[1],
-            "updated_at": row[3],
-            **{str(key): value for key, value in dict(payload).items()},
-        }
-    return {"latest": list(latest_by_account.values())}
+            (account,),
+        ):
+            try:
+                payload = json.loads(str(row[2]))
+            except (TypeError, ValueError):
+                log.warning("Ignoring corrupt risk_state payload for account=%s", account)
+                continue
+            latest.append(
+                {
+                    "account_id": account,
+                    "session_date": row[1],
+                    "updated_at": row[3],
+                    **{str(key): value for key, value in dict(payload).items()},
+                }
+            )
+            break
+    return {"latest": latest}
 
 
 def _entry_block_duration_seconds(incidents: dict[str, object]) -> float | None:

@@ -569,6 +569,14 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
    error and misreads the split-rebase (+1) rows, so the loud schema errors above do
    not hold for that rollback. For such a rollback restore the pre-deploy `--label`
    snapshot instead of running the old build on the migrated database.
+
+   **Positive ownership rows.** Split rebases (`kind = 'split_rebase'`, `sign = 1`)
+   and operator acquisitions (`kind = 'operator_acquisition'`, `sign = 1`) add
+   ownership. A build from before the ownership-rebase fixes does not read the
+   schema version and replays them as reductions or raises `LotBookInconsistency`,
+   so the loud schema errors above do not hold for that rollback either. If
+   `portfolio_ownership_adjustments` holds any row with `sign = 1`, restore the
+   pre-deploy `--label` snapshot instead of running the older build.
 4. Broker state is authoritative. The engine reconciles the ledger to the
    Alpaca account on every start and halts on mismatch. Never flatten or cancel
    broker positions as part of a rollback.

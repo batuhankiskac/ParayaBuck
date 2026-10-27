@@ -68,6 +68,7 @@ Confidence tags: **[H]** high, **[M]** medium, **[L]** low / verify with Alpaca.
    - On sells: SEC $20.60 per $1M (from 2026-04-04) and FINRA TAF $0.000195 per share (cap $9.79) [H/M].
    - CAT fee per share on both sides [M].
    - The daily total is rounded up to $0.01 [H] ([regulatory fees](https://alpaca.markets/support/regulatory-fees)).
+   - Not modelled: the backtest, telemetry and shadow comparator use the unrounded per-trade fee, so a modelled fee is slightly below the broker's daily total. Live fee activity is not imported either, so no observed fee reaches the books yet (see the tax ledger's fee guard).
    - At $1k–$25k this is cents per year. The real cost of small resizes is the spread and open-price slippage, not fees.
    - The official schedule is in [BrokFeeSched.pdf](https://files.alpaca.markets/disclosures/library/BrokFeeSched.pdf); it was not machine-readable here, so wire fees need reading by hand.
 7. **Funding from Turkey**

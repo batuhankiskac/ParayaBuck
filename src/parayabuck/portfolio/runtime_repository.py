@@ -73,9 +73,12 @@ _LEGACY_CRYPTO_MARKET = Market.CRYPTO.value
 _FINAL_ORDER_STATUSES_SQL = ", ".join(f"'{status}'" for status in sorted(_TERMINAL_ORDER_STATUSES))
 # A terminal incoming status is never blocked by this guard, so a late fill
 # landing on a ``canceled`` or ``expired`` row moves the row to ``filled``
-# (the fill itself is booked by ``apply_trade_update``).
+# (the fill itself is booked by ``apply_trade_update``). A filled row is the
+# one final state nothing relabels: a late ``canceled`` or ``expired`` event
+# for an order that already filled keeps ``filled`` (the fill is booked).
 _NON_REGRESSING_STATUS_SQL = (
-    f"CASE WHEN status IN ({_FINAL_ORDER_STATUSES_SQL}) "
+    "CASE WHEN status IN ('filled', 'fill') THEN status "
+    f"WHEN status IN ({_FINAL_ORDER_STATUSES_SQL}) "
     f"AND ? NOT IN ({TERMINAL_ORDER_STATUSES_SQL}) THEN status ELSE ? END"
 )
 
@@ -102,6 +105,26 @@ def _execution_price(
     if not math.isfinite(derived) or derived <= 0:
         return cumulative_average
     return derived
+
+
+def _exact_execution_price(
+    execution_price: float | None,
+    execution_quantity: float | None,
+    fill_delta: float,
+) -> float | None:
+    """The frame's own execution price, when its quantity is this fill's delta.
+
+    Only an execution whose quantity equals the booked delta prices that delta
+    exactly; anything else (a missing or mismatched quantity, a non-finite or
+    non-positive price) returns None so the caller derives the price instead.
+    """
+    if execution_price is None or execution_quantity is None:
+        return None
+    if not (math.isfinite(execution_price) and execution_price > 0):
+        return None
+    if not (math.isfinite(execution_quantity) and abs(execution_quantity - fill_delta) <= 1e-9):
+        return None
+    return float(execution_price)
 
 
 def _emit_invalid_fill_alert(client_order_id: str, message: str) -> None:
@@ -454,6 +477,23 @@ class PortfolioStateRepository:
                        )
                        WHERE fill_delay_seconds IS NULL""",
                 )
+            # Whether the broker reported this fill's fee. A fill without one
+            # is stored with a 0.0 placeholder, so only this flag tells an
+            # unobserved fee from a free one. Legacy rows default to observed
+            # unless their execution-event journal recorded the fee as missing.
+            if "fee_observed" not in fill_columns:
+                self._add_column_with_backfill(
+                    "portfolio_fills",
+                    "fee_observed INTEGER NOT NULL DEFAULT 1",
+                    """UPDATE portfolio_fills
+                       SET fee_observed = 0
+                       WHERE EXISTS (
+                           SELECT 1 FROM portfolio_execution_events e
+                           WHERE e.client_order_id = portfolio_fills.client_order_id
+                             AND e.dedup_identity = portfolio_fills.activity_id
+                             AND e.fee_observed = 0
+                       )""",
+                )
             adjustment_columns = {
                 str(row[1])
                 for row in self.store.connection.execute("PRAGMA table_info(portfolio_ownership_adjustments)")
@@ -533,6 +573,8 @@ class PortfolioStateRepository:
                 ON portfolio_decisions(account_id, decision_timestamp);
             CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_session_id
                 ON portfolio_decisions(session_id);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_decisions_account_market_ts
+                ON portfolio_decisions(account_id, market, decision_timestamp);
             CREATE INDEX IF NOT EXISTS idx_portfolio_orders_decision_id
                 ON portfolio_orders(decision_id);
             CREATE INDEX IF NOT EXISTS idx_portfolio_fills_client_order_id
@@ -1289,7 +1331,7 @@ class PortfolioStateRepository:
             """SELECT adjustment_id, quantity, consumed_quantity, created_at
                FROM portfolio_ownership_adjustments
                WHERE account_id = ? AND symbol = ? AND market = ? AND kind = 'stale_ownership_clear'
-                 AND consumed_quantity < quantity
+                 AND quantity - consumed_quantity > 1e-9
                ORDER BY created_at""",
             (account_id, symbol, market.value),
         ).fetchall()
@@ -1300,6 +1342,10 @@ class PortfolioStateRepository:
                 continue
             capacity = float(quantity) - float(consumed)
             consume = min(capacity, remaining)
+            if capacity - consume <= 1e-9:
+                # Close the row outright: a float residue must not keep it
+                # open, or it stays in the ownership netting for good.
+                consume = capacity
             self.store.connection.execute(
                 """UPDATE portfolio_ownership_adjustments
                    SET consumed_quantity = consumed_quantity + ?
@@ -1371,6 +1417,8 @@ class PortfolioStateRepository:
         source: str = "other",
         received_at: datetime | None = None,
         fee_observed: bool | None = None,
+        execution_price: float | None = None,
+        execution_quantity: float | None = None,
     ) -> bool:
         # Fail closed on hostile broker facts BEFORE any write: a non-finite
         # cumulative wedges ownership at inf forever (a later legit update
@@ -1517,12 +1565,20 @@ class PortfolioStateRepository:
                 ),
             )
             if fill_delta > 0 and average_fill_price is not None:
-                fill_price = _execution_price(
-                    previous,
-                    float(row[7]) if row[7] is not None else None,
-                    cumulative_filled_quantity,
-                    average_fill_price,
-                    fill_delta,
+                # The frame's own execution price is exact; the derived price
+                # only rounds back from cumulative averages. Use it when it
+                # prices this delta, and fall back otherwise.
+                exact_price = _exact_execution_price(execution_price, execution_quantity, fill_delta)
+                fill_price = (
+                    exact_price
+                    if exact_price is not None
+                    else _execution_price(
+                        previous,
+                        float(row[7]) if row[7] is not None else None,
+                        cumulative_filled_quantity,
+                        average_fill_price,
+                        fill_delta,
+                    )
                 )
                 direction = 1.0 if side == "buy" else -1.0
                 slippage = (fill_price - reference) * fill_delta * direction
@@ -1546,8 +1602,9 @@ class PortfolioStateRepository:
                 self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
-                        fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        fee, realized_pnl, unrealized_pnl, slippage, fill_delay_seconds,
+                        fee_observed
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         activity_id,
                         client_order_id,
@@ -1559,6 +1616,9 @@ class PortfolioStateRepository:
                         unrealized_pnl,
                         slippage,
                         delay_seconds,
+                        # A missing fee is stored as a 0.0 placeholder, so the
+                        # flag is the only record that it was not observed.
+                        int(observed_fee),
                     ),
                 )
                 if side == "sell":
@@ -2157,6 +2217,22 @@ class PortfolioStateRepository:
         if unit_cost is not None and (not math.isfinite(unit_cost) or unit_cost <= 0):
             raise ValueError("Unit cost must be finite and positive")
         with self.store.lock:
+            # The dry run opens the database read-only and runs no migration,
+            # so a database that predates these columns cannot be netted.
+            # Refuse with the remedy instead of failing on a missing column.
+            adjustment_columns = {
+                str(row[1])
+                for row in self.store.connection.execute("PRAGMA table_info(portfolio_ownership_adjustments)")
+            }
+            if not {"sign", "unit_cost"} <= adjustment_columns:
+                return OwnershipRebasePlan(
+                    math.nan,
+                    broker_quantity,
+                    REFUSED_BOOKING,
+                    math.nan,
+                    "the ledger schema predates the ownership-adjustment columns; start the engine once so it "
+                    "migrates, then run this again",
+                )
             owned = self._net_quantities(account_id, market, allow_negative=True).get(symbol, 0.0)
             adjustment = broker_quantity - owned
 

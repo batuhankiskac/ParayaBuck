@@ -46,6 +46,9 @@ class Fill:
     quantity: float
     price: float
     fee: float
+    # False when the broker reported no fee for this fill. ``fee`` is then a
+    # 0.0 placeholder, which the ledger must not book as a free fill.
+    fee_observed: bool = True
 
 
 @dataclass(frozen=True)
@@ -95,8 +98,17 @@ def parse_instant(text: str) -> datetime:
 
 def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
     """Every bot equity fill of ``account_id``, oldest first (read-only query)."""
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(portfolio_fills)")}
+    if "fee_observed" not in columns:
+        # An unmigrated database cannot say which fees were observed, so no
+        # figure is produced until the engine has migrated it.
+        raise LedgerError(
+            "Veritabanında portfolio_fills.fee_observed sütunu yok; komisyon gözlem bilgisi olmadan "
+            "vergi hesabı üretilmez. Motoru bir kez başlatıp veritabanını güncelleyin."
+        )
     rows = connection.execute(
-        """SELECT f.activity_id, o.symbol, o.side, f.occurred_at, f.quantity, f.price, f.fee
+        """SELECT f.activity_id, o.symbol, o.side, f.occurred_at, f.quantity, f.price, f.fee,
+                  f.fee_observed
            FROM portfolio_fills f
            JOIN portfolio_orders o ON o.client_order_id = f.client_order_id
            JOIN portfolio_decisions d ON d.decision_id = o.decision_id
@@ -105,7 +117,7 @@ def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
         (account_id, Market.EQUITY.value),
     ).fetchall()
     fills: list[Fill] = []
-    for fill_id, symbol, side, occurred_at, quantity, price, fee in rows:
+    for fill_id, symbol, side, occurred_at, quantity, price, fee, fee_observed in rows:
         normalized = str(side).lower()
         if normalized not in {"buy", "sell"}:
             raise LedgerError(f"fill {fill_id} has unknown side {side!r}")
@@ -118,6 +130,7 @@ def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
                 quantity=float(quantity),
                 price=float(price),
                 fee=float(fee or 0.0),
+                fee_observed=bool(fee_observed),
             )
         )
     fills.sort(key=lambda fill: (fill.occurred_at, fill.fill_id))
@@ -153,6 +166,27 @@ def assert_no_ownership_adjustments(
             f"ownership adjustment(s) recorded for {', '.join(sorted(adjusted))} in account {account_id} "
             f"({sum(adjusted.values())} row(s)); the fill-based TL ledger does not model splits or rebases, "
             "so no figure is produced for those symbols. Reconcile the lots manually first."
+        )
+
+
+def assert_fees_observed(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> None:
+    """Fail closed when a reported disposal rests on a fill whose fee was not observed.
+
+    The fill book stores a missing fee as 0.0, and a fee-free cost or proceeds figure
+    would be wrong, not conservative. Only disposals that use such a fill are refused;
+    the other symbols and years keep their figures.
+    """
+    unobserved = {fill.fill_id for fill in fills if not fill.fee_observed}
+    if not unobserved:
+        return
+    affected = sorted(
+        {item.symbol for item in disposals if item.buy_fill_id in unobserved or item.sell_fill_id in unobserved}
+    )
+    if affected:
+        raise LedgerError(
+            f"{', '.join(affected)} için broker komisyonu gözlenmemiş dolum(lar) var; bu ücretler 0 sayılamaz, "
+            "bu semboller için vergi rakamı üretilmiyor. Komisyon verisi alınana kadar bekleyin veya "
+            "ilgili dolumları elle doğrulayın."
         )
 
 
@@ -251,12 +285,15 @@ def build_disposals(
     symbols. With ``year`` only that year's disposals are returned, and the guard
     covers only the symbols sold in that year.
     """
-    disposals = match_disposals(read_fills(connection, account_id), rates)
+    fills = read_fills(connection, account_id)
+    disposals = match_disposals(fills, rates)
     if year is None:
         assert_no_ownership_adjustments(connection, account_id)
+        assert_fees_observed(disposals, fills)
         return disposals
     selected = [item for item in disposals if item.disposed_on.year == year]
     assert_no_ownership_adjustments(connection, account_id, {item.symbol for item in selected})
+    assert_fees_observed(selected, fills)
     return selected
 
 
@@ -264,6 +301,7 @@ __all__ = [
     "Fill",
     "LotDisposal",
     "TURKEY_TIME",
+    "assert_fees_observed",
     "assert_no_ownership_adjustments",
     "build_disposals",
     "match_disposals",

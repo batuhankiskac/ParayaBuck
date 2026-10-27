@@ -31,7 +31,11 @@ from alpaca.trading.requests import GetOrdersRequest
 
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.alerting import emit_execution_alert
-from parayabuck.execution.alpaca_account import flat_broker_reconcile_scope, quantities_agree
+from parayabuck.execution.alpaca_account import (
+    bot_tradable_symbols,
+    flat_broker_reconcile_scope,
+    quantities_agree,
+)
 from parayabuck.execution.alpaca_models import TERMINAL_BROKER_ORDER_STATUSES
 from parayabuck.logger import get_logger
 from parayabuck.markets.symbols import canonical_symbol
@@ -390,23 +394,6 @@ class ReconciliationService:
         )
         return ordered
 
-    def _bot_tradable_symbols(self) -> frozenset[str] | None:
-        """Canonical symbols this bot may trade, or None when it cannot say.
-
-        The brokerage account is shared, so the bot's own tradable universe is
-        the boundary between its positions and someone else's. None (no
-        provider, or an unreadable one) is fail-closed: every unowned equity
-        position then stays drift, exactly as before.
-        """
-        provider = getattr(self._broker, "bot_tradable_symbols", None)
-        if provider is None:
-            return None
-        try:
-            return frozenset(canonical_symbol(str(symbol)) for symbol in provider() or ())
-        except Exception:
-            log.warning("Bot tradable symbols unavailable; equity positions stay fail-closed", exc_info=True)
-            return None
-
     def _cost_basis_drift(
         self,
         positions: Sequence[Any],
@@ -521,7 +508,7 @@ class ReconciliationService:
             else {}
         )
         broker_symbols = {canonical_symbol(p.symbol, p.market) for p in account.positions if not p.is_flat}
-        tradable_symbols = self._bot_tradable_symbols()
+        tradable_symbols = bot_tradable_symbols(self._broker)
         # Signed broker quantity: a short is never owned inventory, so it can
         # never MATCH a long portfolio quantity.
         broker_quantities: dict[str, float] = {}

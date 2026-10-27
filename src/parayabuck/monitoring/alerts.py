@@ -44,17 +44,6 @@ _suppressed_count = 0
 _delivered_counts: dict[str, int] = {}
 
 
-def configure_alerting(*, throttle_seconds: float | None = None) -> None:
-    """Set the repeat-suppression window (idempotent, never raises)."""
-    global _throttle_seconds
-    try:
-        if throttle_seconds is not None:
-            with _lock:
-                _throttle_seconds = max(0.0, float(throttle_seconds))
-    except Exception:  # pragma: no cover - defensive; never raise
-        log.exception("Alert configuration ignored")
-
-
 def _throttle_key(kind: str, fields: dict[str, object]) -> str:
     """Throttle per distinct actionable incident, not merely per kind.
 
@@ -187,7 +176,6 @@ def reset_for_tests() -> None:
 __all__ = [
     "ALERT_KINDS",
     "alert_stats",
-    "configure_alerting",
     "emit",
     "reset_for_tests",
 ]

@@ -378,15 +378,6 @@ class EmailAlertSink:
             except Exception:  # pragma: no cover - the worker must never die
                 log.exception("E-mail alert worker iteration failed")
 
-    def flush(self, timeout: float = 30.0) -> bool:
-        """Wait until the queue is drained (CLI/test helper)."""
-        deadline = time.monotonic() + timeout
-        while self._queue.unfinished_tasks:
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.01)
-        return True
-
     def close(self) -> None:
         self._closed = True
         try:

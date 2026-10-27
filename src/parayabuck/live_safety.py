@@ -33,6 +33,12 @@ def _check_approval_key(secret: str) -> None:
         raise ValueError("Operator approval HMAC key is the .env.example placeholder; set a real random key")
 
 
+def _unsigned_hmac(secret: str, unsigned: dict[str, object]) -> str:
+    _check_approval_key(secret)
+    payload = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+
 def _signatures_equal(left: str, right: str) -> bool:
     """Constant-time equality for any str: compare_digest rejects non-ASCII str."""
     return hmac.compare_digest(left.encode("utf-8", "surrogatepass"), right.encode("utf-8", "surrogatepass"))
@@ -282,9 +288,7 @@ class LiveOperatorApproval:
         }
 
     def calculated_signature(self, secret: str) -> str:
-        _check_approval_key(secret)
-        payload = json.dumps(self.unsigned_dict(), sort_keys=True, separators=(",", ":")).encode()
-        return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+        return _unsigned_hmac(secret, self.unsigned_dict())
 
     def signed(self, secret: str) -> LiveOperatorApproval:
         return replace(self, signature=self.calculated_signature(secret))
@@ -438,9 +442,7 @@ class StandingLiveAuthorization:
         }
 
     def calculated_signature(self, secret: str) -> str:
-        _check_approval_key(secret)
-        payload = json.dumps(self.unsigned_dict(), sort_keys=True, separators=(",", ":")).encode()
-        return hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+        return _unsigned_hmac(secret, self.unsigned_dict())
 
     def signed(self, secret: str) -> StandingLiveAuthorization:
         return replace(self, signature=self.calculated_signature(secret))

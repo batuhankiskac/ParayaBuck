@@ -84,7 +84,7 @@ def _clean_state() -> Any:
     _FakeSMTP.instances = []
     _FakeSMTP.fail_with = None
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     email_alerts.reset_for_tests()
     yield
     email_alerts.reset_for_tests()

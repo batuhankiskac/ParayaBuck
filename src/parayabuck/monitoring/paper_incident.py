@@ -561,8 +561,6 @@ def emit_incident_record(record: IncidentRecord) -> None:
             )
             if record.category == IncidentCategory.PENDING_ORDER_UNKNOWN:
                 kind = "ambiguous_order"
-        elif record.category in _DB_INTEGRITY_CATEGORIES:
-            kind = "reconciliation_failure"
         else:
             kind = "reconciliation_failure"
         # metrics: record per-category counter if known, plus generic

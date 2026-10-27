@@ -112,7 +112,7 @@ def test_alert_fields_are_redacted_on_log_and_journal(
     journaled: list[object] = []
     monkeypatch.setattr(journal_module, "emit_journal", lambda event: journaled.append(event))
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
 
     with caplog.at_level(logging.INFO, logger="parayabuck.monitoring.alerts"):
         alerts.emit("paper_incident", message="boom", category="X", api_key_hint="leaky-value")
@@ -131,7 +131,7 @@ def test_throttle_map_prunes_expired_keys(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(journal_module, "emit_journal", lambda event: True)
     monkeypatch.setattr(alerts, "_THROTTLE_KEYS_MAX", 3)
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts._throttle_seconds = 60.0
     now = time.monotonic()
     alerts._last_emitted_at.update({f"old-{index}": now - 3600.0 for index in range(5)})
     alerts._last_emitted_at["recent"] = now

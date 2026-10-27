@@ -52,7 +52,6 @@ def _bare_runtime(symbol: str = "AAA", *, minimum_history_bars: int = 10) -> Por
     runtime.symbols = (symbol,)
     runtime.history = {symbol: []}
     runtime.signal_verified_through_by_symbol = {}
-    runtime.signal_last_verified_at = None
     runtime.previous_timestamp = None
     return runtime
 
@@ -156,7 +155,6 @@ def test_adopt_authoritative_history_updates_verification_state() -> None:
     assert changed == 1
     assert [b.close for b in runtime.history["AAA"]] == [c / 4.0 for c in economic]
     assert runtime.signal_verified_through_by_symbol == {"AAA": dates[-1]}
-    assert runtime.signal_last_verified_at is not None
     # Second identical adoption changes nothing.
     assert runtime.adopt_authoritative_signal_history({"AAA": provider}, {"AAA": dates[-1]}) == 0
 
@@ -486,7 +484,6 @@ def _process_engine(provider: dict[str, list[Bar]], dates: list[datetime]):
         process_closed_bars=fake_process,
         history={"AAA": [_bar("AAA", d, 40.0) for d in dates[:-1]]},
         signal_verified_through_by_symbol={},
-        signal_last_verified_at=None,
         previous_timestamp=None,
     )
     # Verification adopts THROUGH the runtime: bind the real method.

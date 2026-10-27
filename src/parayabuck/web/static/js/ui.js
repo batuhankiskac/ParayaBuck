@@ -139,7 +139,7 @@
     const dlg = byId("pbDialog");
     if (!dlg || typeof dlg.showModal !== "function") {
       if (opts.input) return Promise.resolve(window.prompt(opts.message || "", "") || null);
-      return Promise.resolve(opts.alertOnly ? true : window.confirm(opts.message || ""));
+      return Promise.resolve(window.confirm(opts.message || ""));
     }
     setText("pbDialogTitle", opts.title || "");
     setText("pbDialogMessage", opts.message || "");
@@ -152,7 +152,7 @@
     const ok = byId("pbDialogOk");
     ok.textContent = opts.confirmLabel || "Tamam";
     ok.className = "btn " + (opts.danger ? "danger-solid" : "primary");
-    byId("pbDialogCancel").hidden = !!opts.alertOnly;
+    byId("pbDialogCancel").hidden = false;
     return new Promise(function (resolve) {
       const onClose = function () {
         dlg.removeEventListener("close", onClose);
@@ -168,8 +168,7 @@
   }
   const dialog = {
     confirm: function (opts) { return openDialog(Object.assign({}, opts)); },
-    prompt: function (opts) { return openDialog(Object.assign({}, opts, { input: true })); },
-    alert: function (opts) { return openDialog(Object.assign({}, opts, { alertOnly: true })); }
+    prompt: function (opts) { return openDialog(Object.assign({}, opts, { input: true })); }
   };
 
   // ---------- theme ----------

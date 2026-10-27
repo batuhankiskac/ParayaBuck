@@ -295,7 +295,11 @@ def test_event_redaction_reaches_nested_and_decoded_values() -> None:
     assert isinstance(ev.fields["delivery"], dict)
     assert ev.fields["delivery"]["webhook_token"] == "***REDACTED***"
 
-    decoded = OperationalEvent.from_dict({**ev.to_dict(), "fields": {"webhook_token": "cleartext", "phase": "sell"}})
+    decoded = create_event(
+        kind="data_provider_unavailable",
+        message="refresh failed",
+        fields={"webhook_token": "cleartext", "phase": "sell"},
+    )
     assert decoded.fields["webhook_token"] == "***REDACTED***"
     assert decoded.fields["phase"] == "sell"
 
@@ -357,7 +361,7 @@ def test_supplied_event_id_reaches_the_journal(monkeypatch: pytest.MonkeyPatch) 
     journaled: list[OperationalEvent] = []
     monkeypatch.setattr(journal_module, "emit_journal", lambda event: journaled.append(event))
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
 
     alerts.emit("paper_incident", message="boom", category="PROVIDER_UNAVAILABLE", event_id="fixed-id")
     alerts.reset_for_tests()

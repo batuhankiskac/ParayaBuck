@@ -222,8 +222,6 @@ def _emit_decision_summary_safe(
         # map no-trade reason if no orders
         if not planned and not no_trade_reason:
             no_trade_reason = "NO_TARGET_CHANGE"
-        elif planned is not None and len(planned) == 0 and not no_trade_reason:
-            no_trade_reason = "NO_TARGET_CHANGE"
         _observe.on_decision_summary(
             decision_id=decision_id,
             market=str(market) if market else None,
@@ -657,7 +655,6 @@ class PortfolioRuntime:
         # Newest New York session per symbol for which a FINAL provider bar
         # was adopted (partial provider bars are never adopted).
         self.provider_final_session_by_symbol: dict[str, date] = {}
-        self.signal_last_verified_at: datetime | None = None
         self.configuration_digest = configuration_digest(
             strategy,
             mode,
@@ -1257,7 +1254,6 @@ class PortfolioRuntime:
                 previous = self.signal_verified_through_by_symbol.get(symbol)
                 if previous is None or verified_through > previous:
                     self.signal_verified_through_by_symbol[symbol] = verified_through
-        self.signal_last_verified_at = datetime.now(UTC)
         return changed_symbols
 
     def _drawdown_liquidation_inputs(
@@ -1582,9 +1578,7 @@ class PortfolioRuntime:
         # contexts explicitly opt in via ``allow_static_universe=True`` on the
         # runtime or are synthetic non-PRODUCT strategies that retain
         # permissive behaviour; PAPER product execution never opts in.
-        if self.allow_static_universe:
-            require_product_universe(context, allow_static_context=True)
-        else:
+        if not self.allow_static_universe:
             is_product = self.strategy.name in PRODUCT_STRATEGY_NAMES
             if is_product:
                 require_product_universe(context)
@@ -2531,6 +2525,19 @@ class PortfolioRuntime:
             client_order_ids=",".join(stuck),
         )
 
+    def _complete_rebalance_without_buys(self, decision_id: str, risk: RiskOverlayDecision) -> PortfolioRuntimeResult:
+        self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
+        self._alert_completed_with_ambiguous_buys(decision_id)
+        _emit_rebalance_phase_safe(
+            decision_id,
+            REBALANCE_PHASE_BUY_READY,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+        )
+        return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+
     def _operator_alert_keys(self) -> set[tuple[str, str]]:
         keys = getattr(self, "_raised_operator_alerts", None)
         if keys is None:
@@ -2842,17 +2849,7 @@ class PortfolioRuntime:
         if not buy_orders and working_buy:
             return self._enter_buy_pending(decision_id, risk, (), ())
         if not buy_orders:
-            self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
-            self._alert_completed_with_ambiguous_buys(decision_id)
-            _emit_rebalance_phase_safe(
-                decision_id,
-                REBALANCE_PHASE_BUY_READY,
-                REBALANCE_PHASE_COMPLETE,
-                market=self._market_name(),
-                account_id=self.account_id,
-                session_id=self.session_id,
-            )
-            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+            return self._complete_rebalance_without_buys(decision_id, risk)
         admission = self._size_buys_to_safe_capacity(buy_orders)
         buy_orders = admission.orders
         account = admission.account
@@ -2879,17 +2876,7 @@ class PortfolioRuntime:
                 return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_waiting_for_slot")
             if working_buy:
                 return self._enter_buy_pending(decision_id, risk, (), ())
-            self.repository.update_rebalance_execution(decision_id, REBALANCE_PHASE_COMPLETE)
-            self._alert_completed_with_ambiguous_buys(decision_id)
-            _emit_rebalance_phase_safe(
-                decision_id,
-                REBALANCE_PHASE_BUY_READY,
-                REBALANCE_PHASE_COMPLETE,
-                market=self._market_name(),
-                account_id=self.account_id,
-                session_id=self.session_id,
-            )
-            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "rebalance_complete")
+            return self._complete_rebalance_without_buys(decision_id, risk)
         # The admission evidence references its order rows, which the direct
         # BUY path writes with the decision; the re-planned BUYs exist only
         # now. Each row is written just before its own submit (the

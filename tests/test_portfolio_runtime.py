@@ -2913,7 +2913,6 @@ class _CatchUpRecorder:
         self.symbols: tuple[str, ...] = ()
         self.strategy = SimpleNamespace(timeframe="1d", minimum_history_bars=1)
         self.signal_verified_through_by_symbol: dict = {}
-        self.signal_last_verified_at = None
         self.previous_timestamp = None
 
     def adopt_authoritative_signal_history(self, provider, watermarks) -> int:

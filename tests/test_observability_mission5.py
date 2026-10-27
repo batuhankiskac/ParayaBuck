@@ -54,11 +54,6 @@ def test_operational_event_serialization_and_correlation() -> None:
     assert d["incident_id"] == "inc1"
     assert d["market"] == "equity"
     assert d["fields"]["extra"] == 123
-    # round-trip
-    ev2 = OperationalEvent.from_dict(d)
-    assert ev2.event_id == ev.event_id
-    assert ev2.kind == ev.kind
-    assert ev2.occurred_at == ev.occurred_at
 
 
 def test_event_ids_deterministic_and_random() -> None:
@@ -715,7 +710,7 @@ def test_forensics_decision_reconstruction(tmp_path: Path) -> None:
 
 def test_alert_throttle_distinct_incidents() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts._throttle_seconds = 60.0
     # Two paper_incident with different incident_id should both be delivered (not throttled)
     alerts.emit("paper_incident", message="first", category="PROVIDER_UNAVAILABLE", incident_id="id1")
     alerts.emit("paper_incident", message="second", category="PROVIDER_UNAVAILABLE", incident_id="id2")
@@ -729,7 +724,7 @@ def test_alert_throttle_distinct_incidents() -> None:
 
     # Distinct provider incidents should not suppress each other
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=60.0)
+    alerts._throttle_seconds = 60.0
     alerts.emit("data_provider_unavailable", message="provider fail", incident_id="inc-1")
     alerts.emit("data_provider_unavailable", message="provider fail again", incident_id="inc-2")
     stats = alerts.alert_stats()
@@ -784,7 +779,7 @@ def test_snapshot_failure_does_not_crash(tmp_path: Path) -> None:
 
 def test_alert_failure_does_not_crash() -> None:
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0)
+    alerts._throttle_seconds = 0
     with patch("parayabuck.monitoring.journal.emit_journal", side_effect=Exception("journal down")) as emit:
         try:
             alerts.emit("runtime_started", message="x")

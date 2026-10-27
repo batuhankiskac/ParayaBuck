@@ -1294,8 +1294,6 @@ class PortfolioBacktestEngine:
                 # but still validate version if universe is present.
                 if context.universe is not None:
                     require_product_universe(context, allow_static_context=False)
-        else:
-            require_product_universe(context, allow_static_context=True)
         if not self.strategy.supports(context):
             return
         declared = getattr(self.strategy, "decision_symbols", None)

@@ -97,7 +97,7 @@ def _result(target: TargetPortfolio | None, decision_id: str | None = "d1") -> S
 def test_runtime_summary_is_logged_and_journaled_once(monkeypatch) -> None:
     journaled: list[object] = []
     monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: journaled.append(event))
-    alerts.configure_alerting(throttle_seconds=0)
+    alerts._throttle_seconds = 0
     _shell()._emit_equity_daily_summary(SimpleNamespace(market=Market.EQUITY), _result(_target()), _account())
     assert alerts.alert_stats()["delivered"] == {"daily_summary": 1}
     assert len(journaled) == 1
@@ -117,7 +117,7 @@ def test_runtime_summary_is_logged_and_journaled_once(monkeypatch) -> None:
     ],
 )
 def test_runtime_summary_skips_disabled_non_equity_and_non_decisions(monkeypatch, runtime, market, result) -> None:
-    alerts.configure_alerting(throttle_seconds=0)
+    alerts._throttle_seconds = 0
     runtime._emit_equity_daily_summary(SimpleNamespace(market=market), result, _account())
     assert alerts.alert_stats()["delivered"] == {}
 

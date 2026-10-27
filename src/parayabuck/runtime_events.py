@@ -30,11 +30,6 @@ class _Event:
 class _EventQueue:
     """Bounded queue with same-bar coalescing and a no-eviction overflow policy."""
 
-    def drain_for_test(self) -> tuple[_Event | None, ...]:
-        """Return the queued items without removing them (tests only)."""
-        with self._condition:
-            return tuple(self._items)
-
     def __init__(self, maxsize: int) -> None:
         self.maxsize = maxsize
         self._items: deque[_Event | None] = deque()

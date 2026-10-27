@@ -438,9 +438,6 @@ class EngineRuntime:
         self.secret_key = secret_key
         self.app_config = config
         self.config = config.engine
-        # Written by the account loop after each fully successful pass; the
-        # web watchdog pinger reads it (stale = the account loop is hung).
-        self.last_successful_account_iteration_at: datetime | None = None
         # Stamped after every completed account-loop pass, failed or not: the
         # watchdog detects a hung loop, while broker outages are handled by the
         # account-fetch breaker. ``_watchdog_started_at`` gives startup a grace.
@@ -925,7 +922,7 @@ class EngineRuntime:
             ttl = _SIGNAL_ADJUSTMENT_CHECK_SECONDS + max(300.0, heartbeat_ttl)
             return (now - worker.last_heartbeat).total_seconds() <= ttl
         if name in _MARKET_BY_STREAM_WORKER:
-            return self._stream_worker_delivering(_MARKET_BY_STREAM_WORKER[name], worker, now, heartbeat_ttl)
+            return self._stream_worker_delivering(worker, now, heartbeat_ttl)
         return (now - worker.last_heartbeat).total_seconds() <= heartbeat_ttl
 
     def _build_market_health(
@@ -947,7 +944,7 @@ class EngineRuntime:
             ready_symbol_count = len(symbols) - len(market_not_ready)
             ready = not enabled or not symbols or ready_symbol_count > 0
             stream_healthy = (
-                not enabled or not symbols or self._stream_worker_delivering(market, worker, now, heartbeat_ttl)
+                not enabled or not symbols or self._stream_worker_delivering(worker, now, heartbeat_ttl)
             )
             market_health[market.value] = {
                 "enabled": enabled,
@@ -1369,9 +1366,7 @@ class EngineRuntime:
         status = self.market_data_status()
         if not status.get("available"):
             return
-        degraded = bool(status.get("sip_fallback_active") or status.get("sip_quote_fallback_active")) or status.get(
-            "effective"
-        ) != status.get("configured")
+        degraded = bool(status.get("sip_fallback_active")) or status.get("effective") != status.get("configured")
         previous = getattr(self, "_market_data_degraded", None)
         self._market_data_degraded = degraded
         # The first observation is a baseline only when healthy: a downgrade
@@ -2363,7 +2358,6 @@ class EngineRuntime:
         try:
             while self._running:
                 worker.last_heartbeat = datetime.now(UTC)
-                iteration_ok = False
                 fetched = False
                 try:
                     _, _, fetch_generation = self._account_snapshot_cache_state()
@@ -2394,7 +2388,6 @@ class EngineRuntime:
                         )
                         self._persist_risk_state(account)
                         self._maybe_retry_rejected_exit_sells(account)
-                        iteration_ok = True
                 except OwnershipDriftError:
                     # Ownership drift is not a transient broker/API error: the
                     # broker holds fewer shares than the repository claims as
@@ -2433,8 +2426,6 @@ class EngineRuntime:
                     except Exception as exc:
                         worker.last_error = str(exc)
                         log.warning("Readiness refresh failed: %s", exc, exc_info=True)
-                if iteration_ok:
-                    self.last_successful_account_iteration_at = datetime.now(UTC)
                 # Read by the web watchdog gate (EngineManager.watchdog_healthy).
                 self.last_account_loop_pass_at = datetime.now(UTC)
                 self._stop_event.wait(self.config.account_poll_interval_seconds)
@@ -3636,14 +3627,13 @@ class EngineRuntime:
         for timeframe, bars in finalized.items():
             for bar in bars:
                 self._emit_finalized_bar(timeframe, bar)
-        self._arm_session_close_fallback(incomplete, session_close, now)
+        self._arm_session_close_fallback(incomplete, session_close)
         self._run_session_close_fallback(now)
 
     def _arm_session_close_fallback(
         self,
         incomplete: dict[str, datetime],
         session_close: datetime | None,
-        now: datetime,
     ) -> None:
         """Record a session whose stream-built daily bar was withheld.
 
@@ -4859,9 +4849,7 @@ class EngineRuntime:
           sorted symbols, same computed start/end window, same
           ``required_through`` and same timeframe/adjustment within a short
           TTL (45 s) reuse the last successful verified_through without
-          re-hitting Alpaca. This is measured via
-          ``provider_symbols_requested``/``provider_bars_returned``/
-          ``provider_calls`` and never weakens fail-closed (a new decision
+          re-hitting Alpaca. It never weakens fail-closed (a new decision
           timestamp or new symbol set invalidates the dedup key).
         """
         history_client = getattr(self, "_historical", None)
@@ -6165,11 +6153,10 @@ class EngineRuntime:
                 if worker is not None and worker.alive:
                     break
                 time.sleep(0.05)
-        return self._stream_worker_delivering(market, worker)
+        return self._stream_worker_delivering(worker)
 
     def _stream_worker_delivering(
         self,
-        market: Market,
         worker: WorkerHealth | None,
         now: datetime | None = None,
         heartbeat_ttl: float | None = None,

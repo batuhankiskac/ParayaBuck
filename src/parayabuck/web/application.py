@@ -13,31 +13,12 @@ from parayabuck.web.security import build_protect_middleware, install_ticket_log
 from parayabuck.web.state import WebState
 
 
-def _default_state() -> WebState:
-    from parayabuck.web.managers.backtest import BacktestManager
-    from parayabuck.web.managers.engine import EngineManager
-    from parayabuck.web.security import WebSocketTicketStore
-
-    engine_manager = EngineManager()
-    backtest_manager = BacktestManager(engine_state_provider=engine_manager.current_engine_state)
-
-    state = WebState(
-        engine_manager=engine_manager,
-        backtest_manager=backtest_manager,
-        ticket_store=WebSocketTicketStore(ttl_seconds=30.0),
-    )
-    state.bind()
-    return state
-
-
-def create_app(state: WebState | None = None) -> FastAPI:
+def create_app(state: WebState) -> FastAPI:
     """Create FastAPI app with all routers and middleware.
 
     The process-wide app lives in ``parayabuck.web.server``; importing this
     module builds nothing.
     """
-    if state is None:
-        state = _default_state()
     state.bind()
 
     lifespan = create_lifespan(lambda: state)

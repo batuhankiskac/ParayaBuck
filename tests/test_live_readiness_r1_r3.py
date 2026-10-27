@@ -33,7 +33,7 @@ _LIMITS = PortfolioRiskLimits(
 def _alerts(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr("parayabuck.monitoring.journal.emit_journal", lambda event: None)
     alerts.reset_for_tests()
-    alerts.configure_alerting(throttle_seconds=0.0)
+    alerts._throttle_seconds = 0.0
     yield
     alerts.reset_for_tests()
 

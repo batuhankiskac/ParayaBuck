@@ -23,7 +23,7 @@ from parayabuck.data import alpaca_stream
 from parayabuck.data.alpaca_stream import AlpacaBarStream, guard_sdk_cast, supervise_sdk_stream
 from parayabuck.execution import alpaca_updates
 from parayabuck.execution.alpaca_client import AlpacaClient, parse_broker_timestamp
-from parayabuck.execution.alpaca_models import DefiniteOrderRejection
+from parayabuck.execution.alpaca_models import AmbiguousOrderState, DefiniteOrderRejection
 from parayabuck.execution.alpaca_updates import UNDECODED_TRADE_EVENT, AlpacaTradingUpdateStream
 from parayabuck.execution.portfolio import PortfolioOrderRequest, PortfolioOrderSide
 from tests.helpers import make_broker
@@ -385,7 +385,9 @@ def test_filled_order_recovered_after_a_submit_error_is_booked(tmp_path: Path) -
     assert booked == [("cid-9", "b-9", 4.0, 50.0, filled_at, "cid-9:recovered:4.0", None)]
 
 
-def test_lookup_404_after_a_server_error_is_still_a_definite_non_submission(tmp_path: Path) -> None:
+def test_lookup_404_after_a_server_error_stays_ambiguous(tmp_path: Path) -> None:
+    """A 5xx is transient, not a refusal: the POST may have been accepted and
+    the lookup may lag, so a 404 after it does not prove a non-submission."""
     server_error = RuntimeError("500 internal server error")
     client = SimpleNamespace(
         submit_order=lambda _request: (_ for _ in ()).throw(server_error),
@@ -393,7 +395,7 @@ def test_lookup_404_after_a_server_error_is_still_a_definite_non_submission(tmp_
     )
     broker = make_broker(tmp_path, client=client)
 
-    with pytest.raises(DefiniteOrderRejection) as excinfo:
+    with pytest.raises(AmbiguousOrderState) as excinfo:
         broker._submit_with_recovery(SimpleNamespace(), "cid-10")
 
     assert excinfo.value.__cause__ is server_error

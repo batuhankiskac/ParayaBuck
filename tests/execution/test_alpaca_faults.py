@@ -123,8 +123,9 @@ def test_submit_is_ambiguous_when_the_recovery_lookup_also_fails(
 
 def test_submit_is_a_definite_rejection_when_the_lookup_proves_absence(broker: AlpacaBroker) -> None:
     """A 404 lookup proves the client order id was never accepted: the order was
-    not sent, so the caller gets the definite rejection (not the raw error)."""
-    submit_error = RuntimeError("submit rejected")
+    not sent, so the caller gets the definite rejection (not the raw error).
+    The submit must itself be a broker 4xx refusal for the proof to hold."""
+    submit_error = APIError("submit rejected", SimpleNamespace(response=SimpleNamespace(status_code=422)))
     fake = FakeTradingClient()
 
     def failing_submit(_request: Any) -> Any:

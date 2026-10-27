@@ -1149,9 +1149,12 @@ def floor_increment(value: float, increment: float) -> float:
     by AlpacaBroker submission/fill-verification paths and by the portfolio
     repository so all three can never disagree on a floored quantity.
     """
-    if not math.isfinite(value) or not math.isfinite(increment) or increment <= 0:
+    # A negative value would round toward zero (not down): refuse it rather
+    # than return a quantity that is larger than a floor of the input.
+    if not math.isfinite(value) or value < 0 or not math.isfinite(increment) or increment <= 0:
         raise ValueError(
-            f"floor_increment requires finite positive increment, got value={value!r} increment={increment!r}"
+            f"floor_increment requires a finite non-negative value and a finite positive increment, "
+            f"got value={value!r} increment={increment!r}"
         )
     raw = Decimal(str(value))
     step = Decimal(str(increment))

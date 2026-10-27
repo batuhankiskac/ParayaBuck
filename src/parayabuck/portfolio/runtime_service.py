@@ -320,6 +320,20 @@ def _sell_chain_position(client_order_id: str, root: str) -> tuple[int, int]:
     return (int(rest[len(RESIDUAL_SELL_SUFFIX) :]), retry)
 
 
+def _sell_leg_owed_quantity(rows: Sequence[dict[str, object]], root: str, tail: dict[str, object]) -> float:
+    """Unfilled quantity a SELL leg still owes: its base quantity less every fill on the leg.
+
+    Summed over the leg's rows (base, retries and residuals), so a fill on an
+    earlier row is never counted as owed again. Without the base row the tail's
+    own remainder is the only figure available.
+    """
+    base = next((row for row in rows if str(row["client_order_id"]) == root), None)
+    if base is None:
+        return float(str(tail["quantity"])) - float(str(tail.get("cumulative_filled_quantity") or 0.0))
+    filled = sum(float(str(row.get("cumulative_filled_quantity") or 0.0)) for row in rows)
+    return float(str(base["quantity"])) - filled
+
+
 def emit_exit_sell_rejected_safe(
     *,
     client_order_id: str,
@@ -2183,9 +2197,11 @@ class PortfolioRuntime:
 
         Read only from this decision's order rows, never from an account
         snapshot: a SELL that filled completely leaves no residual, so a stale
-        position cannot trigger a second SELL. The latest row of a leg is the
-        one that matters; it leaves a residual when it ended canceled, expired
-        or done for day with unfilled quantity, including a leg with nothing
+        position cannot trigger a second SELL. The latest row of a leg decides
+        whether it is judged: it leaves a residual when it ended canceled,
+        expired or done for day with unfilled quantity, or when a filled retry
+        left part of the base quantity unfilled. The owed quantity is the base
+        quantity less every fill on the leg, including a leg with nothing
         filled (a canceled DAY SELL at the close, or one that never reached the
         broker, still owes its exit). A leg with a rejected row that has no
         retry yet belongs to ``retry_rejected_exit_sells`` and is skipped.
@@ -2214,10 +2230,18 @@ class PortfolioRuntime:
             ):
                 continue
             tail = max(rows, key=lambda row: _sell_chain_position(str(row["client_order_id"]), root))
-            if str(tail["status"]) not in RESIDUAL_SELL_STATUSES:
+            # The owed quantity is judged over the whole leg, not the tail row
+            # alone: a retry sized below the rejected quantity that fills in full
+            # still leaves the shortfall owed, and the tail alone cannot see it.
+            # Only a filled retry is judged this way; a filled base or residual
+            # row is complete as before.
+            remaining = _sell_leg_owed_quantity(rows, root, tail)
+            tail_status = str(tail["status"])
+            filled_retry_tail = tail_status in {"filled", "fill"} and (
+                _sell_chain_position(str(tail["client_order_id"]), root)[1] == 1
+            )
+            if tail_status not in RESIDUAL_SELL_STATUSES and not filled_retry_tail:
                 continue
-            filled = float(str(tail.get("cumulative_filled_quantity") or 0.0))
-            remaining = float(str(tail["quantity"])) - filled
             if remaining <= 1e-12:
                 continue
             rounds = max(_sell_chain_position(str(row["client_order_id"]), root)[0] for row in rows)
@@ -2837,6 +2861,13 @@ class PortfolioRuntime:
         # broker first, as the pending phases do: left as is, the re-plan would
         # suppress its symbol and could complete the rebalance with the row
         # never resolved. An unresolved row waits for a later advance.
+        # The same holds for a SELL row (a re-plan that crashed mid-submit): the
+        # re-plan waits for it, so it must be resolved here too.
+        sells = self.repository.orders_for_decision(decision_id, side="sell")
+        if any(str(item["status"]) == "submitting" for item in sells):
+            resolved_sells = self._resolve_stuck_submission_rows(decision_id, sells, "sell")
+            if resolved_sells is None or any(str(item["status"]) == "submitting" for item in resolved_sells):
+                return None
         buys = self.repository.orders_for_decision(decision_id, side="buy")
         if any(str(item["status"]) == "submitting" for item in buys):
             resolved = self._resolve_stuck_submission_rows(decision_id, buys, "buy")
@@ -2941,6 +2972,20 @@ class PortfolioRuntime:
         planned_sells = {
             order.symbol: order.client_order_id for order in planned if order.side == PortfolioOrderSide.SELL
         }
+        in_flight_replans = self._replan_ids_in_flight(decision_id, planned)
+        if in_flight_replans:
+            # An earlier re-plan of the same order may already be at the broker
+            # (submitting or ambiguous): a fresh id now would send it twice. The
+            # whole plan waits, nothing is sent or closed, and a later advance
+            # re-plans once the earlier row has resolved.
+            log.warning(
+                "Re-plan held: an earlier re-plan of the same order is unresolved: market=%s decision=%s ids=%s",
+                self._market_name(),
+                decision_id,
+                ",".join(in_flight_replans),
+            )
+            self._alert_buy_side_held(decision_id, "replan_order_in_flight")
+            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "replan_order_in_flight")
         planned = self._replan_orders_with_fresh_ids(decision_id, planned)
         kept_sell_legs = {order.symbol for order in planned if order.side == PortfolioOrderSide.SELL}
         dropped_sell_legs: list[str] = []
@@ -3055,6 +3100,12 @@ class PortfolioRuntime:
                         order.client_order_id,
                         reason,
                     )
+                    if submitted:
+                        # A BUY of this batch already went out. Re-planning from a
+                        # snapshot that may not show its fill would send it again,
+                        # so the phase moves on: the held BUYs are not sent for
+                        # this decision and the sent ones are tracked to terminal.
+                        return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
                     return PortfolioRuntimeResult(decision_id, risk.target, risk, (), submitted, "submit_blocked")
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
@@ -3128,6 +3179,32 @@ class PortfolioRuntime:
                 order.quantity,
             )
         return PortfolioRuntimeResult(decision_id, risk.target, risk, valid, submitted, "replan_sell_submitted")
+
+    def _replan_ids_in_flight(
+        self,
+        decision_id: str,
+        orders: Sequence[PortfolioOrderRequest],
+    ) -> tuple[str, ...]:
+        """Planned ids whose earlier ``-replan`` row is still submitting or ambiguous.
+
+        Only an order whose planned id is terminal would be re-planned under a
+        fresh ``{id}-replan{n}`` id (see ``_replan_orders_with_fresh_ids``). When
+        an earlier ``-replan`` row of that order is not terminal, the broker may
+        already hold it, so a new id would send the same order twice. Such an
+        order is held until the earlier row resolves.
+        """
+        statuses = {
+            str(row["client_order_id"]): str(row["status"]) for row in self.repository.orders_for_decision(decision_id)
+        }
+        held: list[str] = []
+        for order in orders:
+            planned_id = order.client_order_id
+            if planned_id not in statuses or not is_terminal_order_status(statuses[planned_id]):
+                continue
+            family = (f"{planned_id}{REPLAN_ORDER_SUFFIX}{n}" for n in range(1, REPLAN_ORDER_MAX_ATTEMPTS + 1))
+            if any(candidate in statuses and not is_terminal_order_status(statuses[candidate]) for candidate in family):
+                held.append(planned_id)
+        return tuple(held)
 
     def _replan_orders_with_fresh_ids(
         self,

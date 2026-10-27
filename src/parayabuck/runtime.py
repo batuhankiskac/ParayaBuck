@@ -1131,23 +1131,41 @@ class EngineRuntime:
         """Cheap, lock-free check for a rejected SELL still owed its one retry.
 
         Mirrors the row filter of ``PortfolioRuntime.retry_rejected_exit_sells``
-        so the portfolio lock is taken only when that method has work to do.
-        A runtime without a repository (test doubles) keeps the locked path.
+        and its skip rules that need only the ledger (a symbol with an order
+        already open, or with another SELL of the same decision), so the
+        portfolio lock is taken only when that method has work to do. A row
+        skipped for one of these reasons is never retried, so it is not a
+        candidate. A runtime without a repository (test doubles) keeps the
+        locked path.
         """
         repository = getattr(portfolio_runtime, "repository", None)
         if repository is None:
             return True
-        decision_id = repository.latest_decision_id(portfolio_runtime.account_id, portfolio_runtime.market)
+        market = portfolio_runtime.market
+        decision_id = repository.latest_decision_id(portfolio_runtime.account_id, market)
         if decision_id is None:
             return False
-        for row in repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value):
+        sell_rows = repository.orders_for_decision(decision_id, side=PortfolioOrderSide.SELL.value)
+        open_symbols = {
+            canonical_symbol(order.symbol, order.market)
+            for order in repository.open_orders(portfolio_runtime.account_id)
+        }
+        for row in sell_rows:
             client_order_id = str(row["client_order_id"])
-            if (
+            if not (
                 str(row["status"]) == "rejected"
                 and not is_exit_sell_retry(client_order_id)
                 and not repository.has_order(exit_sell_retry_client_order_id(client_order_id))
             ):
-                return True
+                continue
+            if canonical_symbol(str(row["symbol"]), market) in open_symbols:
+                continue
+            if any(
+                str(other["symbol"]) == str(row["symbol"]) and str(other["client_order_id"]) != client_order_id
+                for other in sell_rows
+            ):
+                continue
+            return True
         return False
 
     _STANDING_CHECK_INTERVAL_SECONDS = 3600.0
@@ -5702,6 +5720,20 @@ class EngineRuntime:
                 # reconcile has just cleared.
                 with getattr(self, "_risk_state_lock", threading.Lock()):
                     self._clear_reconciliation_incidents()
+                # F2-6-1: a clean reconcile can book a fill or a cancel that no
+                # trade update advanced. Advance each market's rebalance now, so
+                # its residual SELL or deferred BUYs do not wait for the next
+                # trade update or closed bar. Only after a clean reconcile: the
+                # drift path returned above.
+                for market in dict.fromkeys(rt.market for rt in getattr(self, "_portfolio_runtimes", ())):
+                    try:
+                        self._advance_portfolio_rebalance(market)
+                    except Exception:
+                        log.warning(
+                            "Rebalance advance after a clean reconciliation failed: market=%s",
+                            market.value,
+                            exc_info=True,
+                        )
             except ReconciliationResultError as exc:
                 if _is_transient_network_error(exc):
                     # F14: a network failure inside the FILL-activity backfill

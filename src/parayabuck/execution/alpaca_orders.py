@@ -11,8 +11,9 @@ Responsibility:
   ``MarketOrderRequest``, ``client_order_id`` as recovery key.
 - ``_submit_with_recovery`` delegates to the broker facade, which owns the
   single recovery decision: on submit raise, try ``get_order_by_client_id``
-  → terminal with a fill recovered, terminal/404 definite rejection or
-  re-raise, working recover, lookup fail →
+  → terminal with a fill recovered, terminal or 404 definite rejection
+  (only when the submit error is a broker refusal) or re-raise, working
+  recover, lookup fail →
   :class:`AmbiguousOrderState` (no blind resubmit).
 """
 

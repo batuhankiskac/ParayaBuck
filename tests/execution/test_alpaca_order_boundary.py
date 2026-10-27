@@ -27,11 +27,17 @@ class _NotFound(Exception):
     status_code = 404
 
 
+class _Refused(Exception):
+    """A broker 422 refusal as the SDK models it."""
+
+    status_code = 422
+
+
 def test_portfolio_submit_404_lookup_reraises_the_submit_failure(tmp_path: Path) -> None:
     """The broker's 404 proves the client id never reached Alpaca: the submit
     is a definite non-submission, so the caller gets that rejection, not the
-    raw submit error or the lookup's 404."""
-    submit_error = ValueError("422 insufficient buying power")
+    raw submit error or the lookup's 404. The submit must itself be a refusal."""
+    submit_error = _Refused("422 insufficient buying power")
 
     def submit(_request: Any) -> Any:
         raise submit_error
@@ -78,7 +84,9 @@ def test_portfolio_submit_done_for_day_lookup_reraises_the_submit_failure(tmp_pa
         tmp_path,
         client=SimpleNamespace(
             submit_order=lambda _request: (_ for _ in ()).throw(submit_error),
-            get_order_by_client_id=lambda _cid: SimpleNamespace(id="b-1", status="done_for_day"),
+            get_order_by_client_id=lambda _cid: SimpleNamespace(
+                id="b-1", status="done_for_day", symbol="AAPL", side="buy", qty="1"
+            ),
         ),
     )
     broker.asset_trading_rules = lambda symbol, market: AssetTradingRules(  # type: ignore[method-assign]

@@ -217,6 +217,9 @@ class AlertingConfig:
             object.__setattr__(self, "email", EmailAlertConfig(**self.email))
         elif self.email is None:
             object.__setattr__(self, "email", EmailAlertConfig())
+        elif not isinstance(self.email, EmailAlertConfig):
+            # ``email: true`` must not silently disable delivery.
+            raise ValueError("alerting.email must be a mapping")
 
 
 @dataclass(frozen=True)
@@ -255,6 +258,22 @@ class BacktestConfig:
             raise ValueError("Unsupported backtest ranking metric")
 
 
+# Operator-safety ceilings (audit V6). Each one still admits the shipped
+# config/settings.yaml value; a value above it is almost certainly a typo or
+# a setting that silently disables the control it governs.
+_MAX_BAND_PCT = 0.2
+_MAX_MINIMUM_ORDER_NOTIONAL = 1000.0
+_MAX_DECEMBER_DEFERRAL_SESSIONS = 20
+_MAX_DAILY_LOSS_LIMIT_PCT = 0.5
+_MAX_DRAWDOWN_PCT = 0.9
+# The web watchdog gate (web/managers/engine.py, _WATCHDOG_ACCOUNT_LOOP_MAX_AGE_SECONDS)
+# allows 120 s per account-loop pass; the poll sleep is part of that gap, so
+# keep half of it free for the pass itself.
+_MAX_ACCOUNT_POLL_INTERVAL_SECONDS = 60.0
+_MAX_DECISION_RETRY_WINDOW_MINUTES = 60.0
+_MAX_VOL_TARGET_CONFIG = 0.5
+
+
 @dataclass(frozen=True)
 class DownsizeGainBand:
     """Gain-scaled downsize band (A1u, ``docs/research/gain_band_v3.md``).
@@ -278,8 +297,9 @@ class DownsizeGainBand:
             raise ValueError("execution.downsize_gain_band thresholds must be in (0, 1)")
         if any(left >= right for left, right in zip(self.thresholds, self.thresholds[1:], strict=False)):
             raise ValueError("execution.downsize_gain_band thresholds must be strictly increasing")
-        if any(not math.isfinite(value) or not 0 <= value < 1 for value in self.bands):
-            raise ValueError("execution.downsize_gain_band bands must be in [0, 1)")
+        # A percent typo (0.5 for 0.5 %) must not become a 50 % band.
+        if any(not math.isfinite(value) or not 0 <= value <= _MAX_BAND_PCT for value in self.bands):
+            raise ValueError(f"execution.downsize_gain_band bands must be in [0, {_MAX_BAND_PCT:g}]")
         if any(left > right for left, right in zip(self.bands, self.bands[1:], strict=False)):
             raise ValueError("execution.downsize_gain_band bands must be non-decreasing")
 
@@ -312,19 +332,32 @@ class ExecutionConfig:
     december_downsize_deferral_sessions: int = 10
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.rebalance_band_pct) or not 0 <= self.rebalance_band_pct < 1:
-            raise ValueError("execution.rebalance_band_pct must be in [0, 1)")
-        if not math.isfinite(self.minimum_order_notional) or self.minimum_order_notional < 0:
-            raise ValueError("execution.minimum_order_notional must be non-negative")
+        if not math.isfinite(self.rebalance_band_pct) or not 0 <= self.rebalance_band_pct <= _MAX_BAND_PCT:
+            raise ValueError(f"execution.rebalance_band_pct must be in [0, {_MAX_BAND_PCT:g}]")
+        if (
+            not math.isfinite(self.minimum_order_notional)
+            or not 0 <= self.minimum_order_notional <= _MAX_MINIMUM_ORDER_NOTIONAL
+        ):
+            raise ValueError(f"execution.minimum_order_notional must be in [0, {_MAX_MINIMUM_ORDER_NOTIONAL:g}]")
         schedule = self.downsize_gain_band
         if schedule is not None and not isinstance(schedule, DownsizeGainBand):
             raise ValueError("execution.downsize_gain_band must be a schedule or null")
+        # A gain-band tier replaces the constant band for downsizes, so a tier
+        # below rebalance_band_pct would let those downsizes fill at a smaller
+        # drift than the operator's base band allows.
+        if schedule is not None and any(band < self.rebalance_band_pct for band in schedule.bands):
+            raise ValueError("execution.downsize_gain_band bands must be at least rebalance_band_pct")
         if (
             isinstance(self.december_downsize_deferral_sessions, bool)
             or not isinstance(self.december_downsize_deferral_sessions, int)
             or self.december_downsize_deferral_sessions < 0
         ):
             raise ValueError("execution.december_downsize_deferral_sessions must be a non-negative integer")
+        # December has about 21 NYSE sessions; a larger window defers the whole month.
+        if self.december_downsize_deferral_sessions > _MAX_DECEMBER_DEFERRAL_SESSIONS:
+            raise ValueError(
+                f"execution.december_downsize_deferral_sessions must be at most {_MAX_DECEMBER_DEFERRAL_SESSIONS}"
+            )
 
 
 @dataclass(frozen=True)
@@ -388,6 +421,16 @@ class RiskLimits:
         # shipping a safety control that cannot fire.
         if self.daily_loss_limit_pct >= 1 or self.max_drawdown_pct >= 1:
             raise ValueError("risk.daily_loss_limit_pct and risk.max_drawdown_pct must be below 1")
+        # A 2x ETF needs a usable latch: above these ceilings the halt cannot
+        # trip before the account is nearly wiped out.
+        if self.daily_loss_limit_pct > _MAX_DAILY_LOSS_LIMIT_PCT:
+            raise ValueError(f"risk.daily_loss_limit_pct must be at most {_MAX_DAILY_LOSS_LIMIT_PCT:g}")
+        if self.max_drawdown_pct > _MAX_DRAWDOWN_PCT:
+            raise ValueError(f"risk.max_drawdown_pct must be at most {_MAX_DRAWDOWN_PCT:g}")
+        # A float such as 8.0 passes the comparisons below, then raises
+        # TypeError on every decision; reject it at load instead.
+        if isinstance(self.max_positions, bool) or not isinstance(self.max_positions, int):
+            raise ValueError("risk.max_positions must be an integer")
         if self.max_positions <= 0 or not math.isfinite(self.cash_buffer_pct) or not 0 <= self.cash_buffer_pct < 1:
             raise ValueError("Invalid risk limits")
 
@@ -422,6 +465,22 @@ class EngineConfig:
         # A retry cadence longer than the retry window never retries.
         if self.decision_retry_interval_seconds > self.decision_retry_window_minutes * 60:
             raise ValueError("engine.decision_retry_interval_seconds must not exceed decision_retry_window_minutes")
+        if self.decision_retry_window_minutes > _MAX_DECISION_RETRY_WINDOW_MINUTES:
+            raise ValueError(
+                f"engine.decision_retry_window_minutes must be at most {_MAX_DECISION_RETRY_WINDOW_MINUTES:g}"
+            )
+        # The account loop sleeps this long between passes; above the gate the
+        # web watchdog restarts the unit in a loop (and loses in-memory halts).
+        if self.account_poll_interval_seconds > _MAX_ACCOUNT_POLL_INTERVAL_SECONDS:
+            raise ValueError(
+                f"engine.account_poll_interval_seconds must be at most {_MAX_ACCOUNT_POLL_INTERVAL_SECONDS:g}"
+            )
+        # A snapshot can never be fresh enough for entries if it is older than
+        # the poll that refreshes it, so every entry would be blocked.
+        if self.maximum_account_age_for_entry_seconds < self.account_poll_interval_seconds:
+            raise ValueError(
+                "engine.maximum_account_age_for_entry_seconds must be at least account_poll_interval_seconds"
+            )
 
     @property
     def timing_capacity_values_invalid(self) -> bool:
@@ -784,6 +843,35 @@ class Config:
         if effective_alloc - max_gross > eps:
             raise ValueError(
                 f"Capital invariant violated: equity allocation {effective_alloc:.4f} > max_gross {max_gross:.4f}"
+            )
+        # The per-asset cap must admit the whole equity allocation; a smaller
+        # cap would shrink the allocation without any operator-visible error.
+        if effective_alloc - float(self.risk.max_position_pct) > eps:
+            raise ValueError(
+                f"risk.max_position_pct {float(self.risk.max_position_pct):.4f} is below equity "
+                f"maximum_allocation {effective_alloc:.4f}; the cap would silently shrink the allocation"
+            )
+        # SMA(0) is the buy-and-hold control, not a trend filter; a production
+        # config must not load it silently (the strategy itself accepts 0).
+        equity_parameters = self.strategy.equity.parameters
+        sma_bars = equity_parameters.get("sma_bars")
+        if (
+            self.strategy.equity.enabled
+            and isinstance(sma_bars, int)
+            and not isinstance(sma_bars, bool)
+            and sma_bars < 2
+        ):
+            raise ValueError("strategy.equity.parameters.sma_bars must be at least 2 (0 is buy-and-hold)")
+        vol_target = equity_parameters.get("vol_target")
+        if (
+            self.strategy.equity.enabled
+            and isinstance(vol_target, (int, float))
+            and not isinstance(vol_target, bool)
+            and vol_target > _MAX_VOL_TARGET_CONFIG
+        ):
+            raise ValueError(
+                f"strategy.equity.parameters.vol_target must be at most {_MAX_VOL_TARGET_CONFIG:g} "
+                "(higher targets leave the 2x hold near full weight, so volatility targeting is effectively off)"
             )
         # A retried session-close decision must still land before the intent
         # watchdog would call it missing, and must outlive the second-source

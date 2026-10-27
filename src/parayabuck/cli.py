@@ -314,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {"halt", "resume"}:
         return _run_halt(config, args)
     if args.command == "backup":
-        return _run_backup(config, args)
+        return _run_backup_with_email(config, args)
     market = Market(args.market)
     start = _date(args.start) if args.start else None
     end = _date(args.end, end_of_day=True) if args.end else None
@@ -508,6 +508,33 @@ def _emit_ops_alert(kind: str, message: str, **fields: Any) -> None:
         emit_alert(kind, message=message, **fields)
     except Exception:  # pragma: no cover - alerting must never mask the failure
         log.exception("Could not emit %s alert", kind)
+
+
+# Upper bound for the one-shot backup process to hand a queued backup_failed
+# e-mail to the SMTP server before it exits (one send is at most three
+# attempts of at most 60 s each, plus the retry backoff).
+_EMAIL_FLUSH_SECONDS = 60.0
+
+
+def _run_backup_with_email(config: Config, args: argparse.Namespace) -> int:
+    """Run the backup with the runtime's e-mail sink installed, so ``backup_failed`` is mailed.
+
+    The timer runs this command as a one-shot process. The sink delivers from a
+    daemon thread, so after the backup the queued mail gets a bounded time to
+    leave before the process exits.
+    """
+    from parayabuck.monitoring.email_alerts import configure_email_alerts, current_sink
+
+    configure_email_alerts(config.alerting.email, mode=config.runtime.mode.value)
+    try:
+        return _run_backup(config, args)
+    finally:
+        sink = current_sink()
+        if sink is not None:
+            sink.close()
+            worker = getattr(sink, "_worker", None)
+            if worker is not None:
+                worker.join(timeout=_EMAIL_FLUSH_SECONDS)
 
 
 def _run_backup(config: Config, args: argparse.Namespace) -> int:

@@ -412,9 +412,12 @@ a commit that is on `origin/main` and whose CI run is green:
 ```bash
 git fetch origin main
 git rev-parse origin/main                                  # the commit that ships
+git rev-parse main                                         # must print the same sha (git merge --ff-only origin/main first if not)
 gh run list --workflow=ci.yml --branch=main --limit=1 --json headSha,conclusion
 # headSha must be that commit and conclusion must be "success"; otherwise do not ship
-git bundle create /tmp/pb-update.bundle <deployed-sha>..origin/main
+# bundle the branch, not a range ending in origin/main: that bundle has no
+# refs/heads/main, so the VM's "main:refs/remotes/bundle/main" fetch fails
+git bundle create /tmp/pb-update.bundle <deployed-sha>..main
 git bundle verify /tmp/pb-update.bundle                    # must end with "is okay"
 shasum -a 256 /tmp/pb-update.bundle                        # record this checksum
 gcloud compute scp /tmp/pb-update.bundle <vm>:~/pb-update.bundle --zone <zone>
@@ -429,6 +432,10 @@ git bundle verify ~/pb-update.bundle                       # must end with "is o
 git fetch ~/pb-update.bundle main:refs/remotes/bundle/main
 git log --oneline HEAD..bundle/main               # review what ships
 git merge --ff-only bundle/main
+# when deploy/systemd/ changed in the range (git diff --name-only <deployed-sha>..HEAD -- deploy/systemd):
+# install each changed unit and run sudo systemctl daemon-reload. Before the backup
+# unit is re-copied, create /opt/parayabuck/.env.backup (see "Backup environment file"):
+# a backup unit without it fails its next timer run with no alert, and the off-host copy stops silently.
 .venv/bin/pip install -e . --no-deps              # when dependencies or entry points changed
 # when requirements.lock changed: the lock is a closed closure, so every
 # transitive dependency is pinned there — reinstall the whole file

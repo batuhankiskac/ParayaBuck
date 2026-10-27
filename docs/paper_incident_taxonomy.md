@@ -8,6 +8,11 @@ Every incident defines severity, halt, retry, recovery, operator action, telemet
 
 ## Taxonomy (12 categories, `monitoring/incident.py` `IncidentCategory`)
 
+This table is the closed set of 12. Other `category=` values that the code also
+emits on `paper_incident` alerts (for example `ownership_rebased` or `exit_sell_untradable`)
+are not defined here; their checks and actions are in `docs/operator_runbook.md`,
+"`paper_incident` categories".
+
 | # | Category | Severity | Trading Halts? | Auto-Retry | Recovery Condition | Operator Action | Telemetry Payload |
 |---|----------|----------|----------------|------------|--------------------|-----------------|-------------------|
 | 1 | **PROVIDER_UNAVAILABLE** (Alpaca 5xx/429/timeout) | `warning` → `critical` after 5 attempts | No global halt; entries gated if account/signal path | Exponential `2^(n-1)` ≤16s, `n≤5` streams; reconcile 60s next cycle; startup `TransientStartupError` | `broker.reconcile()` success + fresh account + `health.healthy` | `incident_id, timestamp, category, severity, account_id, provider, http_status, retry_attempt, error, duration_ms` |

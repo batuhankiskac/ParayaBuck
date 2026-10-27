@@ -104,8 +104,15 @@ fields give `reason` and `attempts`.
 
 - `credentials_missing` / `startup_rejected` — a startup guard refused the
   start (missing keys, tracked `.env` in git, live not armed, config error).
-  Fix the cause; do not bypass the guard. The refusals are deliberate: "Engine start refused: this machine is not designated as
-  the trading host" and "Engine start refused: operator halt is in force".
+  Fix the cause; do not bypass the guard.
+- `operator_halt` — the operator halt marker is in force ("Engine start refused: operator
+  halt is in force"). The engine stays down after a reboot until `parayabuck resume` (see
+  "Operator halt"). The auto-start path emits `runtime_start_failed` with `reason=operator_halt`.
+- Trading-host refusal ("Engine start refused: this machine is not designated as the trading
+  host") — this machine lacks the `PARAYABUCK_TRADING_HOST=1` drop-in
+  (`deploy/systemd/vm-dropin/trading-host.conf`). It is deliberate: only the designated VM
+  runs the engine. The auto-start path logs it as a warning and emits no alert; a manual start
+  shows the message in the console. Do not add the variable to a laptop or any other host.
 - `startup_error` — permanent startup error, e.g. Alpaca 401 after a key
   rotation, a SQLite error in `begin_session`, a corrupt peak sidecar, a
   catch-up exception. Fix it, then start the engine from the dashboard.
@@ -235,7 +242,7 @@ close + `signal_cross_check.sip_embargo_minutes` and decides on it.
 ## Ownership drift after a split or a foreign sell
 
 `circuit_breaker` (`ownership_drift` or `reconciliation_failed`), and
-the `reconciliation_anomalies` list of `/api/status` (not `ops status`) has a `split_rebase`,
+the `operations.reconciliation_anomalies` list of `/api/status` (not `ops status`; present only while the engine runtime exists) has a `split_rebase`,
 `foreign_sell_reduction` or `stale_ownership_clear` row. The repository's
 share count and the broker's disagree, so every decision — exits included — is
 blocked and dropped, and no reset can succeed until they match. A decision
@@ -259,9 +266,15 @@ Then compare `ops bundle` with the Alpaca dashboard:
 - Neither explains the numbers → adopt the broker's count explicitly:
 
 ```bash
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty>   # dry run
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty> --confirm
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty>   # dry run: prints "Owned now"
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty <broker qty> --confirm <owned qty>
 ```
+
+`--confirm` takes the owned quantity the dry run printed (`Owned now`); a bare
+`--confirm` is refused, and so is a write when the ledger has changed since the dry run.
+A share increase is refused unless `--broker-average-cost` (a split, proven by the
+broker's average entry price) or `--acquisition-unit-cost` (shares bought outside the bot)
+is given; see `docs/operations.md`, "Splits and foreign sells".
 
 Never edit `portfolio_ownership_adjustments`, never flatten the position and
 never delete the DB to "fix" drift. After a rebase, reconciliation is clean:
@@ -318,12 +331,16 @@ crashed worker), so no order of any side is submitted: a decision blocked at
 the close is re-queued for the retry window, and the dependent BUY phase of a
 two-phase rebalance stays at `buy_ready` until a verified reset submits it.
 Review `active_incidents.json` in the bundle and the broker account, then
-reset. Restarting does not clear it.
+reset. Restarting does not clear a persisted halt; the exceptions are listed under
+"Two kinds of row never come back after a restart" below. A `<worker>_restart_limit`
+reason is not operator-resettable at all (the reset answers "Safety lock is not
+operator-resettable"): the restart re-arms the worker, and a repeat failure halts again.
 
-If the reset reports stopped shared workers (for example `pb-decisions` after a drift
-halt), the dashboard refuses every reset until the service restarts. Restart with
-`sudo systemctl restart parayabuck` (the halt rows survive it), check `ops status`, then
-reset again.
+If the reset reports stopped shared workers (`pb-account` or `pb-trade-updates`),
+the dashboard refuses every reset until the service restarts. Restart with
+`sudo systemctl restart parayabuck` (the persisted halt rows survive it), check
+`ops status`, then reset again. A stopped `pb-decisions` loop is not a reason to
+restart: the reset respawns it.
 
 Two kinds of row never come back after a restart:
 
@@ -519,9 +536,10 @@ sudo systemctl start parayabuck                           # or the console start
 
 ## `paper_incident` categories
 
-Each `paper_incident` alert carries `category=`, one of the twelve categories in
-`docs/paper_incident_taxonomy.md`. Start with `parayabuck ops events --kind paper_incident`,
-which shows the account and the error text.
+Each `paper_incident` alert carries `category=`. The first twelve rows are the taxonomy
+categories in `docs/paper_incident_taxonomy.md`. The code also emits the other `category=`
+values in the second table; the taxonomy does not define them. Start with
+`parayabuck ops events --kind paper_incident`, which shows the account and the error text.
 
 | Category | Check first | Action |
 |---|---|---|
@@ -537,6 +555,32 @@ which shows the account and the error text.
 | `DUPLICATE_ORDER_RISK` | `ops timeline --order` for the repeated client id | Halt. Verify the order at the broker first; never resubmit. |
 | `CLOCK_OR_SESSION_MISMATCH` | host time against NTP, the log | Sync the clock. Restart the engine if the bars have gaps. |
 | `RESTART_RECOVERY_FAILED` | `safety_incidents` and `runtime_sessions` | Clear each listed reason by its own verified recovery, then reset. |
+
+Other `paper_incident` categories emitted by the code (not in the taxonomy):
+
+| Category | Meaning | Action |
+|---|---|---|
+| `ownership_rebased` | A split or a foreign sell was rebased automatically (audited adjustment row) | Informational: compare with the Alpaca position (`ops bundle`). |
+| `ownership_surplus_unconfirmed` | The broker holds more shares than the bot owns and no split or purchase explains it | After the Alpaca check, adopt the count with `ops rebase-ownership` plus `--broker-average-cost` (a split) or `--acquisition-unit-cost` (bought outside the bot), as in "Ownership drift after a split or a foreign sell". |
+| `lot_book_inconsistency` | The lot book does not match the owned quantity; the gain band falls back to the constant band | Repair the lot book as in "Ownership drift"; the fallback is safe meanwhile. |
+| `cost_basis_drift` | Reconciliation found a cost basis that differs from the broker's | Compare the lots with the broker's average entry price (`ops bundle`). Never edit the ledger by hand. |
+| `invalid_fill_facts` | A fill row failed validation and was not booked | Check the order at the broker (`ops timeline --order`); reconciliation settles it. |
+| `last_equity_missing` | The broker did not report `last_equity` and no baseline exists for today; entries are refused | Check Alpaca reachability. It clears when the broker reports `last_equity` again; no reset needed. |
+| `peak_sidecar_write_failed` | The drawdown peak file could not be written; the snapshot is kept | Check disk space and permissions in `data/runtime`. Retried on the next poll. |
+| `peak_bootstrap` | The drawdown baseline was started at current equity: no peak file and no persisted high-water | Expected on a new host. On a host that traded, find out why the peak file is missing before trusting the drawdown figure. |
+| `stream_auth_failed` | The market-data stream rejected authentication | Check the keys and the data entitlement. The stream retries. |
+| `undecoded_trade_update` | An Alpaca trade update could not be decoded and was dropped | Repeated events: check the SDK pin and `ops timeline`. Reconciliation re-reads the orders. |
+| `unrecognized_broker_order_status` | The broker reports a status the pinned SDK does not know; the order is left unchanged | Reconciliation reports it. Persistent: check the SDK pin. |
+| `unknown_order_canceled` | A portfolio order the broker never accepted was canceled | Informational: the local record is closed. |
+| `residual_sell_exhausted` | A residual SELL stayed unfilled after the round limit; deferred BUYs were discarded | Check the open SELL at the broker; the next decision re-plans. |
+| `rebalance_unrecoverable` | A blocked rebalance decision could not be restored; its deferred BUYs were discarded | Check `ops status` for the rebalance phase; the next decision re-plans. |
+| `stuck_deferred_buy` | A deferred BUY still awaits reconciliation | Reconciliation settles it. Never resubmit. |
+| `rebalance_completed_with_ambiguous_buy` | The rebalance finished while a deferred BUY awaits reconciliation | Check the BUY with `ops timeline --order`. Never resubmit. |
+| `submission_resolved_canceled` | The broker lookup resolved a submitting order as canceled; it was not re-sent | Informational. |
+| `stuck_submission_lookup` | A submitting order stayed unresolved after repeated lookups; escalated to reconciliation | Check the client id at the broker. Never resubmit. |
+| `replan_order_exhausted` | A re-planned order ran out of fresh client ids; it is not sent | Repeated: check the symbol's order history with `ops timeline`. |
+| `asset_untradable` | The broker refuses the trading rules of a symbol; it is left out of the plan | Check the symbol at Alpaca. |
+| `exit_sell_untradable` | A rejected exit SELL cannot be retried: the broker refuses the symbol's trading rules | Settle the position at the broker by hand; the engine cannot retry this SELL. |
 
 ## Other alerted reasons
 
@@ -569,14 +613,20 @@ A provider outage at warning level that did not halt the engine (formerly
 reachability (`parayabuck doctor` without `--offline`). Retries are automatic. If it lasts
 for hours, entries wait on the signal path: see `PROVIDER_UNAVAILABLE` above.
 
-### Market-scope restart-limit halt
+### Restart-limit halts (`<worker>_restart_limit`)
 
-A `circuit_breaker` for a worker that exceeded its restart limit (the `<worker>_restart_limit`
-reasons, for example `pb-decisions_restart_limit`). The market is halted until the cause is
-fixed. Read the worker's last errors (`sudo journalctl -u parayabuck --since "2 hours ago"`),
-fix the cause (usually stream connectivity or the data entitlement), then do a verified reset.
-Restart limits are not restored on restart (see "Circuit breaker active"), so a repeat failure
-halts again by itself. If the reset reports stopped shared workers, see "Circuit breaker active".
+A `circuit_breaker` for a worker that exceeded its restart limit. Read the worker's
+last errors first (`sudo journalctl -u parayabuck --since "2 hours ago"`) and fix the
+cause (usually stream connectivity or the data entitlement). Then follow the shape of the halt:
+
+- **Shared worker** (`pb-decisions_restart_limit`, `pb-account_restart_limit`,
+  `pb-trade-updates_restart_limit`): the whole engine is halted. The reset refuses these
+  reasons, and restart limits are not restored on restart (see "Circuit breaker active"):
+  restart the service, check `ops status`. A repeat failure halts again by itself.
+- **Market stream worker** (`pb-stocks_restart_limit`): entries are halted for that market
+  only. Only a verified reset clears it: the reset re-arms the stream worker and clears the
+  halt when the worker delivers fresh events. Do the reset from the dashboard, then check
+  `ops status`.
 
 ## Credentials from systemd (`LoadCredentialEncrypted=`)
 

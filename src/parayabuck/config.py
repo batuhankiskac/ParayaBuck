@@ -215,7 +215,8 @@ class AlertingConfig:
     def __post_init__(self) -> None:
         if isinstance(self.email, dict):
             object.__setattr__(self, "email", EmailAlertConfig(**self.email))
-        elif self.email is None:
+        elif self.email is None or self.email is False:
+            # ``email: false`` is the explicit off switch; ``email: true`` is still refused.
             object.__setattr__(self, "email", EmailAlertConfig())
         elif not isinstance(self.email, EmailAlertConfig):
             # ``email: true`` must not silently disable delivery.
@@ -346,7 +347,10 @@ class ExecutionConfig:
         # below rebalance_band_pct would let those downsizes fill at a smaller
         # drift than the operator's base band allows.
         if schedule is not None and any(band < self.rebalance_band_pct for band in schedule.bands):
-            raise ValueError("execution.downsize_gain_band bands must be at least rebalance_band_pct")
+            raise ValueError(
+                "execution.downsize_gain_band bands must be at least rebalance_band_pct: raise every band to match "
+                "rebalance_band_pct, or set execution.downsize_gain_band to null"
+            )
         if (
             isinstance(self.december_downsize_deferral_sessions, bool)
             or not isinstance(self.december_downsize_deferral_sessions, int)

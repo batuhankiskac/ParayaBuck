@@ -4,7 +4,9 @@ The PAPER account is shared between the GCP VM (the trading host) and every
 other machine that has the credentials. Two runners on one account corrupt
 the shared ledger (double-run incident, 2026-09-25), so starting the engine
 requires an explicit, machine-local opt-in that only the designated host
-sets (``Environment=PARAYABUCK_TRADING_HOST=1`` in the systemd unit).
+sets (``Environment=PARAYABUCK_TRADING_HOST=1`` in the systemd drop-in
+``deploy/systemd/vm-dropin/trading-host.conf``; the template unit does not
+set it).
 
 Everything else keeps working without it: the web console, settings, the
 backtest runner and all read-only operator views.
@@ -24,8 +26,9 @@ _TRUTHY = frozenset({"1", "true", "yes", "on"})
 TRADING_HOST_REFUSAL = (
     "Engine start refused: this machine is not designated as the trading host. "
     f"Only one runner may trade the shared Alpaca account; set {TRADING_HOST_ENV}=1 "
-    "in the service environment (deploy/systemd/parayabuck.service) on the designated "
-    "host. The web console and backtests work without it."
+    "in the service environment on the designated host, through the systemd drop-in "
+    "deploy/systemd/vm-dropin/trading-host.conf (not the template unit). "
+    "The web console and backtests work without it."
 )
 
 

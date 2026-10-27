@@ -96,7 +96,9 @@ risk:
   daily_loss_limit_pct: 0.20
   max_drawdown_pct: 0.75
   # Optional catastrophe brake, default off (docs/operator_runbook.md,
-  # "Drawdown liquidation"). Uncomment to enable: the runtime passes it on, and enabling it sells every managed target to zero at the threshold.
+  # "Drawdown liquidation"). To enable it, uncomment the block and set
+  # enabled: true. The runtime passes it on, and enabling it sells every
+  # managed target to zero at the threshold.
   # drawdown_liquidation:
   #   enabled: false
   #   threshold_pct: 0.45

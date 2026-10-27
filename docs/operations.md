@@ -236,10 +236,12 @@ web`) sends `READY=1` from its lifespan once the app is serving, whether or not
 the engine starts. A pinger thread sends `WATCHDOG=1` every 30 s while the
 engine gate allows it: no engine running (stopped, halted, never started), or
 a running engine whose account loop completed any pass within the last
-120 s. A pass that raises still counts, so an outage does not restart-loop the
-unit; what stops the pings is an account loop that stops passing altogether. A hung account loop therefore stops the pings and systemd restarts the
-unit after `WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the
-sends are no-ops.
+120 s and whose decision worker (`pb-decisions`) beat within the last 120 s (a
+missing worker record is not counted). A pass that raises still counts, so an
+outage does not restart-loop the unit. What stops the pings is an account loop
+that stops passing altogether, or a decision worker that stops beating. A hung
+loop therefore stops the pings and systemd restarts the unit after
+`WatchdogSec`. Outside systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
 
 A premarket probe runs once per NYSE session, 30 to 5 minutes before the open
 (broker clock, calendar and open-order parity against the local non-terminal
@@ -481,7 +483,7 @@ reads the day's net external cash from the broker's activities and subtracts
 it from the daily P&L, from the drawdown peak (which tracks equity net of that
 cash) and so from the figures the latches read. If the activities read fails,
 that poll is not adjusted and a warning is logged. The runtime copies the flag
-onto the broker when the engine is built (`execution/alpaca_account.py`). The default keeps
+onto the broker when the engine is built (`runtime.py`); `execution/alpaca_account.py` reads it. The default keeps
 today's figures; turning the flag on changes the risk inputs and is an owner
 decision.
 
@@ -539,6 +541,9 @@ sudo -u "$PB_USER" cp -a data/runtime/parayabuck.sqlite3* "$EVIDENCE"/   # keep 
 sudo -u "$PB_USER" .venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
 sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
 sudo -u "$PB_USER" rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
+# the peak sidecars of the same set go back with the snapshot (<stem> = the file name without .sqlite3)
+sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.paper_equity_peak.json data/runtime/paper_equity_peak.json
+sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.live_equity_peak.json data/runtime/live_equity_peak.json   # LIVE hosts only
 sudo systemctl start parayabuck
 sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```
@@ -546,6 +551,12 @@ sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:800
 Orders and fills after the backup are missing from the restored ledger. On
 start the engine reconciles it against the broker and halts on drift it cannot
 explain; review the broker account before any safety reset. Never delete the DB, safety incidents or the peak file to "reset".
+
+Install only the peak sidecars that the chosen set holds, and never copy a peak from
+another set: a peak from a different point in time misstates the drawdown. A set without
+a sidecar (a host that had not traded) leaves the peak to be re-bootstrapped
+(`peak_bootstrap`); check that alert before trusting the drawdown figure. Before the restore,
+copy the current `data/runtime/*_equity_peak.json` files into `$EVIDENCE` too.
 
 A restored file is in DELETE journal mode, because the backup normalizes to
 it. That is expected: `doctor --strict` reports `sqlite journal_mode` as INFO
@@ -651,18 +662,26 @@ actionable incident for the rest:
   Verify the real position on the Alpaca dashboard and adopt it explicitly:
 
 ```bash
-# 1. read the position off the broker, then dry run
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 \
+# 1. read the position off the broker (share count and average entry price), then dry run;
+#    the output prints "Owned now" (the owned quantity, here 98.8)
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 --broker-average-cost <broker avg price> \
   --note "QLD 2:1 split 2025-11-20 verified on the broker"
-# 2. apply it (refused while any portfolio order is still open)
-.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 \
-  --note "QLD 2:1 split 2025-11-20 verified on the broker" --confirm
+# 2. apply it with the owned quantity the dry run printed (refused while any portfolio order is still open,
+#    and refused if the ledger has changed since the dry run); a bare --confirm is refused
+.venv/bin/parayabuck ops rebase-ownership QLD --broker-qty 197.6 --broker-average-cost <broker avg price> \
+  --note "QLD 2:1 split 2025-11-20 verified on the broker" --confirm 98.8
 # 3. reconciliation is now clean: reset the safety lock from the dashboard
 ```
 
+`--broker-average-cost` is the proof of a split: without it a share increase is
+refused. For shares the bot did not buy (a foreign purchase on the shared key), give
+`--acquisition-unit-cost <unit cost>` instead; a decrease needs neither flag and is
+booked as a sale.
+
 Every rebase writes one row to `portfolio_ownership_adjustments` and appears
-as a reconciliation anomaly in the `reconciliation_anomalies` list of
-`curl -s http://127.0.0.1:8000/api/status` (`ops status` does not print it). If the
+as a reconciliation anomaly in the `operations.reconciliation_anomalies` list of
+`curl -s http://127.0.0.1:8000/api/status` (`ops status` does not print it; the key is
+present only while the engine runtime exists). If the
 dashboard does not show the anomaly rows, read them from `/api/status`. The command never flattens or cancels anything at the
 broker.
 

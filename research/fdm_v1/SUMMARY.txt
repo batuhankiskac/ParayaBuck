@@ -1,0 +1,13 @@
+fdm_v1  wall clock 20.4 s  main window 2000-03-09 .. 2026-09-29  last session loaded 2026-09-29 (sealed from 2026-10-30)
+DSR trials N = 377
+FDM in force, main window: mean 1.099, max 1.161
+K    pre base  15.76% cal  15.18% DD  46.7% turnover 5.46/yr sells(QLD) 10.2/yr | AT 2000  10.75 2010  15.24 2017  23.97 sells(all)/yr 10.7 DSR 0.708
+     exposure QLD mean all 0.673 vote-on 0.897 vote-off 0.027 | QQQ-equiv vote-on 1.793
+R2   pre base  15.48% cal  14.90% DD  46.8% turnover 5.99/yr sells(QLD) 29.6/yr | AT 2000  10.16 2010  14.71 2017  22.89 sells(all)/yr 30.7 DSR 0.698
+     exposure QLD mean all 0.673 vote-on 0.897 vote-off 0.027 | QQQ-equiv vote-on 1.793
+F1   pre base  12.14% cal  11.68% DD  33.2% turnover 3.90/yr sells(QLD) 34.3/yr | AT 2000   8.14 2010  12.03 2017  19.11 sells(all)/yr 34.5 DSR 0.612
+     exposure QLD mean all 0.545 vote-on 0.729 vote-off 0.012 | QQQ-equiv vote-on 1.458
+F2   pre base  15.96% cal  15.32% DD  54.2% turnover 4.90/yr sells(QLD) 15.8/yr | AT 2000  10.54 2010  16.75 2017  21.49 sells(all)/yr 16.3 DSR 0.684
+     exposure QLD mean all 0.723 vote-on 0.897 vote-off 0.222 | QQQ-equiv vote-on 1.793
+F1 gates: G1=fail G2=PASS G3=fail G4=fail G5=fail G6=fail G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=fail REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail
+F2 gates: G1=PASS G2=fail G3=fail G4=fail G5=PASS G6=PASS G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=PASS REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail

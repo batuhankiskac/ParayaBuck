@@ -48,7 +48,7 @@ from parayabuck.runtime import EngineRuntime
 from parayabuck.web.managers import engine as engine_module
 
 _REPO = Path(__file__).resolve().parents[1]
-_HMAC = "h" * 40
+_HMAC = "0123456789abcdef0123456789abcdef01234567"
 _HOST = "host-a"
 
 

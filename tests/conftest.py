@@ -666,20 +666,30 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     _orig_connect = _sqlite3.connect
 
+    # The production files a test may name (often through the default config)
+    # are redirected to this test's isolated copies before the guard runs. The
+    # redirect matches the resolved path, so a relative path, an absolute path
+    # and a sqlite ``file:`` URI (with its query, e.g. ``?mode=ro``) all land
+    # on the isolated file; any other production path is still refused.
+    redirects = {
+        (_REPO_ROOT / "data/runtime/parayabuck.sqlite3").resolve(): iso_db,
+        (_REPO_ROOT / "data/runtime/observability.sqlite3").resolve(): iso_journal,
+        (_REPO_ROOT / "data/cache/warmup.sqlite3").resolve(): iso_cache,
+    }
+
+    def _redirected(database):  # type: ignore[no-untyped-def]
+        target = redirects.get(protected_state_path(database))  # type: ignore[arg-type]
+        if target is None:
+            return database
+        text = os.fsdecode(os.fspath(database))
+        if text.startswith("file:"):
+            query = text.split("?", 1)[1] if "?" in text else ""
+            return f"file:{target}" + (f"?{query}" if query else "")
+        return str(target)
+
     def _patched_connect(database, *args, **kwargs):  # type: ignore[no-untyped-def]
+        database = _redirected(database)
         _check(database, writing=True)
-        db_str = str(database)
-        # Redirect production paths (including URI file:...) to isolated files
-        if "data/runtime/parayabuck.sqlite3" in db_str and str(tmp_path) not in db_str:
-            db_str = db_str.replace("data/runtime/parayabuck.sqlite3", str(iso_db))
-            # Handle WAL/SHM etc. are separate files, not via connect, but handle anyway
-            database = db_str
-        if "data/runtime/observability.sqlite3" in db_str and str(tmp_path) not in db_str:
-            db_str = db_str.replace("data/runtime/observability.sqlite3", str(iso_journal))
-            database = db_str
-        if "data/cache/warmup.sqlite3" in db_str and str(tmp_path) not in db_str:
-            db_str = db_str.replace("data/cache/warmup.sqlite3", str(iso_cache))
-            database = db_str
         return _orig_connect(database, *args, **kwargs)
 
     monkeypatch.setattr(_sqlite3, "connect", _patched_connect)
@@ -748,3 +758,17 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             f"Test opened production state paths {sorted(set(state_accesses))} — isolation failed; "
             "tests must use tmp_path, never the repo's data/runtime, data/cache or logs"
         )
+
+
+@pytest.fixture(autouse=True)
+def _fixed_trading_host_machine_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fixed machine id for the host identity, so LIVE tests never depend on the host's /etc/machine-id.
+
+    The identity fails closed without a readable machine id (S2-8-7); a
+    developer's Mac has none, so the tests bind one instead of reading the host.
+    """
+    import parayabuck.trading_host as trading_host_module
+
+    machine_id = tmp_path / "test-machine-id"
+    machine_id.write_text("0123456789abcdef0123456789abcdef\n", encoding="utf-8")
+    monkeypatch.setattr(trading_host_module, "_MACHINE_ID_PATHS", (str(machine_id),))

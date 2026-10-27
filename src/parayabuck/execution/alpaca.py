@@ -68,6 +68,8 @@ class AlpacaBroker:
         client: Any | None = None,
     ) -> None:
         self._client_adapter = AlpacaClient(api_key, secret_key, paper=paper, client=client)
+        # The endpoint this broker was built for; read by the web account poll (S2-5-4).
+        self.paper = bool(paper)
         self._risk_peak = RiskPeakService(
             paper=paper, ledger=ledger, peak_state_path=peak_state_path, runtime_state_dir=runtime_state_dir
         )

@@ -55,8 +55,22 @@ def test_path_text_unwraps_sqlite_file_uris(raw: str, expected: str) -> None:
     assert _path_text(raw) == expected
 
 
-def test_a_read_only_uri_to_the_live_ledger_is_refused_before_connect() -> None:
-    uri = f"file:{REPO_ROOT}/data/runtime/parayabuck.sqlite3?mode=ro"
+def test_a_uri_to_the_live_ledger_lands_on_the_isolated_copy(tmp_path: Path) -> None:
+    # The known production ledgers are redirected to this test's isolated file
+    # (resolved path match, URI query kept), so a default-config read never
+    # opens the operator's ledger; any other production path is refused.
+    uri = f"file:{REPO_ROOT}/data/runtime/parayabuck.sqlite3?mode=rwc"
+    assert protected_state_path(uri) is not None
+    connection = sqlite3.connect(uri, uri=True)
+    try:
+        (path,) = [row[2] for row in connection.execute("PRAGMA database_list") if row[1] == "main"]
+    finally:
+        connection.close()
+    assert Path(path).resolve().parent == tmp_path.resolve()
+
+
+def test_a_read_only_uri_to_another_production_file_is_refused_before_connect() -> None:
+    uri = f"file:{REPO_ROOT}/data/runtime/other_state.sqlite3?mode=ro"
     assert protected_state_path(uri) is not None
     with pytest.raises(ProductionStateAccessError):
         sqlite3.connect(uri, uri=True)
@@ -86,9 +100,9 @@ def test_an_os_level_write_open_of_production_state_is_refused() -> None:
     _expect_refused_access()
 
 
-def test_sqlite_connect_to_the_live_ledger_path_is_refused() -> None:
+def test_sqlite_connect_to_another_production_path_is_refused() -> None:
     with pytest.raises(ProductionStateAccessError):
-        sqlite3.connect(str(REPO_ROOT / "data" / "runtime" / "parayabuck.sqlite3"))
+        sqlite3.connect(str(REPO_ROOT / "data" / "runtime" / "other_state.sqlite3"))
     _expect_refused_access()
 
 

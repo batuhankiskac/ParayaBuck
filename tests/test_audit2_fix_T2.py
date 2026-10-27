@@ -30,12 +30,13 @@ from parayabuck.monitoring import alerts
 from parayabuck.portfolio import product_strategy_from
 from parayabuck.runtime import EngineRuntime
 from parayabuck.runtime_universe import ActiveProductUniverse
+from parayabuck.trading_host import trading_host_identity
 from parayabuck.web.managers import engine as engine_module
 from parayabuck.web.managers.engine import EngineManager, LiveArmToken
 from tests.helpers import web_client
 
 _REPO = Path(__file__).resolve().parents[1]
-_SECRET = "h" * 40  # operator-approval HMAC key and standing-authorization secret
+_SECRET = "0123456789abcdefghij" * 2  # operator-approval HMAC key and standing-authorization secret
 _HOST = "host-t2"
 _DIGEST = "digest"
 _CLEAN_RECONCILIATION = {category: [] for category in RECONCILIATION_CATEGORIES}
@@ -155,6 +156,7 @@ def _live_runtime_before_start(
         expires_at=now + timedelta(minutes=5),
         nonce="t2-nonce",
         config_fingerprint="fp-test",
+        trading_host=trading_host_identity(),
     ).signed(_SECRET)
     Path(config.live.operator_approval_path).write_text(json.dumps(approval.to_dict()), encoding="utf-8")
 

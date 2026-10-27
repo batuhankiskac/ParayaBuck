@@ -18,10 +18,11 @@ from parayabuck.execution.alpaca_reconciliation import (
 )
 from parayabuck.live_safety import LiveOperatorApproval, LiveStartupProof
 from parayabuck.runtime import EngineRuntime
+from parayabuck.trading_host import trading_host_identity
 from parayabuck.web.managers.backtest import BacktestManager
 
 _CLEAN_RECONCILIATION = {category: [] for category in RECONCILIATION_CATEGORIES}
-_TEST_APPROVAL_SECRET = "t" * 32
+_TEST_APPROVAL_SECRET = "0123456789abcdef0123456789abcdef"
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +80,7 @@ def _approval_file(path: Path, *, account_id: str = "acct", digests: tuple[str, 
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         nonce="test-nonce",
         config_fingerprint="fp-test",
+        trading_host=trading_host_identity(),
     ).signed(_TEST_APPROVAL_SECRET)
     path.write_text(json.dumps(approval.to_dict()), encoding="utf-8")
 
@@ -141,7 +143,7 @@ def test_live_startup_proof_rejects_invalid_hmac_before_broker_calls(tmp_path: P
         approved_at=datetime.now(UTC) - timedelta(seconds=1),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         nonce="test-nonce",
-    ).signed("u" * 32)
+    ).signed("fedcba9876543210fedcba9876543210")
     approval_path.write_text(json.dumps(approval.to_dict()), encoding="utf-8")
     monkeypatch.setenv("PB_TEST_OPERATOR_KEY", _TEST_APPROVAL_SECRET)
     broker = _BrokerSpy()

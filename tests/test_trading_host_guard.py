@@ -332,15 +332,31 @@ def _record_live_probes(monkeypatch: Any) -> None:
     monkeypatch.setattr(alpaca_module, "AlpacaBroker", _RecordingLiveBroker)
 
 
-def _prerequisites_with(live_enabled: bool, env_armed: bool, root: Path, monkeypatch: Any) -> dict[str, Any]:
-    _write_settings(
-        root,
-        {
-            "app": {"auto_start_engine": True},
-            "runtime": {"mode": "paper"},
-            "live": {"enabled": live_enabled, "hard_dollar_cap": 0, "operator_approval_path": ""},
-        },
-    )
+def _prerequisites_with(
+    live_enabled: bool,
+    env_armed: bool,
+    root: Path,
+    monkeypatch: Any,
+    *,
+    mode: str = "paper",
+    cap: float = 0,
+    approval_path: str = "",
+) -> dict[str, Any]:
+    if mode == "live":
+        # A LIVE configuration must parse in full, so start from the tracked settings.
+        raw = yaml.safe_load((Path(__file__).resolve().parents[1] / "config" / "settings.yaml").read_text("utf-8"))
+        raw["runtime"]["mode"] = "live"
+        raw["live"].update(enabled=live_enabled, hard_dollar_cap=cap, operator_approval_path=approval_path)
+        _write_settings(root, raw)
+    else:
+        _write_settings(
+            root,
+            {
+                "app": {"auto_start_engine": True},
+                "runtime": {"mode": mode},
+                "live": {"enabled": live_enabled, "hard_dollar_cap": cap, "operator_approval_path": approval_path},
+            },
+        )
     if env_armed:
         monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     else:
@@ -362,6 +378,15 @@ def test_live_enabled_without_env_still_never_probes(tmp_path: Path, monkeypatch
 
 
 def test_both_live_gates_open_probe_the_live_account(tmp_path: Path, monkeypatch: Any) -> None:
-    _prerequisites_with(live_enabled=True, env_armed=True, root=tmp_path, monkeypatch=monkeypatch)
+    # A valid LIVE config: the probe only runs when the config parses as LIVE (S2-5-5).
+    _prerequisites_with(
+        live_enabled=True,
+        env_armed=True,
+        root=tmp_path,
+        monkeypatch=monkeypatch,
+        mode="live",
+        cap=100,
+        approval_path=str(tmp_path / "approval.json"),
+    )
 
     assert len(_RecordingLiveBroker.constructed) == 1

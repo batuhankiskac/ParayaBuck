@@ -697,7 +697,8 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
 1. **Keys.** Add `ALPACA_LIVE_API_KEY` / `ALPACA_LIVE_SECRET_KEY` (from the
    LIVE dashboard, keys starting `AK`) to the env file. Keep the PAPER pair;
    the two pairs are never mixed. Also set `PARAYABUCK_ENABLE_LIVE=YES` and a
-   random `PARAYABUCK_OPERATOR_APPROVAL_KEY` (at least 32 characters).
+   random `PARAYABUCK_OPERATOR_APPROVAL_KEY` (at least 32 characters, at least
+   10 distinct characters; the variable name must end in `_KEY` or `_SECRET`).
 2. **E-mail.** Enable e-mail alerts (section above). LIVE preflight refuses
    to start without them.
 3. **Settings.** `runtime.mode: live`, `live.enabled: true`,
@@ -714,7 +715,9 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
      --expires-minutes 30`, then arm in the dashboard (mode chip, type
      `LIVE <suffix>`) and press Start. After **every** reboot, deploy or crash
      LIVE stays stopped and the owner gets a `live_rearm_required` e-mail;
-     positions stay open until the re-arm.
+     positions stay open until the re-arm. The approval file is bound to the
+     trading host it was written on and starts LIVE once: a second start needs
+     a new `authorize-live`. Run `authorize-live` on the trading host itself.
    - *Standing authorization (opt-in, at most 30 days).*
      `parayabuck authorize-live --operator <name> --standing-days 14` writes
      `live_standing_authorization.json` next to the approval file (HMAC-signed
@@ -727,7 +730,9 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
      `live_authorization_expiring` (one per day), and `live_authorization_expired`
      when it ends; a running engine keeps running, only the next restart needs
      a fresh authorization. Revoke it at any time with
-     `parayabuck authorize-live --revoke-standing`.
+     `parayabuck authorize-live --revoke-standing`. A revoked file stays refused
+     even when a backup copy of it is restored; only a new `--standing-days`
+     authorization is accepted again.
 6. **Every LIVE start** still checks, in the engine: `live.enabled`, the cap,
    `PARAYABUCK_ENABLE_LIVE=YES`, the trading-host flag, the approval or
    standing HMAC, the account id, and that the LIVE key is a live account

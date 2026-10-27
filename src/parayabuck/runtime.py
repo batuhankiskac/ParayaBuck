@@ -19,7 +19,14 @@ from typing import Any
 
 from requests.exceptions import RequestException
 
-from parayabuck.config import Config, IntentWatchdogConfig, RuntimeMode, SignalCrossCheckConfig
+from parayabuck.config import (
+    DEFAULT_LIVE_DECISION_DB_PATH,
+    Config,
+    IntentWatchdogConfig,
+    RuntimeMode,
+    SignalCrossCheckConfig,
+    same_ledger_path,
+)
 from parayabuck.core.models import (
     AccountSnapshot,
     Bar,
@@ -57,9 +64,11 @@ from parayabuck.live_safety import (
     LiveOperatorApproval,
     LiveStartupProof,
     StandingLiveAuthorization,
+    approval_nonce_consumed,
     config_fingerprint,
     operator_halt_active,
     operator_halt_marker_path,
+    record_approval_consumed,
     verify_account_environment,
 )
 from parayabuck.logger import get_logger
@@ -114,7 +123,7 @@ from parayabuck.runtime_events import _Event, _EventQueue
 from parayabuck.runtime_health import RuntimeHealth, WorkerHealth, _portfolio_catch_up_health
 from parayabuck.runtime_universe import ActiveProductUniverse
 from parayabuck.storage import SQLiteStore
-from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized, trading_host_identity
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils import is_crypto
 from parayabuck.utils.http import is_network_failure
@@ -511,7 +520,9 @@ class EngineRuntime:
         self.strategy_status = "configured:" + ",".join(
             f"{strategy.market.value}/{strategy.name}" for strategy, _symbols, _cap in strategy_specs
         )
-        self.paper = self.mode == RuntimeMode.PAPER
+        # Only LIVE uses the live endpoint. DISABLED builds the PAPER one (no
+        # call is made: start refuses first), so no mode reaches LIVE by accident (S2-5-1).
+        self.paper = self.mode != RuntimeMode.LIVE
         database_path = config.runtime.decision_db_path
         self.store = SQLiteStore(database_path)
         self.ledger = ExecutionLedger(database_path, store=self.store)
@@ -735,6 +746,7 @@ class EngineRuntime:
         self, expected_digests: tuple[str, ...]
     ) -> LiveOperatorApproval | StandingLiveAuthorization:
         proof = self._live_startup_proof
+        self._pending_approval_consumption = None
         if not isinstance(proof, LiveStartupProof) or not proof.is_fresh():
             raise RuntimeError("Live startup proof is missing or expired")
         expected_fingerprint = hashlib.sha256(f"{self.api_key}\0{self.secret_key}".encode()).hexdigest()
@@ -761,13 +773,20 @@ class EngineRuntime:
             )
         else:
             secret = os.getenv(self.app_config.live.operator_approval_key_env, "")
+            approval_path = self.app_config.live.operator_approval_path
             approval = LiveOperatorApproval.load_verified(
-                self.app_config.live.operator_approval_path,
+                approval_path,
                 secret=secret,
                 account_id=proof.account_id,
                 configuration_digests=expected_digests,
                 config_fingerprint=config_fingerprint(self.app_config),
+                trading_host=trading_host_identity(),
             )
+            if approval_nonce_consumed(approval_path, approval.nonce):
+                raise RuntimeError("Live operator approval was already used for a LIVE start; run authorize-live again")
+            # Recorded only once the start has committed (see _start_impl), so a
+            # transient failure before that point can be retried with the same approval.
+            self._pending_approval_consumption = (approval_path, approval.nonce)
         self.broker.account()
         account_id = str(getattr(self.broker, "account_id", "") or "")
         if not account_id or account_id != proof.account_id:
@@ -1526,6 +1545,14 @@ class EngineRuntime:
             # Defence in depth behind the web manager: no code path may start
             # an engine on a machine that is not the designated trading host.
             raise RuntimeError(TRADING_HOST_REFUSAL)
+        if (
+            self.mode == RuntimeMode.PAPER
+            and decision_db_path
+            and same_ledger_path(decision_db_path, DEFAULT_LIVE_DECISION_DB_PATH)
+        ):
+            # A PAPER engine on the LIVE ledger would write PAPER decisions into
+            # the LIVE books (S2-5-3). Refused before any state is touched.
+            raise RuntimeError("PAPER start refused: the decision database is the LIVE ledger")
         if self.mode == RuntimeMode.LIVE:
             if not self.app_config.live.enabled:
                 raise RuntimeError("Live runtime requires live.enabled=true")
@@ -1784,6 +1811,10 @@ class EngineRuntime:
             # Observability-only; fake ledgers in unit tests may omit it.
             self._runtime_session_id = record_session(self.broker.account_id or "unknown", self.mode.value)
         self._intent_watchdog_running_since = datetime.now(UTC)
+        pending_consumption = getattr(self, "_pending_approval_consumption", None)
+        if pending_consumption is not None:
+            record_approval_consumed(*pending_consumption)
+            self._pending_approval_consumption = None
         self._startup_committed = True
         try:
             if getattr(self, "_snapshot_writer", None) is not None:

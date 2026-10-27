@@ -664,6 +664,10 @@ record the decision in `docs/OPERATIONS_LOG.md` before acting.
   After the credential migration, a plain shell cannot see the LIVE keys: run the
   command as the transient unit in `docs/deployment.md` ("Manual commands after the
   migration") with the LIVE credential lines added.
+- VM after the approval-binding change: an approval file written before it has no host
+  binding and is refused. Run `parayabuck authorize-live --operator <name>` on the trading
+  host before the next manual LIVE start. A standing authorization keeps its signature
+  format and stays valid.
 
 ### `data_provider_unavailable`
 

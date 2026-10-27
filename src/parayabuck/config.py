@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -23,6 +24,10 @@ DEFAULT_DECISION_DB_PATH = "data/runtime/parayabuck.sqlite3"
 # PAPER default path is resolved to this separate directory, which also gives
 # LIVE its own runtime-state directory (risk peak sidecar) next to it.
 DEFAULT_LIVE_DECISION_DB_PATH = "data/runtime/live/parayabuck.sqlite3"
+DEFAULT_OPERATOR_APPROVAL_KEY_ENV = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
+# The approval HMAC key is read from the environment named here. Only a key-like
+# name is accepted, so PATH, HOME or a broker credential can never become the key.
+_APPROVAL_KEY_ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*_(KEY|SECRET)")
 
 
 class RuntimeMode(StrEnum):
@@ -55,8 +60,26 @@ class RuntimeConfig:
             object.__setattr__(self, "decision_db_path", DEFAULT_LIVE_DECISION_DB_PATH)
 
 
+def same_ledger_path(first: str | os.PathLike[str], second: str | os.PathLike[str]) -> bool:
+    """True when two ledger paths name one file, after relative paths and symlinks resolve.
+
+    A string compare let an absolute or symlinked path to the PAPER ledger pass
+    as "not the PAPER ledger" (S2-5-2).
+    """
+    return os.path.realpath(os.fspath(first)) == os.path.realpath(os.fspath(second))
+
+
+def approval_key_env_problem(name: str) -> str | None:
+    """Why a live.operator_approval_key_env name is refused, or None when it is acceptable."""
+    if not _APPROVAL_KEY_ENV_PATTERN.fullmatch(name):
+        return "must be an upper-case environment name ending in _KEY or _SECRET"
+    if name.startswith("ALPACA"):
+        return "must not name a broker credential"
+    return None
+
+
 def _same_path(first: str, second: str) -> bool:
-    return os.path.normpath(str(first)) == os.path.normpath(str(second))
+    return same_ledger_path(first, second)
 
 
 def _require_bool(value: object, name: str) -> None:
@@ -127,7 +150,7 @@ class LiveConfig:
     enabled: bool = False
     hard_dollar_cap: float = 0.0
     operator_approval_path: str = ""
-    operator_approval_key_env: str = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
+    operator_approval_key_env: str = DEFAULT_OPERATOR_APPROVAL_KEY_ENV
     # LIVE-only gap-safe BUY cap (docs/live_readiness_v1.md R1): a BUY batch
     # is capped so that notional x (1 + margin) fits inside
     # min(cash, non_marginable_buying_power) minus committed BUYs, so a
@@ -137,6 +160,12 @@ class LiveConfig:
 
     def __post_init__(self) -> None:
         _require_bool(self.enabled, "live.enabled")
+        if not str(self.operator_approval_key_env or "").strip():
+            # One resolution for every reader (start, doctor, checklist, redaction).
+            object.__setattr__(self, "operator_approval_key_env", DEFAULT_OPERATOR_APPROVAL_KEY_ENV)
+        problem = approval_key_env_problem(self.operator_approval_key_env)
+        if problem is not None:
+            raise ValueError(f"live.operator_approval_key_env {problem}")
         if not math.isfinite(self.hard_dollar_cap) or self.hard_dollar_cap < 0:
             raise ValueError("live.hard_dollar_cap must be non-negative")
         if not math.isfinite(self.buy_gap_margin_pct) or not 0 <= self.buy_gap_margin_pct < 0.5:
@@ -1303,6 +1332,7 @@ def load_config(config_path: str | None = None) -> Config:
 __all__ = [
     "DEFAULT_DECISION_DB_PATH",
     "DEFAULT_LIVE_DECISION_DB_PATH",
+    "DEFAULT_OPERATOR_APPROVAL_KEY_ENV",
     "AlertingConfig",
     "EmailAlertConfig",
     "AlpacaConfig",

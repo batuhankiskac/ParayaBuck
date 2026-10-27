@@ -35,7 +35,7 @@ from parayabuck.risk.state import RiskState
 from parayabuck.runtime import EngineRuntime
 
 _REPO = Path(__file__).resolve().parents[1]
-_KEY = "k" * 40
+_KEY = "0123456789abcdef0123456789abcdef01234567"
 _CLEAN_RECONCILIATION = {
     "MATCH": [],
     "LOCAL_STALE": [],

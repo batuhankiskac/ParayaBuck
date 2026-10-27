@@ -111,6 +111,10 @@ def load_standing_authorization(
     path = standing_authorization_file(config)
     if path is None:
         raise LiveApprovalError("live.operator_approval_path is not configured")
+    try:
+        host = trading_host_identity()
+    except ValueError as exc:
+        raise LiveApprovalError(str(exc)) from exc
     return StandingLiveAuthorization.load_verified(
         path,
         secret=_approval_secret(config, env),
@@ -119,7 +123,7 @@ def load_standing_authorization(
         ),
         config_fingerprint=config_fingerprint(config),
         hard_dollar_cap=float(config.live.hard_dollar_cap),
-        trading_host=trading_host_identity(),
+        trading_host=host,
         account_id=account_id,
         now=now,
     )
@@ -161,14 +165,15 @@ def standing_authorization_status(
     if signed.expires_at <= current:
         return StandingStatus(STANDING_EXPIRED, f"standing LIVE authorization expired at {signed.expires_at}", signed)
     try:
+        host = trading_host_identity()
         signed.verify_binding(
             configuration_digests=live_configuration_digests(config),
             config_fingerprint=config_fingerprint(config),
             hard_dollar_cap=float(config.live.hard_dollar_cap),
-            trading_host=trading_host_identity(),
+            trading_host=host,
             now=current,
         )
-    except LiveApprovalError as exc:
+    except (LiveApprovalError, ValueError) as exc:
         return StandingStatus(STANDING_INVALID, str(exc), signed)
     return StandingStatus(STANDING_VALID, f"valid until {signed.expires_at.isoformat()}", signed)
 

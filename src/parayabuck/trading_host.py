@@ -25,10 +25,10 @@ _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 TRADING_HOST_REFUSAL = (
     "Engine start refused: this machine is not designated as the trading host. "
-    f"Only one runner may trade the shared Alpaca account; set {TRADING_HOST_ENV}=1 "
-    "in the service environment on the designated host, through the systemd drop-in "
-    "deploy/systemd/vm-dropin/trading-host.conf (not the template unit). "
-    "The web console and backtests work without it."
+    "Only one runner may trade the shared Alpaca account. The systemd drop-in "
+    "deploy/systemd/vm-dropin/trading-host.conf sets "
+    f"{TRADING_HOST_ENV}=1 on the designated host; install that drop-in there only "
+    "(the template unit does not set it). The web console and backtests work without it."
 )
 
 
@@ -45,6 +45,9 @@ def trading_host_identity() -> str:
 
     A standing LIVE authorization is bound to it, so a copy of the signed
     file on another machine (a laptop, a rebuilt VM) never starts LIVE.
+    Without a readable machine id the hostname alone would be the identity,
+    and a copy on any host with the same name would match, so this raises
+    instead (S2-8-7).
     """
     machine_id = ""
     for candidate in _MACHINE_ID_PATHS:
@@ -54,6 +57,8 @@ def trading_host_identity() -> str:
             continue
         if machine_id:
             break
+    if not machine_id:
+        raise ValueError("host identity unavailable: no readable machine id (/etc/machine-id)")
     material = f"{socket.gethostname()}\0{machine_id}"
     return hashlib.sha256(material.encode()).hexdigest()[:32]
 

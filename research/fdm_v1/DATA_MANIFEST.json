@@ -1,0 +1,59 @@
+{
+  "files_sha256": {
+    "data/historical/after_tax_tr_v1_usdtry_cbrt.csv": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+    "data/historical/after_tax_tr_v1_yiufe.csv": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+    "data/historical/equity_entity_lifetimes_full_v5.csv": "fe998bf81af1f705accf461f13a6e71fdcedb2d68a317c5aa2152833b4cad4f0",
+    "data/historical/equity_pit_symmetric_2016_2026_v5.manifest.json": "d4266d7331e3bb1ea6303772ad14a4ea4ff01cd7845d507a138836216f81011f",
+    "data/historical/equity_survivorship_full_corporate_actions_v5.manifest.json": "514cc2f608b043da2608fe87753aa45cdfbe71a99ef970aee82c1d3361955953",
+    "data/historical/ewma_band_v1_gspc.csv": "9086d704640bf198f69884f9596591def1ff95980d7ad883951b26beb05048be",
+    "data/historical/ewma_band_v1_index.csv": "eb718713e87c9b6b82fd796e978d1011e246aca2ac47b028cfb26f8788fd305c",
+    "data/historical/ewma_band_v1_tb3ms.csv": "8c7e5034550186eb88e9360801dd22fc6e1818c9000a641f2b7217baebc10dcf",
+    "data/historical/range_vol_v1_dia.csv": "1300f2a61255d5699a349794179f09ead15703e2813025e6b64a2df16d91b14e",
+    "data/historical/range_vol_v1_iwm.csv": "c6ff89f0fb18506a9869de2d92b609c37815cc8fe634d064bb29218638573580",
+    "data/historical/range_vol_v1_spy.csv": "80c8bee68dcd3e1a8ee5fb3cf6828afc6cdc018aaf7b7395dbdac7b22e0ea0a4",
+    "data/historical/range_vol_v2_eem.csv": "2a7d0a7f3cd9c2e3c70abb3e366de7589141b5d1f82dd1c382f5fe2cba36aa99",
+    "data/historical/range_vol_v2_efa.csv": "61f525b17d70aa947aba6e6e1033cc2f626b815e7d8a9c05663ad1dd64bd345d",
+    "data/historical/range_vol_v2_ewa.csv": "09b6942f6660cc90306d5dc4cca54c6fd6a67e783517b6b9cb48f07094f49187",
+    "data/historical/range_vol_v2_ewc.csv": "51321cb9cc1f45f59023ec63d055535f4f2e2af4b5ed0bbe1b1e6dffa3e6518e",
+    "data/historical/range_vol_v2_ewg.csv": "79ebfa1f9df848ae208f983ebcf41f0a71b9acf5decf6a3983886ebf3a4710f5",
+    "data/historical/range_vol_v2_ewh.csv": "d1e7a96c6b72d0a041ea362d42b9159bc42da7993d13f5947e6b5ae5972b3aee",
+    "data/historical/range_vol_v2_ewj.csv": "846ef8ec8b7206498f668f6e7df5d4d1a75afb61b4bf5059b25c279f704c4457",
+    "data/historical/range_vol_v2_ewl.csv": "344b8a554ad668e88df543ab0c8e8ed5c5ff350b756e2ba9813f3fd992d69780",
+    "data/historical/range_vol_v2_ews.csv": "92ad902cba58e1f3d4cffcb02fa6ead636b468437b014a60e7cb82611f75a12e",
+    "data/historical/range_vol_v2_ewu.csv": "8f0d1914103a55f47329264d2aecc5845f76791b0aa37cc1c7bd1d4b1529e9f8",
+    "data/historical/range_vol_v2_xlb.csv": "687e99eaaad489c85847fdfc84d8136545ab929b50e0f784eaf186ca8568a59a",
+    "data/historical/range_vol_v2_xle.csv": "7c06aac6ddbf7b8fef6dc1ba5d4022e1c22bf1f6f1e7a8685730f9b0542e17f1",
+    "data/historical/range_vol_v2_xlf.csv": "f6c34092978d4d1da1fc0ee96a395019c0d8fcb893694faf584d1ddf9367182e",
+    "data/historical/range_vol_v2_xli.csv": "c9039b8828807c489e1d64381e53f48a5dca5d0e77775cae515f30264508a7b8",
+    "data/historical/range_vol_v2_xlk.csv": "0916e3134092de2ca9049c9b317e1170980057ff8b0a5159b76e24fb6424fa61",
+    "data/historical/range_vol_v2_xlp.csv": "5a08680540fc09205024f5ebb997c24ffdb98d967a0aed10c616b2144e2d0670",
+    "data/historical/range_vol_v2_xlu.csv": "614e80d03bcbfd99af27a87981a3cb463d72654ce22f0c0bdb07052c8bea8421",
+    "data/historical/range_vol_v2_xlv.csv": "02e5df03723d01930af4ae348409d88cc7fbaf9513d7049e628777399e5533f7",
+    "data/historical/range_vol_v2_xly.csv": "abfd815334cae8cbeb25329e16041d994289eb5804103a8d7ef1930ee55b0ba6",
+    "data/historical/stress_robustness_v1_daily.csv": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+    "data/historical/stress_robustness_v1_dtb3.csv": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c"
+  },
+  "new_downloads": [],
+  "origin_manifests": [
+    "research/carver_forecast_v1/DATA_MANIFEST.json",
+    "research/gates_v2/DATA_MANIFEST.json",
+    "research/band_h2_combo_v1/DATA_MANIFEST.json",
+    "research/fast_engine/README.md"
+  ],
+  "restored_from": {
+    "archive/research/carver-forecast-v1-2026-10": [
+      "research/fast_engine",
+      "research/gates_v2",
+      "research/gates_v1 (stats, provenance, inputs)",
+      "research/band_h2_combo_v1",
+      "research/trend_robustness_v2",
+      "research/carver_forecast_v1 (screen imported for the C3 parity check and rule forecasts only)",
+      "data/historical (all files)"
+    ]
+  },
+  "sealed_window": {
+    "doc": "docs/research/sealed_window_v1.md (commit 4c40d114 on main)",
+    "sealed_from": "2026-10-30"
+  },
+  "study": "fdm_v1"
+}

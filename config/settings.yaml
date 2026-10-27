@@ -12,6 +12,7 @@ app:
 runtime:
   mode: paper
   decision_db_path: data/runtime/parayabuck.sqlite3
+  # stale_account_sell_only: false   # true: a stale account allows sell-only decisions (buys held)
 alpaca:
   data_delayed: false
   # Live Basic streaming: IEX exchange prints only (NOT the consolidated

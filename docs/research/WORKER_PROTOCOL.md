@@ -91,6 +91,13 @@ Read docs/research/INDEX.md for everything already tested — don't repeat it.
 3. Gates for a candidate: pre-tax G1–G8 vs K (as ewma_band_v1 defines them), G9 turnover ≤ 2× K,
    AND after tax: beats K at $100k in all three windows AND clean bootstrap B1-recent and B2
    median Δ ≥ 0 with share > 0 ≥ 55%. If a window/OOS is not usable, pre-register the reduced gate.
+   Also report, for every non-control arm (tooling in tags `archive/research/gates-v1-2026-10`
+   and `archive/research/gates-v2-2026-10`): the DSR from `research/gates_v1/stats.py` with
+   N = registry count + your arms; the pre/post-2020 after-tax gate (Δ vs K > 0 on both
+   2000-03-09→2019-12-31 and 2020-01-01→end); PBO via `research/gates_v1/pbo.py` when the study
+   is a grid of more than 4 arms; and the provenance stamp from `research/gates_v1/provenance.py`
+   in RESULTS.json.
+   Sealed window (docs/research/sealed_window_v1.md): never read data dated after 2026-10-30.
 4. Run, write RESULTS.json and SUMMARY.txt, run twice and confirm byte-identical RESULTS.json, write
    `docs/research/<NAME>.md` (verdict first, method, tables, gates) and commit. Do NOT edit
    docs/research/INDEX.md.

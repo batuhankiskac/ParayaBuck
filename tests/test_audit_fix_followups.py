@@ -62,3 +62,20 @@ def test_advance_submit_gate_holds_every_order_when_stopping_or_tripped() -> Non
     sell = SimpleNamespace(side=PortfolioOrderSide.SELL)
     assert _gate_runtime(running=False)._advance_submit_block_reason(Market.EQUITY, sell) == "engine_not_running"
     assert _gate_runtime(breaker="x")._advance_submit_block_reason(Market.EQUITY, sell) == "circuit_breaker"
+
+
+def test_locked_pin_check_reads_a_hashed_export(tmp_path) -> None:
+    import importlib.metadata
+
+    from parayabuck.cli import _locked_pin_mismatches
+
+    installed = importlib.metadata.version("pyyaml")
+    lock = tmp_path / "requirements.lock"
+    lock.write_text(
+        f"pyyaml=={installed} \\\n"
+        "    --hash=sha256:00\n"
+        f"pyyaml=={installed} ; python_version >= '3.11' \\\n"
+        "    --hash=sha256:11\n",
+        encoding="utf-8",
+    )
+    assert _locked_pin_mismatches(lock) == (2, [])

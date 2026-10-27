@@ -679,6 +679,9 @@ def _locked_pin_mismatches(lock_path: Path) -> tuple[int, list[str]]:
         if not line or line.startswith("-") or "==" not in line:
             continue
         name, wanted = (part.strip() for part in line.split("==", 1))
+        # A hashed export continues the pin line with " \" and may add an
+        # environment marker ("; python_version ..."): keep the version only.
+        wanted = wanted.rstrip("\\").split(";", 1)[0].strip().split()[0] if wanted.rstrip("\\").strip() else ""
         checked += 1
         try:
             installed = importlib.metadata.version(name)

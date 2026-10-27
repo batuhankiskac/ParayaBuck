@@ -125,7 +125,8 @@ def test_dashboard_overview_returns_all_panels(tmp_path: Path, monkeypatch: pyte
         "drawdown",
     ):
         assert field in overview["account"], field
-    assert overview["account"]["total_pnl"] == 300.0
+    # D2-9-6: the total is today's change (daily_pnl), not realized plus cost-basis unrealized.
+    assert overview["account"]["total_pnl"] == -120.5
 
 
 # ---------------------------------------------------------------------------

@@ -193,6 +193,17 @@ class AlpacaBroker:
         Points before the account was funded (zero equity) and non-finite
         values are dropped so the series starts at the first real balance.
         """
+        points, _base_value = self.portfolio_history_with_base(period, timeframe)
+        return points
+
+    def portfolio_history_with_base(
+        self, period: str, timeframe: str
+    ) -> tuple[list[tuple[datetime, float]], float | None]:
+        """Same series as :meth:`portfolio_history` plus the broker's profit/loss basis.
+
+        ``base_value`` is Alpaca's ``base_value`` (for ``1D`` the prior close
+        equity), or ``None`` when it is absent or not a positive finite number.
+        """
         from alpaca.trading.requests import GetPortfolioHistoryRequest
 
         raw: Any = self._client.get_portfolio_history(GetPortfolioHistoryRequest(period=period, timeframe=timeframe))
@@ -206,7 +217,16 @@ class AlpacaBroker:
             if not math.isfinite(equity) or equity <= 0:
                 continue
             points.append((datetime.fromtimestamp(int(stamp), UTC), equity))
-        return points
+        base_raw = getattr(raw, "base_value", None)
+        base_value: float | None = None
+        if base_raw is not None:
+            try:
+                candidate = float(base_raw)
+            except (TypeError, ValueError):
+                candidate = math.nan
+            if math.isfinite(candidate) and candidate > 0:
+                base_value = candidate
+        return points, base_value
 
     def snapshot_if_fresh(self, max_age_seconds: float) -> AccountSnapshot | None:
         """Return the last fetched account snapshot if it is at most

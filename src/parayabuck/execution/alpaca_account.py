@@ -187,6 +187,10 @@ def flat_broker_reconcile_scope() -> Iterator[None]:
         _FLAT_BROKER_ALLOWED.reset(token)
 
 
+class AccountNotActiveError(RuntimeError):
+    """The broker reports an account status other than ACTIVE; no snapshot is published."""
+
+
 class AccountService:
     """Account/ownership service — production implementation.
 
@@ -431,7 +435,17 @@ class AccountService:
         # is not refused here (the field is optional in the test doubles).
         status = _account_status(account)
         if status is not None and status != "ACTIVE":
-            raise RuntimeError(f"Alpaca account status is {status}; snapshot refused until the account is ACTIVE")
+            # Alert at once: left to the generic account-fetch counter, an inactive
+            # account waited for five failed polls before the operator heard of it (D2-3-9).
+            emit_execution_alert(
+                "paper_incident",
+                message=f"Alpaca account status is {status}; trading refused until it is ACTIVE",
+                category="account_status_not_active",
+                incident_id=f"account_status_not_active:{status}",
+            )
+            raise AccountNotActiveError(
+                f"Alpaca account status is {status}; snapshot refused until the account is ACTIVE"
+            )
         trading_day = _trading_day(datetime.now(UTC))
         try:
             equity = float(account.equity)
@@ -728,6 +742,9 @@ class AccountService:
             peak_equity=peak_equity + reported_flows,
             daily_pnl=daily_pnl,
             positions=tuple(positions),
+            # Basis (D2-9-6): realized_pnl is a residual against the prior close, so it
+            # also carries fees and dividends; unrealized_pnl is open P&L against cost.
+            # Their sum is not a single-basis figure; the dashboard total uses daily_pnl.
             realized_pnl=daily_pnl - intraday_unrealized,
             unrealized_pnl=unrealized,
             fees=(ledger.total_fees_for_account(broker._account_id or "unknown") if ledger is not None else 0.0),

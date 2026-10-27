@@ -28,6 +28,7 @@ DEFAULT_OPERATOR_APPROVAL_KEY_ENV = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
 # The approval HMAC key is read from the environment named here. Only a key-like
 # name is accepted, so PATH, HOME or a broker credential can never become the key.
 _APPROVAL_KEY_ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*_(KEY|SECRET)")
+_BENCHMARK_SYMBOL_PATTERN = re.compile(r"[A-Z][A-Z0-9.]{0,9}")
 
 
 class RuntimeMode(StrEnum):
@@ -568,6 +569,9 @@ class AppConfig:
     open_browser: bool = True
     auto_start_engine: bool = True
     log_level: str = "INFO"
+    # Display-only: the dashboard performance chart's comparison line. It never
+    # selects a trading or backtest symbol.
+    benchmark_symbol: str = "VOO"
 
     def __post_init__(self) -> None:
         if self.host not in {"127.0.0.1", "localhost", "::1"}:
@@ -576,6 +580,8 @@ class AppConfig:
             raise ValueError("Invalid port")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
             raise ValueError("Invalid log level")
+        if not _BENCHMARK_SYMBOL_PATTERN.fullmatch(self.benchmark_symbol):
+            raise ValueError("app.benchmark_symbol must be an upper-case ticker such as VOO")
 
 
 @dataclass(frozen=True)

@@ -1407,7 +1407,12 @@ class EngineManager:
                     self.last_engine_error = None
             raise
 
-    def reset_safety_lock(self) -> None:
+    def reset_safety_lock(self) -> tuple[str, ...] | None:
+        """Run the operator reset; return the halt reasons it had to keep (``None`` if unreadable).
+
+        A reset can succeed for its own halt and still leave others in force, so
+        the caller must report the retained list instead of a plain success (D2-3-7).
+        """
         # The ops lock keeps stop_engine from closing the runtime mid-call.
         with self._runtime_ops_lock:
             with self._state_lock:
@@ -1418,6 +1423,11 @@ class EngineManager:
                     "Güvenlik kilidi yalnızca motor güvenlik durdurmasındayken veya kısıtlı çalışırken açılabilir."
                 )
             runtime.reset_safety_lock()
+            try:
+                return tuple(str(item) for item in (getattr(runtime.health(), "halt_reasons", ()) or ()))
+            except Exception as exc:
+                log.warning("Halts retained after the safety-lock reset could not be read: %s", exc)
+                return None
 
     def start_new_risk_epoch(self) -> dict[str, object]:
         """Operator-verified drawdown-baseline reset (explicit recovery for
@@ -1582,6 +1592,7 @@ class EngineManager:
                     "unrealized_pnl": acct.unrealized_pnl,
                     "fees": acct.fees,
                     "drawdown": max(0.0, acct.peak_equity - acct.equity),
+                    # Includes external (non-bot) positions; the dashboard's gross label says so (D2-9-7).
                     "gross_exposure": sum(position.market_value for position in acct.positions if not position.is_flat),
                     "positions": positions_list,
                     "account_suffix": getattr(broker, "account_suffix", ""),

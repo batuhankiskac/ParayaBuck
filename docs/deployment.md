@@ -31,7 +31,7 @@ console, settings and backtests work and the engine refuses to start — see
 
 | File | Purpose |
 |---|---|
-| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStopSec=180`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below. `data/backups/` is `ReadOnlyPaths=-`, so the engine cannot rewrite or delete restore points (S2-10-5); only `parayabuck-backup.service` writes them |
+| `parayabuck.service` | Engine + console. Non-root `parayabuck` user, `EnvironmentFile=/opt/parayabuck/.env`, `Restart=on-failure`, `RestartSec=10`, `StartLimitIntervalSec=600`, `StartLimitBurst=5`, `TimeoutStartSec=900`, `TimeoutStopSec=180`, `UMask=0077`, `ReadWritePaths` = `config/`, `data/`, `reports/` (the `-` prefix tolerates a missing directory), plus the sandbox below. `data/backups/` is `ReadOnlyPaths=-`, so the engine cannot rewrite or delete restore points (S2-10-5); only `parayabuck-backup.service` writes them |
 | `parayabuck-backup.service` | Oneshot `parayabuck backup`, the sandbox below and its own narrow env file `.env.backup` (see "Backup environment file"); `ReadWritePaths` = `data/` only (it reads `config/` and writes `data/backups` and the event journal) |
 | `vm-dropin/*.conf` | Examples for the VM's home-dir layout and the trading-host designation. Drop-ins under `/etc/systemd/system/<unit>.service.d/`, never edits of the template copies (see "VM drop-ins and steps") |
 | `parayabuck-backup.timer` | `OnBootSec=10min`, `OnUnitActiveSec=6h`, `Persistent=true` |
@@ -102,7 +102,13 @@ No `OnFailure=` unit ships, so nothing is e-mailed for that stop: check
 fixed: `sudo systemctl reset-failed parayabuck && sudo systemctl start parayabuck`.
 The preflight runs a full SQLite `integrity_check` on every start; on a large
 ledger that adds start time, and `PRAGMA quick_check` is the cheaper check if it
-becomes a problem (the shipped unit still runs the full one).
+becomes a problem (the shipped unit still runs the full one). The start budget is
+`TimeoutStartSec=900` on `parayabuck.service` and `TimeoutStartSec=3600` on
+`parayabuck-backup.service`. systemd's 90 s default would fail a start on a grown
+ledger, and the backup's integrity check and off-host copy would be killed mid-run
+with no `backup_failed` alert. The engine warm-up runs after `READY=1` and is not
+inside the start budget. On the VM, check the values with
+`systemctl show parayabuck parayabuck-backup -p TimeoutStartUSec`.
 
 There is no watchdog unit any more: `parayabuck ops watchdog` and
 `parayabuck-watchdog.{service,timer}` existed only to deliver a dead-man alert
@@ -138,6 +144,8 @@ can be re-copied without losing them. The examples are in `deploy/systemd/vm-dro
 | `trading-host.conf` | `Environment=PARAYABUCK_TRADING_HOST=1` | Required on the trading host |
 | `watchdog.conf` | `Type=notify`, `NotifyAccess=main`, `WatchdogSec=300` | Example; orchestrator decides whether the VM installs it |
 | `hardening.conf` | `LimitCORE=0`, `ProtectClock`, `ProtectHostname`, `RestrictRealtime`, `KeyringMode=private`, `RemoveIPC` | Install on all three units on the VM |
+| `start-timeout-engine.conf` | `TimeoutStartSec=900` on `parayabuck.service` (`ExecStartPre` integrity check) | Install on the VM engine unit |
+| `start-timeout-backup.conf` | `TimeoutStartSec=3600` on `parayabuck-backup.service` (integrity check and off-host copy) | Install on the VM backup unit |
 
 A drop-in lives in `/etc/systemd/system/<unit>.service.d/<name>.conf`; create it
 with `sudo systemctl edit <unit>` (which writes `override.conf`) or copy the file
@@ -182,9 +190,15 @@ done
 # 3. Watchdog drop-in: the orchestrator decides. Install it only with the decision recorded.
 #    sudo install -m 0644 deploy/systemd/vm-dropin/watchdog.conf /etc/systemd/system/parayabuck.service.d/watchdog.conf
 
+# 4. Start-timeout drop-ins (R2-4-3): the engine's 900 s and the backup's 3600 s.
+sudo install -m 0644 deploy/systemd/vm-dropin/start-timeout-engine.conf /etc/systemd/system/parayabuck.service.d/start-timeout-engine.conf
+sudo install -d /etc/systemd/system/parayabuck-backup.service.d
+sudo install -m 0644 deploy/systemd/vm-dropin/start-timeout-backup.conf /etc/systemd/system/parayabuck-backup.service.d/start-timeout-backup.conf
+
 sudo systemctl daemon-reload
-systemctl show parayabuck -p User,WorkingDirectory,ProtectHome,Type,WatchdogUSec,LimitCORE,Environment
+systemctl show parayabuck -p User,WorkingDirectory,ProtectHome,Type,WatchdogUSec,LimitCORE,Environment,TimeoutStartUSec
 systemctl show parayabuck-backup parayabuck-deadman -p LimitCORE,ProtectClock,RemoveIPC
+systemctl show parayabuck-backup -p TimeoutStartUSec
 systemd-analyze verify /etc/systemd/system/parayabuck.service   # reports unit errors, if any
 ```
 

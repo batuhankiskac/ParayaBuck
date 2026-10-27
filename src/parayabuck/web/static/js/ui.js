@@ -426,8 +426,14 @@
       const ok = await dialog.confirm({ title: "Güvenlik kilidi açılsın mı?", message: "Broker korumaları ve veri bütünlüğü doğrulandıktan sonra kilit sıfırlanır. Emin değilseniz vazgeçin.", confirmLabel: "Doğrula ve aç" });
       if (!ok) return;
       withButton(reset, async function () {
-        await postControl("/api/engine/reset-safety-lock");
-        toast("Güvenlik kilidi doğrulama sonrası açıldı.", "success");
+        const result = await postControl("/api/engine/reset-safety-lock");
+        if (result && Array.isArray(result.retained) && result.retained.length) {
+          toast("Kilit açıldı, ancak şu durdurmalar hâlâ aktif: " + result.retained.join(", "), "error");
+        } else if (result && result.retained === null) {
+          toast("Kilit sıfırlandı; kalan durdurmalar okunamadı, motor durumunu kontrol edin.", "error");
+        } else {
+          toast("Güvenlik kilidi doğrulama sonrası açıldı.", "success");
+        }
       });
     });
     if (epoch) epoch.addEventListener("click", async function () {

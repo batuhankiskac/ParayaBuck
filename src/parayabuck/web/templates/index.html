@@ -30,10 +30,10 @@
             </div>
             <div class="legend">
                 <span><i></i>Portföy <b id="legendPortfolio">—</b></span>
-                <span><i class="bench"></i>VOO <b id="legendBench">—</b></span>
+                <span><i class="bench"></i><span id="legendBenchName">Kıyas</span> <b id="legendBench">—</b></span>
             </div>
         </div>
-        <div id="perfChart" class="perf-chart" aria-label="Portföy ve VOO getiri grafiği"></div>
+        <div id="perfChart" class="perf-chart" aria-label="Portföy ve kıyas getiri grafiği"></div>
         <p id="perfNote" class="chart-note"></p>
     </article>
 
@@ -52,7 +52,7 @@
                 <div class="donut-center"><strong id="donutInvested">—</strong><small>yatırımda</small></div>
             </div>
             <ul class="alloc-legend">
-                <li><span class="swatch c-equity"></span><span>Hisse / ETF</span><b id="allocEquity">—</b></li>
+                <li><span class="swatch c-equity"></span><span>Hisse / ETF (dış dahil)</span><b id="allocEquity">—</b></li>
                 <li><span class="swatch c-cash"></span><span>Nakit</span><b id="allocCash">—</b></li>
             </ul>
         </div>
@@ -66,9 +66,9 @@
         <span id="cashSub" class="kpi-sub">serbest bakiye</span>
     </article>
     <article class="card kpi">
-        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-trend"/></svg>Bugün gerçekleşen + açık K/Z</span>
+        <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-trend"/></svg>Bugünkü toplam K/Z</span>
         <span id="totalPnlValue" class="kpi-value">—</span>
-        <span class="kpi-sub">bugünkü gerçekleşen + tüm açık pozisyonlar; önceki günlerin gerçekleşen K/Z’si dahil değil</span>
+        <span class="kpi-sub">önceki kapanışa göre; bugün gerçekleşen + açık pozisyonların bugünkü değişimi. Yatırma ve çekmeler hariç</span>
     </article>
     <article class="card kpi">
         <span class="kpi-label"><svg class="icon icon-sm"><use href="#i-check"/></svg>Bugünkü değişim (gerçekleşen, tahmini)</span>

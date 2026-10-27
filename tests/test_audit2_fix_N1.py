@@ -276,7 +276,9 @@ def test_dashboard_chart_labels_deposits_and_names_the_benchmark() -> None:
     js = _DASHBOARD_JS.read_text(encoding="utf-8")
 
     assert "yatırma ve çekmeler dahildir. Bu bir performans karşılaştırması değildir." in js
-    assert 'data.benchmark_symbol || "VOO"' in js
+    # D2-9-3: the name comes from the server's config-driven symbol; no VOO literal in the script.
+    assert 'data.benchmark_symbol || "Kıyas"' in js
+    assert '"VOO"' not in js
     assert 'h.cls === "main" ? "Portföy" : benchSymbol' in js
 
 

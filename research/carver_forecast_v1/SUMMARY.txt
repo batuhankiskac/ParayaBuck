@@ -1,0 +1,12 @@
+carver_forecast_v1  wall clock 22.0 s  main window 2000-03-09 .. 2026-09-29
+DSR trials N = 369
+K    pre base  15.76% cal  15.18% DD  46.7% turnover 5.46/yr sells(QLD) 10.2/yr | AT 2000  10.75 2010  15.24 2017  23.97 sells(all)/yr 10.7 DSR 0.710
+R2   pre base  15.48% cal  14.90% DD  46.8% turnover 5.99/yr sells(QLD) 29.6/yr | AT 2000  10.16 2010  14.71 2017  22.89 sells(all)/yr 30.7 DSR 0.700
+C1   pre base   5.62% cal   5.38% DD  19.4% turnover 5.69/yr sells(QLD) 41.8/yr | AT 2000   3.07 2010   4.74 2017   7.61 sells(all)/yr 41.8 DSR 0.325
+C2   pre base   9.89% cal   9.46% DD  35.1% turnover 8.47/yr sells(QLD) 38.7/yr | AT 2000   6.11 2010   9.77 2017  16.06 sells(all)/yr 38.9 DSR 0.466
+C3   pre base  11.19% cal  10.75% DD  32.0% turnover 4.00/yr sells(QLD) 35.8/yr | AT 2000   7.44 2010  11.23 2017  18.31 sells(all)/yr 36.1 DSR 0.562
+C4   pre base  10.51% cal  10.07% DD  31.4% turnover 9.09/yr sells(QLD) 39.5/yr | AT 2000   6.58 2010  10.01 2017  16.38 sells(all)/yr 39.7 DSR 0.514
+C1 gates: G1=fail G2=PASS G3=fail G4=fail G5=fail G6=fail G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=fail REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail
+C2 gates: G1=fail G2=PASS G3=fail G4=fail G5=fail G6=fail G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=fail REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail
+C3 gates: G1=fail G2=PASS G3=fail G4=fail G5=fail G6=fail G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=fail REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail
+C4 gates: G1=fail G2=PASS G3=fail G4=fail G5=fail G6=fail G7=fail G8=fail G9=PASS AT_all_three_windows_beat_K=fail AT_B1_B2=fail REPORTED_halves_both_positive=fail ALL_GATED_PASS=fail

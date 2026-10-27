@@ -1724,6 +1724,15 @@ class EngineRuntime:
             symbols=len(self.symbols),
             timeframes=",".join(sorted(self.aggregators)),
         )
+        if not self.paper:
+            # Manual and standing-authorization LIVE starts both pass here; mailed,
+            # so an unattended LIVE start is never silent.
+            alerts.emit(
+                "live_started",
+                message="LIVE engine runtime started",
+                mode=self.mode.value,
+                symbols=len(self.symbols),
+            )
         log.info(
             "Engine runtime started: mode=%s symbols=%d timeframe=%s",
             "paper" if self.paper else "live",
@@ -1838,6 +1847,7 @@ class EngineRuntime:
         alerts.emit(
             "risk_incident",
             message=message,
+            reason="foreign_inventory",
             foreign=[{"market": market.value, "symbol": symbol} for market, symbol in inventory],
         )
 
@@ -2508,6 +2518,7 @@ class EngineRuntime:
                 alerts.emit(
                     "risk_incident",
                     message="Daily loss limit breached; entries latched",
+                    reason="daily_loss_limit",
                     daily_loss_pct=daily_loss,
                     limit_pct=self.app_config.risk.daily_loss_limit_pct,
                     equity=equity,
@@ -2904,6 +2915,7 @@ class EngineRuntime:
             alerts.emit(
                 "circuit_breaker",
                 message="Persisted halt rows migrated at startup; their worker state was re-armed by this start",
+                reason="halt_rows_migrated",
                 reasons=rearmed,
             )
         # Newest first, but a reconciliation-owned reason never masks another
@@ -5476,6 +5488,7 @@ class EngineRuntime:
                         "reconciliation_failure",
                         message="Reconciliation drift detected; new orders blocked pending verified reconcile",
                         reason="reconciliation_failed",
+                        episode_key="reconciliation_drift",
                         categories=report.as_dict(),
                     )
                     # Still update last_reconciliation_at so the drift is visible,
@@ -5536,6 +5549,7 @@ class EngineRuntime:
                         "reconciliation_failure",
                         message="Reconciliation deferred after a broker network error",
                         reason="reconciliation_failed",
+                        episode_key="reconciliation_network_error",
                         error=str(exc),
                     )
                     return
@@ -5547,6 +5561,7 @@ class EngineRuntime:
                     "reconciliation_failure",
                     message="Reconciliation returned an invalid result shape",
                     reason="reconciliation_failed",
+                    episode_key="reconciliation_invalid_result",
                     error=str(exc),
                 )
             except RequestException as exc:
@@ -5564,6 +5579,7 @@ class EngineRuntime:
                     "reconciliation_failure",
                     message="Position protection check deferred after Alpaca API error",
                     reason="reconciliation_failed",
+                    episode_key="protection_check_api_error",
                     error=str(exc),
                 )
             except OwnershipDriftError:
@@ -5621,6 +5637,7 @@ class EngineRuntime:
                     "reconciliation_failure",
                     message="Periodic position protection check failed",
                     reason=failure_reason,
+                    episode_key="protection_check_generic",
                     consecutive_failures=self._generic_reconcile_failures,
                 )
 
@@ -6055,6 +6072,15 @@ class EngineRuntime:
         if retained:
             log.warning("Operator reset safety lock: halts still in force: %s", ", ".join(retained))
         log.warning("Operator reset safety lock after successful reconciliation: %s", reason)
+        # Journaled and mailed: a halt cleared by hand is a safety-state change the
+        # owner must see. Halts still in force are listed in the retained field.
+        alerts.emit(
+            "safety_lock_reset",
+            message=f"Safety lock reset after a verified reconcile: {reason} cleared",
+            reason=reason,
+            account_id=account_id,
+            retained=", ".join(retained),
+        )
         # A startup catch-up the halt blocked never re-runs by itself: retry it
         # now, against the same verified snapshot. Its own gates still apply.
         if any(_catch_up_blocked(runtime) for runtime in getattr(self, "_portfolio_runtimes", ())):

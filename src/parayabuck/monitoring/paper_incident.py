@@ -549,10 +549,13 @@ def emit_incident_record(record: IncidentRecord) -> None:
         from parayabuck.monitoring import metrics as metrics_store
 
         spec = INCIDENT_TAXONOMY[record.category]
-        # Map severity to alert kind: critical->circuit_breaker/reconciliation_failure,
-        # a warning-level provider outage->data_provider_unavailable, and a
-        # generic incident uses reconciliation_failure as safe fallback; specific
-        # callers may emit more precise kinds.
+        # Map category to alert kind: BROKER_ACCOUNT_STALE->circuit_breaker,
+        # PENDING_ORDER_UNKNOWN->ambiguous_order, other broker uncertainty->
+        # reconciliation_failure, a warning-level provider outage->
+        # data_provider_unavailable. Every other category is named by
+        # paper_incident (its ``category`` field), not filed as a reconciliation
+        # failure: a CRITICAL one (``severity`` field) logs at ERROR and is
+        # e-mailed as a reserved critical kind.
         if record.category == IncidentCategory.PROVIDER_UNAVAILABLE:
             kind = "data_provider_unavailable" if spec.severity.value != "critical" else "reconciliation_failure"
         elif record.category in _BROKER_UNCERTAINTY_CATEGORIES:
@@ -564,7 +567,7 @@ def emit_incident_record(record: IncidentRecord) -> None:
             if record.category == IncidentCategory.PENDING_ORDER_UNKNOWN:
                 kind = "ambiguous_order"
         else:
-            kind = "reconciliation_failure"
+            kind = "paper_incident"
         # metrics: record per-category counter if known, plus generic
         try:
             metrics_store.record_event(kind)
@@ -573,7 +576,10 @@ def emit_incident_record(record: IncidentRecord) -> None:
         alerts.emit(
             kind,
             message=f"Incident {record.category.value}: {record.error or spec.operator_action}",
+            # The uuid identifies the record in the journal; the throttle keys on the
+            # stable episode so repeats of one incident coalesce.
             incident_id=record.incident_id,
+            episode_key=record.episode_key,
             category=str(record.category),
             severity=str(record.severity),
             account_id=record.account_id,

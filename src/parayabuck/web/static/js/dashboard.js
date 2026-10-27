@@ -94,7 +94,8 @@
       setText("dailyPnlValue", fmt.signedMoney(a.daily_pnl) + (dailyPct !== null ? " (" + fmt.signedPct(dailyPct, 2) + ")" : ""), toneClass("delta", a.daily_pnl));
       setText("cashValue", fmt.money(a.cash));
       if (isNum(a.cash) && isNum(a.equity) && Number(a.equity) > 0) setText("cashSub", "portföyün " + fmt.pct((a.cash / a.equity) * 100));
-      const total = isNum(a.total_pnl) ? a.total_pnl : (isNum(a.realized_pnl) || isNum(a.unrealized_pnl) ? Number(a.realized_pnl || 0) + Number(a.unrealized_pnl || 0) : null);
+      // Total is today's change (prior-close basis), never realized plus cost-basis unrealized.
+      const total = isNum(a.total_pnl) ? a.total_pnl : (isNum(a.daily_pnl) ? a.daily_pnl : null);
       setText("totalPnlValue", fmt.signedMoney(total), toneClass("kpi-value", total));
       setText("realizedPnlValue", fmt.signedMoney(a.realized_pnl), toneClass("kpi-value", a.realized_pnl));
       setText("unrealizedPnlValue", fmt.signedMoney(a.unrealized_pnl), toneClass("kpi-value", a.unrealized_pnl));
@@ -114,7 +115,7 @@
           : "güncel · " + fmt.time(a.snapshot_at);
         fresh.replaceChildren(el("span", { className: "dot" + (stale ? "" : " running") }), el("span", { text: label }));
       }
-      setText("grossExposureSub", a.stale ? "eski veri (" + (a.source || "?") + ")" : "brüt maruziyet");
+      setText("grossExposureSub", a.stale ? "eski veri (" + (a.source || "?") + ")" : "brüt maruziyet · dış pozisyonlar dahil");
       if (Array.isArray(a.positions)) renderPositions(a.positions, a.equity);
     }
 
@@ -151,28 +152,30 @@
     // ---------- performance chart ----------
     const chartBox = byId("perfChart");
     let chart = null;
-    function toReturns(series) {
+    // Returns are measured from the server's prior-close base for 1D (base is
+    // null otherwise) and from the first point when no base is sent.
+    function toReturns(series, base) {
       const pts = (series || []).map(function (p) { return { t: new Date(p.t).getTime(), raw: Number(p.v) }; })
         .filter(function (p) { return Number.isFinite(p.t) && Number.isFinite(p.raw) && p.raw > 0; })
         .sort(function (a, b) { return a.t - b.t; });
       if (!pts.length) return [];
-      const base = pts[0].raw;
-      return pts.map(function (p) { return { t: p.t, raw: p.raw, v: (p.raw / base - 1) * 100 }; });
+      const origin = isNum(base) && Number(base) > 0 ? Number(base) : pts[0].raw;
+      return pts.map(function (p) { return { t: p.t, raw: p.raw, v: (p.raw / origin - 1) * 100 }; });
     }
     function renderPerformance(data) {
       view.perf = data;
-      const main = toReturns(data.equity);
-      const bench = toReturns(data.benchmark);
+      const main = toReturns(data.equity, data.base_equity);
+      const bench = toReturns(data.benchmark, data.base_benchmark);
       const last = main.length ? main[main.length - 1].v : null;
       const benchLast = bench.length ? bench[bench.length - 1].v : null;
       setText("periodReturn", fmt.signedPct(last, 2), toneClass("delta", last));
       setText("periodLabel", PERIOD_LABEL[view.period] || "");
       setText("legendPortfolio", fmt.signedPct(last, 2));
       setText("legendBench", fmt.signedPct(benchLast, 2));
-      // The legend names the benchmark the server used (VOO unless a config key says otherwise).
-      const benchSymbol = data.benchmark_symbol || "VOO";
-      const benchName = byId("legendBench") && byId("legendBench").previousSibling;
-      if (benchName && benchName.nodeType === 3) benchName.nodeValue = benchSymbol + " ";
+      // The legend and the chart label name the benchmark the server used (app.benchmark_symbol).
+      const benchSymbol = data.benchmark_symbol || "Kıyas";
+      setText("legendBenchName", benchSymbol);
+      if (chartBox) chartBox.setAttribute("aria-label", "Portföy ve " + benchSymbol + " getiri grafiği");
 
       // The portfolio line is the equity change: deposits and withdrawals are included,
       // so it is not a time-weighted return and the chart is not a performance comparison.
@@ -492,7 +495,11 @@
         box.replaceChildren(
           meter("Zirveden düşüş", known ? ddPct(a) : null, risk.max_drawdown_pct, { note: "Bu sınır aşılırsa bot tüm yeni alımları durdurur." }),
           meter("Bugünkü kayıp", known ? lossPct : null, risk.daily_loss_limit_pct, { digits: 2, note: "Günlük kayıp sınırı aşılırsa o gün yeni alım yapılmaz." }),
-          meter("Yatırımdaki pay (brüt)", risk.gross_exposure_pct, risk.gross_exposure_limit_pct),
+          // Gross exposure counts every open position, including the external (non-bot) ones;
+          // the strategy card counts only the bot's share, so the external share is named here.
+          meter("Yatırımdaki pay (brüt, dış pozisyonlar dahil)", risk.gross_exposure_pct, risk.gross_exposure_limit_pct, {
+            note: isNum(risk.external_exposure_pct) ? "Bunun " + fmt.pct(risk.external_exposure_pct) + " kadarı botun açmadığı (dış) pozisyonlar." : undefined
+          }),
           meter("Nakit tamponu", risk.cash_pct, risk.cash_buffer_limit_pct, { minimum: true })
         );
       }

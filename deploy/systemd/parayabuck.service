@@ -37,6 +37,12 @@ RestartSec=10
 # sequence after a 30 s HTTP drain and a 30 s wait on an in-flight start;
 # 180 s covers that worst case so systemd never SIGKILLs mid-persist.
 TimeoutStopSec=180
+# The start budget covers ExecStartPre, which runs the full SQLite integrity_check
+# on every start (R2-4-3). The default 90 s would fail a start on a grown ledger,
+# and with Type=notify the start completes only at READY=1. The engine warm-up runs
+# after READY and is not counted here. Install the same value on the VM with
+# deploy/systemd/vm-dropin/start-timeout-engine.conf.
+TimeoutStartSec=900
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

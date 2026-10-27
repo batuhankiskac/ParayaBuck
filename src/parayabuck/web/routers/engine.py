@@ -74,17 +74,34 @@ async def stop_engine(request: Request) -> dict[str, str]:
 
 
 @router.post("/reset-safety-lock")
-async def reset_safety_lock(request: Request) -> dict[str, str]:
-    """POST /api/engine/reset-safety-lock — ValueError 400, else 500."""
+async def reset_safety_lock(request: Request) -> dict[str, object]:
+    """POST /api/engine/reset-safety-lock — ValueError 400, else 500.
+
+    ``retained`` lists the halts the reset could not clear (D2-3-7); a
+    non-empty list is not reported as a full success.
+    """
     manager = get_engine_manager(request)
     try:
-        await asyncio.to_thread(manager.reset_safety_lock)
+        retained = await asyncio.to_thread(manager.reset_safety_lock)
     except ValueError as exc:
         raise _http(400, str(exc)) from exc
     except Exception:
         log.exception("Safety lock reset failed with an unexpected error")
         raise _http(500, "Güvenlik kilidi açılamadı; ayrıntılar uygulama günlüğünde.") from None
+    if retained is None:
+        return {
+            "status": "reset",
+            "retained": None,
+            "message": "Güvenlik kilidi sıfırlandı; kalan durdurmalar okunamadı, motor durumunu kontrol edin.",
+        }
+    if retained:
+        return {
+            "status": "reset",
+            "retained": list(retained),
+            "message": "Güvenlik kilidi açıldı, ancak şu durdurmalar hâlâ aktif: " + ", ".join(retained),
+        }
     return {
         "status": "reset",
+        "retained": [],
         "message": "Safety lock reset after broker reconciliation and data checks.",
     }

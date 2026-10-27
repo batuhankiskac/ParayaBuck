@@ -977,11 +977,11 @@ def _build_dashboard_payload_uncached(engine_state: str) -> dict[str, Any]:
         "daily_pnl": account.get("daily_pnl"),
         "realized_pnl": account.get("realized_pnl"),
         "unrealized_pnl": account.get("unrealized_pnl"),
-        # Basis: realized_pnl is TODAY's realized figure, unrealized_pnl is the
-        # open P&L of every open position. The sum is labelled as such in the UI.
-        "total_pnl": (float(account.get("realized_pnl") or 0.0) + float(account.get("unrealized_pnl") or 0.0))
-        if account.get("realized_pnl") is not None or account.get("unrealized_pnl") is not None
-        else None,
+        # Basis: daily_pnl is measured against the prior close and nets external
+        # flows. It equals today's realized plus the intraday change of the open
+        # positions, so it is the one total on a single basis. Adding realized_pnl
+        # to unrealized_pnl (open P&L against cost) mixed two bases (D2-9-6).
+        "total_pnl": account.get("daily_pnl"),
         "fees": account.get("fees"),
         "drawdown": account.get("drawdown"),
         "account_suffix": account.get("account_suffix"),

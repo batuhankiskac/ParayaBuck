@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Protocol
 
+from parayabuck.config import DrawdownLiquidationConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.execution.portfolio import (
     AssetTradingRules,
@@ -191,22 +192,23 @@ def configuration_digest(
     universe_version: str,
     risk_limits: PortfolioRiskLimits | None = None,
     execution_policy: PortfolioExecutionPolicy | None = None,
+    drawdown_liquidation: DrawdownLiquidationConfig | None = None,
 ) -> str:
-    payload = json.dumps(
-        {
-            "strategy": strategy.name,
-            "version": strategy.version,
-            "parameters": strategy.parameter_tuple(),
-            "mode": mode,
-            "maximum_allocation": maximum_allocation,
-            "scanner_policy_digest": universe_version,
-            "risk_limits": asdict(risk_limits or PortfolioRiskLimits()),
-            "execution_policy": asdict(execution_policy or PortfolioExecutionPolicy()),
-        },
-        sort_keys=True,
-        default=str,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
+    payload: dict[str, object] = {
+        "strategy": strategy.name,
+        "version": strategy.version,
+        "parameters": strategy.parameter_tuple(),
+        "mode": mode,
+        "maximum_allocation": maximum_allocation,
+        "scanner_policy_digest": universe_version,
+        "risk_limits": asdict(risk_limits or PortfolioRiskLimits()),
+        "execution_policy": asdict(execution_policy or PortfolioExecutionPolicy()),
+    }
+    # The default-off catastrophe brake joins the digest only while enabled, so
+    # every existing digest (and every LIVE approval bound to one) is unchanged.
+    if drawdown_liquidation is not None and drawdown_liquidation.enabled:
+        payload["drawdown_liquidation"] = asdict(drawdown_liquidation)
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
 __all__ = [

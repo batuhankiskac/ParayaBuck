@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from parayabuck.config import read_credential
+from parayabuck.config import DrawdownLiquidationConfig, read_credential
 
 
 class LiveApprovalError(RuntimeError):
@@ -329,8 +329,17 @@ def standing_authorization_path(operator_approval_path: str) -> Path | None:
 
 
 def config_fingerprint(config: Any) -> str:
-    """Digest of the whole loaded configuration: any settings change invalidates."""
-    payload = json.dumps(asdict(config), sort_keys=True, separators=(",", ":"), default=str)
+    """Digest of the whole loaded configuration: any settings change invalidates.
+
+    The default-off ``risk.drawdown_liquidation`` block is left out while it
+    equals its disabled default, so the fingerprint of an unchanged
+    configuration is the same before and after the brake was added.
+    """
+    document = asdict(config)
+    risk = document.get("risk") if isinstance(document, dict) else None
+    if isinstance(risk, dict) and risk.get("drawdown_liquidation") == asdict(DrawdownLiquidationConfig()):
+        risk.pop("drawdown_liquidation")
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 

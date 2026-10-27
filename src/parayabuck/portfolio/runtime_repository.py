@@ -9,13 +9,14 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from parayabuck.core.models import Market
 from parayabuck.execution.portfolio import (
+    DrawdownLiquidationState,
     PortfolioOrderRequest,
     PortfolioOrderSide,
     RiskOverlayDecision,
@@ -134,6 +135,31 @@ def _at_or_before(first: object, second: object) -> bool:
     return moments[0] <= moments[1]
 
 
+def _upsert_drawdown_liquidation_state(
+    connection: Any,
+    account_id: str,
+    market: Market,
+    state: DrawdownLiquidationState,
+) -> None:
+    """One row per account and market; the caller holds the transaction."""
+    connection.execute(
+        """INSERT INTO portfolio_drawdown_liquidation_states(
+            account_id, market, liquidated_at, rearmed, updated_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(account_id, market) DO UPDATE SET
+            liquidated_at = excluded.liquidated_at,
+            rearmed = excluded.rearmed,
+            updated_at = excluded.updated_at""",
+        (
+            account_id,
+            market.value,
+            state.liquidated_at.isoformat() if state.liquidated_at is not None else None,
+            1 if state.rearmed else 0,
+            datetime.now(UTC).isoformat(),
+        ),
+    )
+
+
 class PortfolioStateRepository:
     def __init__(self, path: str | Path, *, store: SQLiteStore | None = None) -> None:
         self.store = store or SQLiteStore(path)
@@ -241,6 +267,14 @@ class PortfolioStateRepository:
                     cash_headroom REAL NOT NULL,
                     admitted_batch_notional REAL NOT NULL,
                     FOREIGN KEY(client_order_id) REFERENCES portfolio_orders(client_order_id)
+                );
+                CREATE TABLE IF NOT EXISTS portfolio_drawdown_liquidation_states (
+                    account_id TEXT NOT NULL,
+                    market TEXT NOT NULL,
+                    liquidated_at TEXT,
+                    rearmed INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(account_id, market)
                 );
                 """
             )
@@ -613,6 +647,7 @@ class PortfolioStateRepository:
         initial_status: str = "submitting",
         buy_orders_json: str | None = None,
         rebalance_phase: str | None = None,
+        drawdown_liquidation_state: DrawdownLiquidationState | None = None,
     ) -> str:
         """Atomically persist a decision, its orders, and optional rebalance phase.
 
@@ -623,9 +658,18 @@ class PortfolioStateRepository:
         (decision without orders) or a half-rebalance (decision+orders without
         the sell_pending marker). The transaction is bounded by ``store.lock``
         plus WAL ``busy_timeout=5000`` so concurrent writers serialize.
+
+        ``drawdown_liquidation_state`` (set only while the brake is enabled)
+        is the RED-state the decision produced; it is upserted in the same
+        transaction so a restart always reloads the state that matches the
+        decision on disk.
         """
         decision_id: str = _decision_id(account_id, configuration_digest, target.decision_timestamp, market)
         created_at = datetime.now(UTC).isoformat()
+        risk_document = asdict(risk)
+        if risk_document.get("drawdown_liquidation_state") is None:
+            # Keep the stored decision JSON identical to pre-brake decisions.
+            risk_document.pop("drawdown_liquidation_state", None)
         with self.store.lock, self.store.connection:
             self.store.connection.execute(
                 """INSERT OR IGNORE INTO portfolio_decisions(
@@ -641,7 +685,7 @@ class PortfolioStateRepository:
                     market.value,
                     target.strategy_name,
                     json.dumps(target.to_dict(), sort_keys=True, default=str),
-                    json.dumps(asdict(risk), sort_keys=True, default=str),
+                    json.dumps(risk_document, sort_keys=True, default=str),
                 ),
             )
             for order in orders:
@@ -682,7 +726,32 @@ class PortfolioStateRepository:
                         created_at,
                     ),
                 )
+            if drawdown_liquidation_state is not None:
+                _upsert_drawdown_liquidation_state(
+                    self.store.connection, account_id, market, drawdown_liquidation_state
+                )
         return decision_id
+
+    def drawdown_liquidation_state(self, account_id: str, market: Market) -> DrawdownLiquidationState | None:
+        """The persisted brake RED-state, or ``None`` when no state was ever written."""
+        with self.store.lock:
+            row = self.store.connection.execute(
+                """SELECT liquidated_at, rearmed FROM portfolio_drawdown_liquidation_states
+                   WHERE account_id = ? AND market = ?""",
+                (account_id, market.value),
+            ).fetchone()
+        if row is None:
+            return None
+        liquidated_at = str(row[0]) if row[0] is not None else None
+        return DrawdownLiquidationState(
+            liquidated_at=date.fromisoformat(liquidated_at) if liquidated_at else None,
+            rearmed=bool(row[1]),
+        )
+
+    def put_drawdown_liquidation_state(self, account_id: str, market: Market, state: DrawdownLiquidationState) -> None:
+        """Persist the brake RED-state outside a decision (the decision path uses the same upsert in its transaction)."""
+        with self.store.lock, self.store.connection:
+            _upsert_drawdown_liquidation_state(self.store.connection, account_id, market, state)
 
     def record_order(self, order: PortfolioOrderRequest, status: str) -> None:
         with self.store.lock, self.store.connection:

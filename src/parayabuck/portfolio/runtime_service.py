@@ -9,6 +9,7 @@ from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from parayabuck.config import DrawdownLiquidationConfig
 from parayabuck.core.models import AccountSnapshot, Bar, Market
 from parayabuck.data.adjustment import signal_session_date
 from parayabuck.execution.alpaca_models import DefiniteOrderRejection
@@ -16,6 +17,7 @@ from parayabuck.execution.portfolio import (
     DECEMBER_DEFERRAL_KEY,
     AssetTradingRules,
     DecemberDeferralHold,
+    DrawdownLiquidationState,
     GainBandHold,
     PortfolioExecutionPolicy,
     PortfolioOrderRequest,
@@ -506,6 +508,7 @@ class PortfolioRuntime:
         allow_static_universe: bool = False,
         sip_embargo: timedelta = DEFAULT_SIP_EMBARGO,
         live_buy_gap_margin: float = 0.03,
+        drawdown_liquidation: DrawdownLiquidationConfig | None = None,
     ) -> None:
         if mode not in {"paper", "live"}:
             raise ValueError("PortfolioRuntime mode must be paper or live")
@@ -541,7 +544,7 @@ class PortfolioRuntime:
         self.policy = rebalance_policy_for(self.strategy)
         self.execution_policy = execution_policy or PortfolioExecutionPolicy()
         self.decision_service = PortfolioDecisionService()
-        self.risk_overlay = PortfolioRiskOverlay(risk_limits)
+        self.risk_overlay = PortfolioRiskOverlay(risk_limits, drawdown_liquidation=drawdown_liquidation)
         self.planner = TargetToOrderPlanner(self.execution_policy)
         self.history: dict[str, list[Bar]] = {symbol: [] for symbol in self.symbols}
         # Split-basis bridge (equity only): warmup seeds this history on the
@@ -562,6 +565,7 @@ class PortfolioRuntime:
             universe_version,
             self.risk_overlay.limits,
             self.execution_policy,
+            drawdown_liquidation=self.risk_overlay.drawdown_liquidation,
         )
         self.previous_timestamp = repository.latest_decision_timestamp(
             account_id, self.configuration_digest, self.market
@@ -1073,6 +1077,30 @@ class PortfolioRuntime:
         self.signal_last_verified_at = datetime.now(UTC)
         return changed_symbols
 
+    def _drawdown_liquidation_inputs(
+        self,
+        decision_timestamp: datetime,
+    ) -> tuple[DrawdownLiquidationState | None, date | None]:
+        """Persisted RED-state and NYSE session for ``risk_overlay.apply``.
+
+        ``(None, None)`` when the brake is off, so the overlay call is exactly
+        the pre-brake call and the repository is not read. When enabled, a
+        missing row starts from an empty state so the latch can engage.
+        """
+        policy = self.risk_overlay.drawdown_liquidation
+        if policy is None or not policy.enabled:
+            return None, None
+        stored = self.repository.drawdown_liquidation_state(self.account_id, self.market)
+        state = stored if stored is not None else DrawdownLiquidationState()
+        return state, signal_session_date(decision_timestamp)
+
+    def _drawdown_liquidation_write(self, risk: RiskOverlayDecision) -> DrawdownLiquidationState | None:
+        """RED-state to persist with a decision; ``None`` (no write) when the brake is off."""
+        policy = self.risk_overlay.drawdown_liquidation
+        if policy is None or not policy.enabled:
+            return None
+        return risk.drawdown_liquidation_state
+
     def process_closed_bars(
         self,
         bars: list[Bar],
@@ -1505,6 +1533,7 @@ class PortfolioRuntime:
         open_orders = self.repository.open_orders(self.account_id)
         reserved_slots = self._effective_reserved_position_keys(open_orders)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
+        liquidation_state, liquidation_session = self._drawdown_liquidation_inputs(raw_target.decision_timestamp)
         risk = self.risk_overlay.apply(
             raw_target,
             account,
@@ -1514,6 +1543,8 @@ class PortfolioRuntime:
             mode=self.mode,
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
+            drawdown_liquidation_state=liquidation_state,
+            session_date=liquidation_session,
         )
         # Visibility: if risk overlay scaled to limit and left no managed
         # exposure, emit persistent no-trade.
@@ -1638,6 +1669,7 @@ class PortfolioRuntime:
                 self.market,
                 orders,
                 initial_status="submitting",
+                drawdown_liquidation_state=self._drawdown_liquidation_write(risk),
             )
             self._decision_recorded = True
             # Orders are already persisted as submitting; submit them idempotently.
@@ -1680,6 +1712,7 @@ class PortfolioRuntime:
                 initial_status="submitting",
                 buy_orders_json=json.dumps([asdict(order) for order in buys], sort_keys=True, default=str),
                 rebalance_phase=REBALANCE_PHASE_SELL_PENDING,
+                drawdown_liquidation_state=self._drawdown_liquidation_write(risk),
             )
             self._decision_recorded = True
             submitted = self._submit_orders(sells)
@@ -1732,6 +1765,7 @@ class PortfolioRuntime:
             self.market,
             buys,
             initial_status="submitting",
+            drawdown_liquidation_state=self._drawdown_liquidation_write(risk),
         )
         self._decision_recorded = True
         self._record_buy_admission_observation(decision_id, admission, buys)
@@ -2334,6 +2368,9 @@ class PortfolioRuntime:
         open_orders = self.repository.open_orders(self.account_id)
         open_order_symbols, open_order_sides = self._effective_open_order_constraints(open_orders)
         reserved_slots = self._effective_reserved_position_keys(open_orders)
+        # Re-plan reads the persisted RED-state but never writes it: the state
+        # belongs to the decision that produced it, not to the BUY re-plan.
+        liquidation_state, liquidation_session = self._drawdown_liquidation_inputs(adjusted_target.decision_timestamp)
         risk = self.risk_overlay.apply(
             adjusted_target,
             account,
@@ -2343,6 +2380,8 @@ class PortfolioRuntime:
             mode=self.mode,
             reserved_position_keys=reserved_slots,
             open_order_symbols=tuple(sorted(open_order_symbols)),
+            drawdown_liquidation_state=liquidation_state,
+            session_date=liquidation_session,
         )
         prices: dict[str, float] = {symbol: series[-1].close for symbol, series in self.history.items() if series}
         for position in account.positions:

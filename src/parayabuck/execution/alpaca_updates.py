@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import Market
-from parayabuck.data.alpaca_stream import guard_sdk_cast, supervise_sdk_stream
+from parayabuck.data.alpaca_stream import guard_sdk_cast, supervise_sdk_stream, wait_for_sdk_loop
 from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_client import parse_broker_timestamp
 from parayabuck.logger import get_logger
@@ -65,6 +65,8 @@ class AlpacaTradingUpdateStream:
 
     # Set by stop(); a run() that starts after it returns without connecting.
     _stop_requested = False
+    # Set by run() before it reads _stop_requested (see stop()).
+    _run_entered = False
 
     def __init__(
         self,
@@ -215,6 +217,9 @@ class AlpacaTradingUpdateStream:
         )
 
     def run(self) -> None:
+        # The mark is set before the flag is read: a stop() that sets the flag
+        # after this read still sees the mark and waits for the SDK loop.
+        self._run_entered = True
         # A stop that arrived before this run began must not be lost: the SDK
         # forgets it, and the run would then consume until process exit.
         if self._stop_requested:
@@ -223,6 +228,8 @@ class AlpacaTradingUpdateStream:
 
     def stop(self) -> None:
         self._stop_requested = True
+        if self._run_entered:
+            wait_for_sdk_loop(self._stream)
         # alpaca-py creates the event loop only inside run(); its stop()
         # dereferences that loop, so a never-run stream has nothing to stop.
         if getattr(self._stream, "_loop", ...) is None:

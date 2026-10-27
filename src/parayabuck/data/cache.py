@@ -195,6 +195,31 @@ class WarmupCache:
             self.connection.commit()
             return int(cursor.rowcount)
 
+    def invalidate_symbol(
+        self,
+        symbol: str,
+        *,
+        market: Market = Market.EQUITY,
+        feed: str,
+        timeframe: str,
+        adjustment: str,
+    ) -> int:
+        """Delete every cached bar of one symbol on one basis; returns the row count.
+
+        Used when the provider's answer shows that the cached rows are on another
+        price basis (a split or dividend rebase). Those rows cannot be mixed with
+        the new basis, outside the answered window included, so the whole
+        feed/adjustment/timeframe series of the symbol is dropped and refetched.
+        """
+        canonical = canonical_symbol(symbol, market)
+        with self._lock:
+            cursor = self.connection.execute(
+                "DELETE FROM bars WHERE feed=? AND symbol=? AND market=? AND timeframe=? AND adjustment=?",
+                (feed, canonical, market.value, timeframe, adjustment),
+            )
+            self.connection.commit()
+            return int(cursor.rowcount)
+
     def replace_window(
         self,
         bars: list[Bar],

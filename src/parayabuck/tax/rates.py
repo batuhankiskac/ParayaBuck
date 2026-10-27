@@ -190,9 +190,11 @@ def load_yiufe_csv(path: Path) -> dict[str, float]:
     return indices
 
 
-def load_rate_book(usdtry_path: Path = DEFAULT_USDTRY_PATH, yiufe_path: Path = DEFAULT_YIUFE_PATH) -> RateBook:
-    """Load both CSV files into one :class:`RateBook`."""
-    return RateBook(usd_try=load_usdtry_csv(Path(usdtry_path)), yiufe=load_yiufe_csv(Path(yiufe_path)))
+def load_rate_book(usdtry_path: Path | None = None, yiufe_path: Path | None = None) -> RateBook:
+    """Load both CSV files into one :class:`RateBook` (the checkout's data/tax files by default)."""
+    usdtry = Path(usdtry_path) if usdtry_path is not None else DEFAULT_USDTRY_PATH
+    yiufe = Path(yiufe_path) if yiufe_path is not None else DEFAULT_YIUFE_PATH
+    return RateBook(usd_try=load_usdtry_csv(usdtry), yiufe=load_yiufe_csv(yiufe))
 
 
 # -- TCMB EVDS download -------------------------------------------------------

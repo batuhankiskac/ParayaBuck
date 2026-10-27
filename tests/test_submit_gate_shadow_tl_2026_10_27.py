@@ -264,6 +264,15 @@ def test_hold_metadata_carries_the_tl_shadow_only_when_present() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _use_rate_root(monkeypatch, root: Path) -> None:
+    # The default rate files sit under the checkout's data/tax (Q2-5-7); point
+    # them at this test's root instead of relying on the working directory.
+    import parayabuck.tax.rates as rates_module
+
+    monkeypatch.setattr(rates_module, "DEFAULT_USDTRY_PATH", root / "data" / "tax" / "usdtry.csv")
+    monkeypatch.setattr(rates_module, "DEFAULT_YIUFE_PATH", root / "data" / "tax" / "yiufe.csv")
+
+
 def _write_rates(root: Path) -> None:
     data = root / "data" / "tax"
     data.mkdir(parents=True)
@@ -287,7 +296,7 @@ def _fills_with_a_consumed_lot() -> list[tuple[datetime, str, float, float | Non
 def test_runtime_probe_computes_the_tl_fraction_for_a_two_lot_book(tmp_path, monkeypatch) -> None:
     runtime, repository, _ = _runtime_with_decision(tmp_path, _SimBroker())
     _write_rates(tmp_path)
-    monkeypatch.chdir(tmp_path)
+    _use_rate_root(monkeypatch, tmp_path)
     monkeypatch.setattr(repository, "_owned_events", lambda *args, **kwargs: _fills_with_a_consumed_lot())
 
     probe = runtime._gain_band_tl_shadow_probe()
@@ -300,7 +309,7 @@ def test_runtime_probe_skips_silently_without_rate_files(tmp_path, monkeypatch) 
     runtime, repository, _ = _runtime_with_decision(tmp_path, _SimBroker())
     empty_root = tmp_path / "no_rates"
     empty_root.mkdir()
-    monkeypatch.chdir(empty_root)
+    _use_rate_root(monkeypatch, empty_root)
     monkeypatch.setattr(repository, "_owned_events", lambda *args, **kwargs: _fills_with_a_consumed_lot())
 
     probe = runtime._gain_band_tl_shadow_probe()
@@ -311,7 +320,7 @@ def test_runtime_probe_skips_silently_without_rate_files(tmp_path, monkeypatch) 
 def test_runtime_probe_skips_when_the_buy_history_is_shorter_than_the_lots(tmp_path, monkeypatch) -> None:
     runtime, repository, _ = _runtime_with_decision(tmp_path, _SimBroker())
     _write_rates(tmp_path)
-    monkeypatch.chdir(tmp_path)
+    _use_rate_root(monkeypatch, tmp_path)
     monkeypatch.setattr(repository, "_owned_events", lambda *args, **kwargs: _fills_with_a_consumed_lot()[-1:])
 
     probe = runtime._gain_band_tl_shadow_probe()
@@ -381,7 +390,7 @@ def test_missing_rates_leave_the_shadow_fields_absent_and_the_usd_verdict_identi
     runtime, _, _ = _runtime_with_decision(tmp_path, _SimBroker())
     empty_root = tmp_path / "no_rates"
     empty_root.mkdir()
-    monkeypatch.chdir(empty_root)
+    _use_rate_root(monkeypatch, empty_root)
 
     plain_orders, plain_holds = _plan_downsize()
     orders, holds = _plan_downsize(runtime._gain_band_tl_shadow_probe())

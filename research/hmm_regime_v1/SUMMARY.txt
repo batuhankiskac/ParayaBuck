@@ -1,0 +1,8 @@
+hmm_regime_v1 SUMMARY (numbers from RESULTS.json)
+wall_clock_seconds_run: 6.8
+passing arms: none
+K: pre CAGR base 15.76% max DD 46.67% after tax 2000/2010/2017 10.75/15.24/23.97% sells/yr 10.2
+R2: pre CAGR base 15.48% max DD 46.76% after tax 2000/2010/2017 10.16/14.71/22.89% sells/yr 29.6
+H1: pre CAGR base 13.50% max DD 38.37% after tax 2000/2010/2017 8.34/11.62/16.08% sells/yr 19.7
+H2: pre CAGR base 14.55% max DD 42.84% after tax 2000/2010/2017 8.87/12.42/17.88% sells/yr 10.2
+H3: pre CAGR base 14.62% max DD 41.03% after tax 2000/2010/2017 8.85/12.12/17.18% sells/yr 11.8

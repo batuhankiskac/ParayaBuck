@@ -13,6 +13,7 @@ from requests.exceptions import RequestException
 from parayabuck.config import Config, EngineConfig, RiskLimits
 from parayabuck.core.models import AccountSnapshot, Market
 from parayabuck.execution.ledger import ExecutionLedger
+from parayabuck.markets.timeframes import NEW_YORK
 from parayabuck.risk.state import RiskState
 from parayabuck.runtime import EngineRuntime
 
@@ -72,7 +73,8 @@ def test_ownership_drift_halt_survives_session_day_restart(tmp_path: Path) -> No
 def test_drift_halt_rewrite_keeps_the_risk_state_peak_epoch(tmp_path: Path) -> None:
     """The halt's risk_state rewrite must not reset a post-reset peak epoch
     to 0 (the persisted-peak restore groups rows by epoch)."""
-    today = datetime.now(UTC).date()
+    # The runtime keys risk_state by the New York session date, not the UTC date.
+    today = datetime.now(UTC).astimezone(NEW_YORK).date()
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     ledger.save_risk_state(
         RiskState(
@@ -252,7 +254,7 @@ def test_protection_failure_persisted_by_risk_state_survives_restart(tmp_path: P
     runtime._persist_risk_state(account)
 
     assert [i.reason for i in ledger.load_safety_incidents("acct")] == ["protection_failure"]
-    row = ledger.load_risk_state("acct", datetime.now(UTC).date())
+    row = ledger.load_risk_state("acct", datetime.now(UTC).astimezone(NEW_YORK).date())
     assert row is not None and row.circuit_breaker_reason == "protection_failure"
 
     restarted = _runtime_with_ledger(ledger)

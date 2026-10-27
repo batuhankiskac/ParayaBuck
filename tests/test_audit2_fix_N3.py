@@ -72,16 +72,22 @@ def test_shutdown_style_stop_leaves_auto_start_on(manager: EngineManager, tmp_pa
     assert manager.should_auto_start() is True
 
 
-def test_failed_stop_record_write_keeps_engine_running(manager: EngineManager, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_failed_stop_record_write_still_stops_and_alerts(
+    manager: EngineManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An operator Stop must never leave the engine trading: the record is a
+    # convenience for restarts, so its failure is alerted, not obeyed.
     def refuse(self: EngineManager) -> None:
         raise OSError("disk full")
 
+    alerts: list[dict[str, object]] = []
     monkeypatch.setattr(EngineManager, "_write_operator_stop_marker", refuse)
-    manager.engine_state = "running"
+    monkeypatch.setattr("parayabuck.web.managers.engine._alert_start_failure", lambda **kwargs: alerts.append(kwargs))
+    manager.engine_state = "stopped"
 
-    with pytest.raises(RuntimeError, match="Motor durdurulamadı"):
-        manager.stop_engine(operator_request=True)
-    assert manager.engine_state == "running"
+    manager.stop_engine(operator_request=True)  # no raise: the stop goes ahead
+
+    assert [alert["reason"] for alert in alerts] == ["operator_stop_unrecorded"]
 
 
 def test_explicit_start_clears_the_operator_stop(manager: EngineManager, tmp_path: Path) -> None:

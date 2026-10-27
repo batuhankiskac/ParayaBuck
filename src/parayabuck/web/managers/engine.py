@@ -1148,15 +1148,19 @@ class EngineManager:
     def stop_engine(self, *, operator_request: bool = False) -> None:
         # Only an explicit operator Stop is durable. Shutdown, restarts and
         # settings saves stop the engine without it, so they can still auto-start.
-        # Written before any state change: if the record cannot be saved the
-        # engine keeps running and the operator is told.
+        # A record that cannot be saved never keeps the engine running: the
+        # stop still happens, and the operator is told it will not survive a
+        # restart.
         if operator_request:
             try:
                 self._write_operator_stop_marker()
             except OSError as exc:
-                raise RuntimeError(
-                    "Motor durdurulamadı: durdurma kaydı yazılamadı; motor çalışmaya devam ediyor."
-                ) from exc
+                message = (
+                    "Durdurma kaydı yazılamadı; motor durduruluyor ama bir yeniden "
+                    f"başlatmada otomatik olarak tekrar başlayabilir ({exc})"
+                )
+                log.error("%s", message)
+                _alert_start_failure(reason="operator_stop_unrecorded", message=message, auto_start=False)
         with self._state_lock:
             # A start attempt still in flight must abort before its
             # resume/catch-up steps submit orders (see StartupCancelled).

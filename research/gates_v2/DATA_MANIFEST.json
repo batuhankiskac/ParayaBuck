@@ -1,0 +1,43 @@
+{
+ "campaign": "gates_v2",
+ "tag_source": "archive/research/closeout-2026-10 (restored unchanged)",
+ "note": "Inputs read by fe_config/fe_data/fe_study. Only the files below are read by research/gates_v2/screen.py. band_h2 RESULTS.json is used only for the control anchors, not as an input to the study; fe_config.py is the engine config.",
+ "files": [
+  {
+   "path": "data/historical/stress_robustness_v1_daily.csv",
+   "sha256": "f162780d4dab6afae02252c4cbd5ade0b27ee5a20a836aff9ea10c3b587bebbf",
+   "bytes": 2671225,
+   "role": "input"
+  },
+  {
+   "path": "data/historical/stress_robustness_v1_dtb3.csv",
+   "sha256": "e6bf8e030c7847400fb99986497c5030fe253a88515792d215e2f89fd969241c",
+   "bytes": 301157,
+   "role": "input"
+  },
+  {
+   "path": "data/historical/after_tax_tr_v1_usdtry_cbrt.csv",
+   "sha256": "195b5446ffb2293b390c440c6235e7936366a4a39b715887e27188e62dc1c684",
+   "bytes": 172726,
+   "role": "input"
+  },
+  {
+   "path": "data/historical/after_tax_tr_v1_yiufe.csv",
+   "sha256": "396f2f1a2b2aad919d976f7a85bbeb6adfaeffe1c8c15cdefb4bdaf8cba1f56c",
+   "bytes": 17845,
+   "role": "input"
+  },
+  {
+   "path": "research/band_h2_combo_v1/RESULTS.json",
+   "sha256": "5924ea58ed56c83526ffb9ae015708ce225bcafb4f209afcf9398623412d5997",
+   "bytes": 260050,
+   "role": "control_reference_or_code"
+  },
+  {
+   "path": "research/fast_engine/fe_config.py",
+   "sha256": "9cf7cf584bde3447c85a0c91eb59c7461bcd54d350a230d5f21a270e3978c6e9",
+   "bytes": 3731,
+   "role": "control_reference_or_code"
+  }
+ ]
+}

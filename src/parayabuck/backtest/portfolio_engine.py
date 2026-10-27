@@ -8,6 +8,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from itertools import pairwise
 from types import EllipsisType
+from typing import Literal
 
 from parayabuck.backtest.regulatory_fees import rates_for_trade_date
 from parayabuck.backtest.stats import sample_stddev
@@ -220,10 +221,8 @@ class PortfolioBacktestResult:
     # Price-only, close-to-close total return of buy-and-hold for each strategy
     # decision symbol (other than the benchmark) over the evaluated curve window.
     benchmarks: dict[str, float] = field(default_factory=dict)
-
-
-def _adverse_bps(slippage_bps: float, spread_bps: float) -> float:
-    return slippage_bps + spread_bps / 2
+    # Total interest credited on idle cash (zero unless cash_rate_series is set).
+    cash_interest: float = 0.0
 
 
 def session_date_for(timestamp: datetime) -> date:
@@ -293,6 +292,9 @@ class PortfolioBacktestEngine:
       the decision's ``rejected_notional``.
     """
 
+    # True only while _fill_cycle runs the research same-bar pass.
+    _same_bar_pass: bool = False
+
     def __init__(
         self,
         strategy: object,
@@ -321,6 +323,13 @@ class PortfolioBacktestEngine:
         enforce_drawdown_halt: bool = False,
         allow_static_universe: bool = False,
         terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
+        cash_rate_series: Mapping[date, float] | None = None,
+        cash_rate_spread: float = 0.0,
+        cost_bps_per_side: float | None = None,
+        fill_lag_sessions: int = 0,
+        fill_basis: Literal["open", "close"] = "open",
+        allow_same_bar_close: bool = False,
+        impact_coefficient: float = 0.0,
     ) -> None:
         if not isinstance(strategy, PortfolioStrategy):
             raise TypeError("PortfolioBacktestEngine requires a PortfolioStrategy")
@@ -359,6 +368,36 @@ class PortfolioBacktestEngine:
             raise ValueError("Cost inputs must be finite and non-negative")
         if not math.isfinite(equity_regulatory_fee_multiplier) or equity_regulatory_fee_multiplier <= 0:
             raise ValueError("Equity regulatory fee multiplier must be finite and positive")
+        if cost_bps_per_side is not None and (not math.isfinite(cost_bps_per_side) or cost_bps_per_side < 0):
+            raise ValueError("cost_bps_per_side must be finite and non-negative")
+        if not math.isfinite(cash_rate_spread) or cash_rate_spread < 0:
+            raise ValueError("cash_rate_spread must be finite and non-negative")
+        if not isinstance(fill_lag_sessions, int) or isinstance(fill_lag_sessions, bool) or fill_lag_sessions < 0:
+            raise ValueError("fill_lag_sessions must be a non-negative integer")
+        if fill_basis not in ("open", "close"):
+            raise ValueError("fill_basis must be 'open' or 'close'")
+        if allow_same_bar_close and (fill_lag_sessions != 0 or fill_basis != "close"):
+            # Research-only signal-close fill: it is the only causal violation
+            # this engine admits, so it is confined to lag 0 at the close.
+            raise ValueError("allow_same_bar_close requires fill_lag_sessions=0 and fill_basis='close'")
+        if not math.isfinite(impact_coefficient) or impact_coefficient < 0:
+            raise ValueError("impact_coefficient must be finite and non-negative")
+        cash_rate_dates: list[date] = []
+        cash_rates: list[float] = []
+        if cash_rate_series is not None:
+            if any(not math.isfinite(rate) for rate in cash_rate_series.values()):
+                raise ValueError("cash_rate_series values must be finite")
+            cash_rate_dates = sorted(cash_rate_series)
+            cash_rates = [float(cash_rate_series[day]) for day in cash_rate_dates]
+        self._cash_rate_dates = cash_rate_dates
+        self._cash_rates = cash_rates
+        self.cash_rate_spread = cash_rate_spread
+        self.cost_bps_per_side = cost_bps_per_side
+        self.fill_lag_sessions = fill_lag_sessions
+        self.fill_basis = fill_basis
+        self.allow_same_bar_close = bool(allow_same_bar_close)
+        self.impact_coefficient = impact_coefficient
+        self._cash_interest_total = 0.0
         self.strategy = strategy
         self.rebalance_policy = rebalance_policy
         self.starting_equity = starting_equity
@@ -462,6 +501,7 @@ class PortfolioBacktestEngine:
         self._cash_shortfall_notional = {}
         self._volume_blocked_notional = {}
         self._dividend_total = 0.0
+        self._cash_interest_total = 0.0
         self._weight_history = []
         self._universe_history = []
         self._holdings_history = []
@@ -533,7 +573,13 @@ class PortfolioBacktestEngine:
                 _last_price[bar.symbol] = bar.close
             _update_risk(ts)
             _decide(ts)
+            if self.allow_same_bar_close:
+                # Research-only: orders decided on this bar fill at its close.
+                self._fill_cycle(cycle, same_bar=True)
             self._apply_terminal_lifecycles(ts, cycle)
+            if self._cash_rates and (j >= n or session_date_for(ordered[j].timestamp) != session_date_for(ts)):
+                # Interest is credited once, at the last cycle of the session.
+                self._accrue_cash_interest(session_date_for(ts))
             curve.append(_equity())
             curve_timestamps.append(ts)
             _record_holdings(ts)
@@ -769,11 +815,105 @@ class PortfolioBacktestEngine:
             for position in self._positions.values()
         )
 
-    def _fill_cycle(self, cycle: list[Bar]) -> None:
-        for bar in cycle:
-            self._fill_side(bar, OrderSide.SELL)
-        for bar in cycle:
-            self._fill_side(bar, OrderSide.BUY)
+    def _fill_cycle(self, cycle: list[Bar], *, same_bar: bool = False) -> None:
+        # Carried as state, not a parameter, so _fill_side keeps its signature
+        # for subclasses that override it.
+        self._same_bar_pass = same_bar
+        try:
+            for bar in cycle:
+                self._fill_side(bar, OrderSide.SELL)
+            for bar in cycle:
+                self._fill_side(bar, OrderSide.BUY)
+        finally:
+            self._same_bar_pass = False
+
+    def _accrue_cash_interest(self, session: date) -> None:
+        """Credit one session of interest on positive idle cash.
+
+        The rate is the latest ``cash_rate_series`` entry on or before the
+        session (forward-filled); no earlier rate means no accrual.
+        """
+        if self._cash <= 0:
+            return
+        index = bisect_right(self._cash_rate_dates, session) - 1
+        if index < 0:
+            return
+        annual_rate = max(0.0, self._cash_rates[index] - self.cash_rate_spread)
+        interest = self._cash * annual_rate / 252
+        self._cash += interest
+        self._cash_interest_total += interest
+
+    def _cost_bps_parts(self) -> tuple[float, float]:
+        """(slippage bps, half-spread bps) charged on every fill and exit.
+
+        ``cost_bps_per_side`` replaces both components with one adverse value
+        (reported entirely as slippage, with no separate spread charge).
+        """
+        if self.cost_bps_per_side is not None:
+            return self.cost_bps_per_side, 0.0
+        return self.slippage_bps, self.spread_bps / 2
+
+    def _reference_price(self, bar: Bar) -> float:
+        return float(bar.close if self.fill_basis == "close" else bar.open)
+
+    def _fill_eligible(self, order: PortfolioOrder, bar: Bar) -> bool:
+        """Whether ``order`` may fill on ``bar``.
+
+        Causal default: never on the decision bar, and on the first bar after
+        it. ``fill_lag_sessions`` skips that many further bars. The same-bar
+        research pass (``_same_bar_pass``) admits only orders decided on this
+        very bar.
+        """
+        if self._same_bar_pass:
+            return bool(order.created_at == bar.timestamp)
+        if order.created_at >= bar.timestamp:
+            return False
+        if self.fill_lag_sessions == 0:
+            return True
+        history = self._execution_history.get((order.symbol, bar.timeframe), [])
+        created_index = bisect_right(history, order.created_at, key=lambda item: item.timestamp)
+        current_index = bisect_right(history, bar.timestamp, key=lambda item: item.timestamp) - 1
+        return current_index - created_index >= self.fill_lag_sessions
+
+    def _known_daily_volatility(self, order: PortfolioOrder, timeframe: str) -> float | None:
+        """Sample stdev of the last 20 close-to-close returns known at creation.
+
+        Returns None when fewer than 20 returns were observable, so the
+        impact model cannot be evaluated and the order is blocked.
+        """
+        history = self._execution_history.get((order.symbol, timeframe), [])
+        end = bisect_right(history, order.created_at, key=lambda item: item.timestamp)
+        closes = [history[index].close for index in range(max(0, end - 21), end)]
+        returns = [closes[i] / closes[i - 1] - 1 for i in range(1, len(closes)) if closes[i - 1] > 0]
+        if len(returns) < 20:
+            return None
+        return float(sample_stddev(returns))
+
+    def _execution_costs(
+        self,
+        side: OrderSide,
+        reference: float,
+        quantity: float,
+        average_volume: float,
+        daily_vol: float,
+    ) -> tuple[float, float, float]:
+        """Return ``(fill_price, slippage_cost, spread_cost)`` for one fill.
+
+        Square-root impact ``impact_coefficient * daily_vol * sqrt(qty / ADV)``
+        is added to the adverse move and charged as slippage.
+        """
+        slip_bps, half_spread_bps = self._cost_bps_parts()
+        impact = 0.0
+        if self.impact_coefficient > 0 and quantity > 0:
+            impact = self.impact_coefficient * daily_vol * math.sqrt(quantity / average_volume)
+        side_multiplier = 1 if side == OrderSide.BUY else -1
+        adverse = slip_bps + half_spread_bps
+        fill_price = reference * (1 + side_multiplier * (adverse / 10_000 + impact))
+        slippage_cost = quantity * reference * slip_bps / 10_000
+        spread_cost = quantity * reference * half_spread_bps / 10_000
+        if impact:
+            slippage_cost += quantity * reference * impact
+        return fill_price, slippage_cost, spread_cost
 
     def _known_average_volume(self, order: PortfolioOrder, timeframe: str) -> float:
         """Average volume observable when the order was created.
@@ -843,16 +983,18 @@ class PortfolioBacktestEngine:
 
     def _fill_side(self, bar: Bar, side: OrderSide) -> None:
         symbol = bar.symbol
+        reference = self._reference_price(bar)
         remaining: list[PortfolioOrder] = []
         for order in self._pending:
             if order.symbol != symbol or order.side != side:
                 remaining.append(order)
                 continue
-            if order.created_at >= bar.timestamp:
+            if not self._fill_eligible(order, bar):
                 remaining.append(order)
                 continue
             known_average_volume = self._known_average_volume(order, bar.timeframe)
-            if known_average_volume <= 0:
+            daily_vol = self._known_daily_volatility(order, bar.timeframe) if self.impact_coefficient > 0 else 0.0
+            if known_average_volume <= 0 or daily_vol is None:
                 # No positive volume was observable when the order was made
                 # (the window is fixed at ``created_at``), so the capacity
                 # model can never size it: it waits until a later decision
@@ -866,7 +1008,7 @@ class PortfolioBacktestEngine:
                         order.qty,
                         order.decision_timestamp.isoformat(),
                     )
-                self._volume_blocked_notional[blocked_key] = order.qty * bar.open
+                self._volume_blocked_notional[blocked_key] = order.qty * reference
                 remaining.append(order)
                 continue
             fillable = min(order.qty, known_average_volume * self.max_participation_pct)
@@ -879,11 +1021,9 @@ class PortfolioBacktestEngine:
                 # based on the quantity actually executed: a sell capped by
                 # current holdings must not charge for unsold shares.
                 fillable = min(fillable, position.qty)
-            adverse = _adverse_bps(self.slippage_bps, self.spread_bps)
-            side_multiplier = 1 if side == OrderSide.BUY else -1
-            fill_price = bar.open * (1 + side_multiplier * adverse / 10_000)
-            slippage_cost = fillable * bar.open * self.slippage_bps / 10_000
-            spread_cost = fillable * bar.open * (self.spread_bps / 2) / 10_000
+            fill_price, slippage_cost, spread_cost = self._execution_costs(
+                side, reference, fillable, known_average_volume, daily_vol
+            )
             fee = self.commission + self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
             if side == OrderSide.BUY:
                 notional = fillable * fill_price
@@ -892,7 +1032,7 @@ class PortfolioBacktestEngine:
                     # Fill what the cash above the configured buffer buys and
                     # report the rest as rejected instead of skipping silently.
                     affordable = self._affordable_buy_quantity(fill_price, bar.timestamp.date())
-                    shortfall = (order.qty - affordable) * bar.open
+                    shortfall = (order.qty - affordable) * reference
                     self._cash_shortfall_notional[order.decision_timestamp] = (
                         self._cash_shortfall_notional.get(order.decision_timestamp, 0.0) + shortfall
                     )
@@ -907,8 +1047,9 @@ class PortfolioBacktestEngine:
                         continue
                     cash_limited = True
                     fillable = affordable
-                    slippage_cost = fillable * bar.open * self.slippage_bps / 10_000
-                    spread_cost = fillable * bar.open * (self.spread_bps / 2) / 10_000
+                    fill_price, slippage_cost, spread_cost = self._execution_costs(
+                        side, reference, fillable, known_average_volume, daily_vol
+                    )
                     fee = self.commission + self._equity_fee(side, fillable, fill_price, bar.timestamp.date())
                     notional = fillable * fill_price
                 self._cash -= notional + fee
@@ -971,7 +1112,7 @@ class PortfolioBacktestEngine:
                     market=order.market,
                     side=side,
                     qty=fillable,
-                    reference_price=bar.open,
+                    reference_price=reference,
                     fill_price=fill_price,
                     slippage_cost=slippage_cost,
                     spread_cost=spread_cost,
@@ -1575,8 +1716,8 @@ class PortfolioBacktestEngine:
     def _close_position(self, position: _Position, bar: Bar) -> None:
         if position.qty <= 0:
             return
-        adverse = _adverse_bps(self.slippage_bps, self.spread_bps)
-        exit_price = bar.close * (1 - adverse / 10_000)
+        slip_bps, half_spread_bps = self._cost_bps_parts()
+        exit_price = bar.close * (1 - (slip_bps + half_spread_bps) / 10_000)
         fee = self.commission + self._equity_fee(OrderSide.SELL, position.qty, exit_price, bar.timestamp.date())
         realized_delta = (exit_price - position.avg_price) * position.qty - position.entry_fee - fee
         lifetime_realized = position.realized_pnl_accumulator + realized_delta
@@ -1590,8 +1731,8 @@ class PortfolioBacktestEngine:
         self._liquidation_costs.append(
             (
                 position.symbol,
-                position.qty * bar.close * self.slippage_bps / 10_000,
-                position.qty * bar.close * (self.spread_bps / 2) / 10_000,
+                position.qty * bar.close * slip_bps / 10_000,
+                position.qty * bar.close * half_spread_bps / 10_000,
                 fee,
             )
         )
@@ -1606,8 +1747,8 @@ class PortfolioBacktestEngine:
                 "fill_price": exit_price,
                 "proceeds": max(0.0, position.qty * exit_price - fee),
                 "fee": fee,
-                "slippage_cost": position.qty * bar.close * self.slippage_bps / 10_000,
-                "spread_cost": position.qty * bar.close * (self.spread_bps / 2) / 10_000,
+                "slippage_cost": position.qty * bar.close * slip_bps / 10_000,
+                "spread_cost": position.qty * bar.close * half_spread_bps / 10_000,
                 "cash_before": self._cash - (position.qty * exit_price - fee),
                 "cash_after": self._cash,
                 "position_removed": True,
@@ -1628,13 +1769,26 @@ class PortfolioBacktestEngine:
         ending = curve[-1] if curve else self.starting_equity
         peak = self.starting_equity
         peak_index = 0
+        underwater = False
         max_drawdown = 0.0
         max_drawdown_duration_days = 0
         for index, equity in enumerate(curve):
+            # Duration clock only (magnitude is unchanged: a bar at the peak has
+            # no drawdown). A new high restarts the clock as before. A return
+            # to the prior high exactly (>=, not >) also closes the underwater
+            # span at this bar, so the span is peak -> recovery bar.
             if equity > peak:
                 peak = equity
                 peak_index = index
-            elif equity < peak and peak > 0:
+                underwater = False
+            elif equity >= peak:
+                if underwater and curve_timestamps:
+                    span_days = (curve_timestamps[index] - curve_timestamps[peak_index]).total_seconds() / 86_400
+                    max_drawdown_duration_days = max(max_drawdown_duration_days, int(span_days))
+                peak_index = index
+                underwater = False
+            elif peak > 0:
+                underwater = True
                 drawdown = (peak - equity) / peak
                 max_drawdown = max(max_drawdown, drawdown)
                 if curve_timestamps:
@@ -1722,6 +1876,7 @@ class PortfolioBacktestEngine:
             benchmark_return_basis=benchmark_return_basis,
             time_in_market=time_in_market,
             benchmarks=benchmarks,
+            cash_interest=self._cash_interest_total,
             excess_return=total_return - benchmark_return,
             gross_return=gross_return,
             net_return=total_return,

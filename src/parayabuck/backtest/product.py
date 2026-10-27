@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any, Literal
 from uuid import uuid4
 
 from parayabuck.backtest.portfolio_engine import (
+    OrderSide,
     PortfolioBacktestEngine,
     PortfolioBacktestResult,
     TerminalLifecycle,
@@ -479,6 +481,13 @@ def run_product_backtest(
     terminal_lifecycles: Mapping[str, TerminalLifecycle] | None = None,
     build_report: bool = True,
     strict: bool = True,
+    cash_rate_series: Mapping[date, float] | None = None,
+    cash_rate_spread: float = 0.0,
+    cost_bps_per_side: float | None = None,
+    fill_lag_sessions: int = 0,
+    fill_basis: Literal["open", "close"] = "open",
+    allow_same_bar_close: bool = False,
+    impact_coefficient: float = 0.0,
 ) -> ProductBacktestResult:
     """Run the product strategy over ``bars``.
 
@@ -486,6 +495,11 @@ def run_product_backtest(
     calendar failure, or a gappy daily history for a decision symbol raises
     ``ValueError``. ``strict=False`` keeps the degraded behaviour (every bar is
     evaluated with a warning, weekday calendar fallback, no gap check).
+
+    The execution options all default to the established model (fills at the
+    next bar's open, configured slippage plus half-spread, no idle-cash
+    interest, no impact). ``cost_bps_per_side`` is scaled by ``cost_multiplier``
+    like the configured costs. See ``PortfolioBacktestEngine`` for semantics.
     """
     if cost_multiplier <= 0:
         raise ValueError("cost_multiplier must be positive")
@@ -569,6 +583,13 @@ def run_product_backtest(
         maximum_allocation=selection.maximum_allocation,
         execution_policy=portfolio_execution_policy_from_config(config.execution),
         terminal_lifecycles=terminal_lifecycles,
+        cash_rate_series=cash_rate_series,
+        cash_rate_spread=cash_rate_spread,
+        cost_bps_per_side=(None if cost_bps_per_side is None else cost_bps_per_side * cost_multiplier),
+        fill_lag_sessions=fill_lag_sessions,
+        fill_basis=fill_basis,
+        allow_same_bar_close=allow_same_bar_close,
+        impact_coefficient=impact_coefficient,
     )
     result = engine.run(
         filtered,
@@ -656,6 +677,18 @@ def run_product_backtest(
             },
         }
     )
+    execution_options = _execution_options_summary(
+        result,
+        cash_rate_series=cash_rate_series,
+        cash_rate_spread=cash_rate_spread,
+        cost_bps_per_side=(None if cost_bps_per_side is None else cost_bps_per_side * cost_multiplier),
+        fill_lag_sessions=fill_lag_sessions,
+        fill_basis=fill_basis,
+        allow_same_bar_close=allow_same_bar_close,
+        impact_coefficient=impact_coefficient,
+    )
+    if execution_options is not None:
+        report.summary["execution_options"] = execution_options
     run_id = uuid4().hex
     destination = Path(output_dir or config.backtest.output_dir) / run_id
     if persist_artifacts:
@@ -671,6 +704,134 @@ def run_product_backtest(
         )
     score = ranking_score(result, config.backtest.ranking_metric)
     return ProductBacktestResult(run_id, result, report, universe, str(destination), score)
+
+
+def _execution_options_summary(
+    result: PortfolioBacktestResult,
+    *,
+    cash_rate_series: Mapping[date, float] | None,
+    cash_rate_spread: float,
+    cost_bps_per_side: float | None,
+    fill_lag_sessions: int,
+    fill_basis: str,
+    allow_same_bar_close: bool,
+    impact_coefficient: float,
+) -> dict[str, object] | None:
+    """Report block for non-default execution options; None when all default."""
+    if (
+        cash_rate_series is None
+        and cost_bps_per_side is None
+        and fill_lag_sessions == 0
+        and fill_basis == "open"
+        and not allow_same_bar_close
+        and impact_coefficient == 0.0
+    ):
+        return None
+    return {
+        "cash_rate_series_supplied": cash_rate_series is not None,
+        "cash_rate_spread": cash_rate_spread,
+        "cash_interest": result.cash_interest,
+        "cost_bps_per_side": cost_bps_per_side,
+        "fill_lag_sessions": fill_lag_sessions,
+        "fill_basis": fill_basis,
+        "allow_same_bar_close": allow_same_bar_close,
+        "impact_coefficient": impact_coefficient,
+    }
+
+
+def _run_metrics(run: ProductBacktestResult) -> dict[str, object]:
+    portfolio = run.result
+    years = portfolio.duration_days / 365.0
+    sells = sum(1 for fill in portfolio.fills if fill.side == OrderSide.SELL)
+    return {
+        "ending_equity": portfolio.ending_equity,
+        "total_return": portfolio.total_return,
+        "cagr": portfolio.cagr,
+        "max_drawdown": portfolio.max_drawdown,
+        "sells_per_year": sells / years if years > 0 else 0.0,
+        "turnover": portfolio.turnover,
+        "fee_total": portfolio.fee_total,
+        "slippage_cost_total": portfolio.slippage_cost_total,
+    }
+
+
+def cost_sensitivity(
+    config: Config,
+    bars: list[Bar],
+    *,
+    market: Market,
+    grid: tuple[float, ...] = (0.0, 10.0, 25.0),
+    multipliers: tuple[float, ...] = (2.0,),
+    **run_kwargs: Any,
+) -> list[dict[str, object]]:
+    """Rerun the product backtest under alternative cost assumptions.
+
+    The first row is the configured baseline. Each ``grid`` value replaces the
+    adverse cost with that many bps per side (regulatory fees unchanged). Each
+    ``multipliers`` value scales the configured slippage, spread and fees.
+    Artifacts are not persisted. ``run_kwargs`` are forwarded unchanged.
+    """
+    reserved = ("cost_multiplier", "cost_bps_per_side", "persist_artifacts", "build_report")
+    conflicts = [name for name in reserved if name in run_kwargs]
+    if conflicts:
+        raise ValueError(f"cost_sensitivity controls {', '.join(conflicts)}; do not pass it")
+    settings: list[tuple[str, dict[str, object]]] = [("baseline", {})]
+    settings += [(f"{bps:g} bps per side", {"cost_bps_per_side": float(bps)}) for bps in grid]
+    settings += [(f"{factor:g}x configured costs", {"cost_multiplier": float(factor)}) for factor in multipliers]
+    rows: list[dict[str, object]] = []
+    for label, overrides in settings:
+        run = run_product_backtest(
+            config,
+            bars,
+            market=market,
+            persist_artifacts=False,
+            build_report=False,
+            **{**run_kwargs, **overrides},
+        )
+        rows.append({"setting": label, **_run_metrics(run)})
+    return rows
+
+
+# (scenario, fill options). ``same_close`` is the research-only signal-close
+# fill: an upper bound on what a decision made from the bar's own close could
+# have earned, not a tradable result.
+FILL_TIMING_SCENARIOS: tuple[tuple[str, dict[str, object]], ...] = (
+    ("same_close", {"fill_lag_sessions": 0, "fill_basis": "close", "allow_same_bar_close": True}),
+    ("next_open", {"fill_lag_sessions": 0, "fill_basis": "open", "allow_same_bar_close": False}),
+    ("next_close", {"fill_lag_sessions": 0, "fill_basis": "close", "allow_same_bar_close": False}),
+    ("two_session_delay", {"fill_lag_sessions": 1, "fill_basis": "open", "allow_same_bar_close": False}),
+)
+
+
+def fill_timing_report(
+    config: Config,
+    bars: list[Bar],
+    *,
+    market: Market,
+    **run_kwargs: Any,
+) -> dict[str, dict[str, object]]:
+    """Compare fill timing: same-bar close, next open, next close, 2-session delay.
+
+    ``two_session_delay`` fills at the open two sessions after the decision bar
+    (``fill_lag_sessions=1`` on top of the next-open fill). Keys per scenario:
+    the fill options plus the ``_run_metrics`` fields.
+    """
+    reserved = ("fill_lag_sessions", "fill_basis", "allow_same_bar_close", "persist_artifacts", "build_report")
+    conflicts = [name for name in reserved if name in run_kwargs]
+    if conflicts:
+        raise ValueError(f"fill_timing_report controls {', '.join(conflicts)}; do not pass it")
+    report: dict[str, dict[str, object]] = {}
+    for name, options in FILL_TIMING_SCENARIOS:
+        run = run_product_backtest(
+            config,
+            bars,
+            market=market,
+            persist_artifacts=False,
+            build_report=False,
+            **{**run_kwargs, **options},
+        )
+        report[name] = {**options, **_run_metrics(run)}
+    return report
 
 
 def optimize_grid(

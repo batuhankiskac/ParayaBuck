@@ -511,7 +511,7 @@ def test_oversized_approval_file_is_refused_before_it_is_read(tmp_path: Path, mo
     )
 
     assert approval is None
-    assert "larger than" in str(items["approval_signature"])
+    assert "bayttan büyük" in str(items["approval_signature"])
 
 
 def test_approval_parse_error_does_not_echo_the_file_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -527,7 +527,7 @@ def test_approval_parse_error_does_not_echo_the_file_value(tmp_path: Path, monke
 
     assert approval is None
     assert "marker-7741" not in str(items["approval_signature"])
-    assert "unreadable or invalid" in str(items["approval_signature"])
+    assert "okunamıyor veya geçersiz" in str(items["approval_signature"])
 
 
 # --- S-7: the .env writer escapes backslashes -------------------------------------------

@@ -246,7 +246,7 @@ def test_failed_status_poll_moves_the_engine_pill_to_unknown() -> None:
 
     assert 'renderEngineState("unknown")' in catch
     assert 'state: "unknown"' in catch
-    assert '"Bilinmiyor"' in source
+    assert 'setText("statusText", STATE_LABELS[shell.state] || "Bilinmiyor")' in source
 
 
 def test_breaker_codes_are_shown_in_turkish_with_raw_fallback() -> None:
@@ -336,7 +336,7 @@ def test_healthy_label_is_not_shown_without_a_market_feed() -> None:
     source = _read("dashboard.js")
 
     assert "markets.equity ? markets.equity.stream_healthy !== false : null" in source
-    assert '"Bilinmiyor"' in source
+    assert 'dataOk === null ? "Bilinmiyor" : dataOk ? "Güncel" : "Gecikme var"' in source
 
 
 def test_trend_card_names_the_cash_state_before_the_signal() -> None:

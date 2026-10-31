@@ -113,7 +113,7 @@ def test_closed_unresolved_rebalance_is_a_health_degradation(tmp_path: Path) -> 
     check = health._check_execution(str(tmp_path / "runtime.sqlite3"))
 
     assert check.status == health.HealthStatus.DEGRADED
-    assert "closed with an unsettled SELL leg" in check.summary
+    assert "çözülmemiş bir satış bacağıyla kapandı" in check.summary
 
 
 def _rebalance_db(path: Path, rows: list[tuple[str, str, str, str, str]]) -> Path:

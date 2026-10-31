@@ -123,9 +123,32 @@
   const BREAKER_LABELS = {
     ownership_drift: "sahiplik uyuşmazlığı", reconciliation_failed: "mutabakat hatası",
     reconciliation_bug_suspected: "mutabakat hatası şüphesi", protection_failure: "koruma hatası",
-    ambiguous_order_state: "belirsiz emir durumu", operator_halt: "operatör durdurması"
+    ambiguous_order_state: "belirsiz emir durumu", operator_halt: "operatör durdurması",
+    portfolio_runtime_failure: "portföy çalışma hatası", decision_worker_crashed: "karar işçisi çöktü",
+    trade_update_callback_failure: "işlem güncelleme geri çağrısı hatası",
+    final_market_event_queue_overflow: "piyasa olayı kuyruğu taştı", account_fetch_failures: "hesap verisi okunamadı"
   };
-  function breakerLabel(code) { return BREAKER_LABELS[code] || String(code); }
+  // Restart-limit halts are named "<worker>_restart_limit" by the runtime.
+  function breakerLabel(code) {
+    const text = String(code);
+    if (BREAKER_LABELS[text]) return BREAKER_LABELS[text];
+    if (/_restart_limit$/.test(text)) return "yeniden başlatma sınırı aşıldı";
+    return text;
+  }
+  // Refusals come from the server in English; the owner reads Turkish. Known phrases are translated,
+  // anything else is shown as it arrives.
+  const REFUSAL_TEXT = [
+    [/Operator halt marker is still present; run `?parayabuck resume`? before resetting/,
+      "Operatör durdurma işareti hâlâ var; sıfırlamadan önce sunucuda parayabuck resume çalıştırın."],
+    [/Safety lock is not operator-resettable: ?(.*)$/, function (_, reason) {
+      return "Güvenlik kilidi operatör tarafından sıfırlanamaz: " + (reason === "none" ? "aktif kilit yok" : reason);
+    }]
+  ];
+  function translateRefusal(text) {
+    let out = String(text);
+    REFUSAL_TEXT.forEach(function (pair) { out = out.replace(pair[0], pair[1]); });
+    return out;
+  }
 
   // ---------- toasts ----------
   function toast(message, level) {
@@ -167,6 +190,12 @@
       alt.textContent = opts.altLabel || "";
     }
     byId("pbDialogCancel").hidden = false;
+    // Enter in the phrase field confirms. The first submit button in the form is Cancel, and Enter would cancel silently.
+    if (input) {
+      input.onkeydown = function (e) {
+        if (opts.input && e.key === "Enter") { e.preventDefault(); ok.click(); }
+      };
+    }
     return new Promise(function (resolve) {
       const onClose = function () {
         dlg.removeEventListener("close", onClose);
@@ -255,11 +284,20 @@
   };
   const ACTIVE_STATES = ["running", "warming_up", "degraded", "halted"];
   const listeners = { status: [], stream: [] };
-  const shell = { paper: true, accountSuffix: "", state: "stopped", status: null, operatorHalt: null };
+  // paper: null until the first status reply says which mode the engine is in.
+  const shell = { paper: null, accountSuffix: "", state: "stopped", status: null, operatorHalt: null, breaker: null };
 
   function renderMode() {
     const chip = byId("modeChip");
     if (!chip) return;
+    // Unknown mode: no mode is claimed, so no mode-specific dialog can be skipped.
+    if (shell.paper === null) {
+      chip.className = "pill";
+      setText("modeText", "—");
+      setText("modeSuffix", "");
+      chip.title = "İşlem modu okunamadı; sunucu yanıtını bekleyin.";
+      return;
+    }
     chip.className = "pill " + (shell.paper ? "mode-paper" : "mode-live");
     setText("modeText", shell.paper ? "Paper" : "CANLI");
     setText("modeSuffix", shell.accountSuffix ? "· …" + shell.accountSuffix : "");
@@ -277,7 +315,8 @@
     const reset = byId("resetSafetyBtn");
     const epoch = byId("riskEpochBtn");
     const active = ACTIVE_STATES.indexOf(shell.state) !== -1;
-    if (reset) reset.hidden = shell.state !== "halted" && shell.state !== "degraded";
+    // The reset button is shown only while a safety lock is in force (the single rule for both paths).
+    if (reset) reset.hidden = !shell.breaker;
     if (epoch) epoch.hidden = !active;
     if (!start || !stop) return;
     // A control request in flight owns the buttons: a poll must not re-enable them mid-request.
@@ -288,6 +327,8 @@
     else { start.disabled = true; stop.disabled = true; }
     // An operator halt refuses every start until the marker is removed on the host.
     if (shell.operatorHalt) start.disabled = true;
+    // Start waits for the mode: a CANLI start must pass the LIVE confirmation, which needs the mode first.
+    if (shell.paper === null) start.disabled = true;
   }
   function marketLabel(status, market) {
     if (!status.runtime) {
@@ -307,6 +348,7 @@
   function renderStatus(status) {
     shell.status = status;
     shell.operatorHalt = status.operator_halt && status.operator_halt.active ? status.operator_halt : null;
+    shell.breaker = (status.runtime && status.runtime.circuit_breaker_reason) || null;
     renderEngineState(status.state, status.paper);
     const markets = (status.runtime && status.runtime.markets) || {};
     setText("marketStatusText",
@@ -316,14 +358,18 @@
     const messages = [];
     let danger = false;
     if (shell.operatorHalt) {
-      messages.push("Operatör durdurması etkin (sebep: " + (shell.operatorHalt.reason || "belirtilmemiş") + "). Motor başlatılamaz; kaldırmak için sunucuda `parayabuck resume` komutunu çalıştırın.");
+      messages.push("Operatör durdurması etkin (sebep: " + (shell.operatorHalt.reason || "belirtilmemiş") + "). Motor başlatılamaz; kaldırmak için sunucuda parayabuck resume komutunu çalıştırın.");
       danger = true;
     }
-    const breaker = status.runtime && status.runtime.circuit_breaker_reason;
-    // "Kilidi doğrula" only means something while a lock is in force; a degraded engine without one has nothing to reset.
-    const resetBtn = byId("resetSafetyBtn");
-    if (resetBtn && !breaker) resetBtn.hidden = true;
-    if (breaker) { messages.push("Güvenlik kilidi devrede (" + breakerLabel(breaker) + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz."); danger = true; }
+    const breaker = shell.breaker;
+    // Kilidi doğrula is shown by renderEngineState, which is the only place that decides its visibility.
+    if (breaker) {
+      let text = "Güvenlik kilidi devrede (" + breakerLabel(breaker) + "): yeni alım yapılmıyor. Sorun giderildiyse “Kilidi doğrula” ile açabilirsiniz.";
+      // The ownership fix is an offline rebase, and its order is not obvious from the reset button.
+      if (breaker === "ownership_drift") text += " Sahiplik uyuşmazlığında sıra: motoru durdurun, sunucuda parayabuck rebase-ownership çalıştırın, motoru başlatın, sonra “Kilidi doğrula”ya basın.";
+      messages.push(text);
+      danger = true;
+    }
     if (status.engine_error) { messages.push("Motor hatası: " + status.engine_error); danger = true; }
     const retry = status.engine && status.engine.retry;
     if (retry) messages.push("Motor otomatik yeniden deneniyor (deneme " + retry.attempt + "), yaklaşık " + fmt.duration(retry.retry_in_seconds) + " sonra.");
@@ -361,7 +407,7 @@
     const res = await api.controlFetch(url, opts);
     const data = await api.responsePayload(res);
     if (!res.ok) {
-      const err = new Error(api.detailText(data, "İstek başarısız (" + res.status + ")"));
+      const err = new Error(translateRefusal(api.detailText(data, "İstek başarısız (" + res.status + ")")));
       err.status = res.status;
       throw err;
     }
@@ -418,8 +464,10 @@
       });
       if (!ok) return;
       withButton(stop, async function () {
-        await postControl("/api/engine/stop");
-        toast("Motor durduruldu.", "warning");
+        const result = await postControl("/api/engine/stop");
+        // "stopping" means a start attempt in flight is being cancelled; the engine is not down yet.
+        if (result && result.status === "stopping") toast("Motor durduruluyor; devam eden başlatma emir göndermeden iptal edilecek.", "warning");
+        else toast("Motor durduruldu.", "warning");
       });
     });
     if (reset) reset.addEventListener("click", async function () {
@@ -428,7 +476,7 @@
       withButton(reset, async function () {
         const result = await postControl("/api/engine/reset-safety-lock");
         if (result && Array.isArray(result.retained) && result.retained.length) {
-          toast("Kilit açıldı, ancak şu durdurmalar hâlâ aktif: " + result.retained.join(", "), "error");
+          toast("Kilit açıldı, ancak şu durdurmalar hâlâ aktif: " + result.retained.map(breakerLabel).join(", "), "error");
         } else if (result && result.retained === null) {
           toast("Kilit sıfırlandı; kalan durdurmalar okunamadı, motor durumunu kontrol edin.", "error");
         } else {
@@ -456,8 +504,8 @@
           const req = await postControl("/api/live/arming/request");
           const phrase = await dialog.prompt({
             title: "Gerçek para moduna geçiş",
-            message: "Hesap …" + (req.account_suffix || "????") + " üzerinde GERÇEK emirler gönderilecek. Bu işlem geri alınabilir ama canlı paraya dokunur.",
-            label: "Onay için LIVE ve hesabın son dört hanesini yazın",
+            message: "Hesap …" + (req.account_suffix || "????") + " üzerinde GERÇEK emirler gönderilecek. Gönderilen emirler geri alınamaz ve canlı paraya dokunur.",
+            label: "Onay için LIVE (CANLI modun onay kelimesi) ve hesabın son dört hanesini yazın",
             placeholder: "LIVE " + (req.account_suffix || "1234"),
             confirmLabel: "Canlıya geç",
             danger: true
@@ -465,7 +513,11 @@
           if (!phrase) return;
           await postControl("/api/live/arming/confirm", { phrase: phrase });
         } else {
-          const ok = await dialog.confirm({ title: "Paper moda dönülsün mü?", message: "Bot demo hesapla çalışmaya devam eder.", confirmLabel: "Paper'a dön" });
+          const ok = await dialog.confirm({
+            title: "Paper moda dönülsün mü?",
+            message: "Mod yalnızca motor durmuşken değiştirilebilir. Motor çalışıyorsa sunucu geçişi reddeder; önce Durdur’a basın. Ardından Başlat ile paper modda çalıştırabilirsiniz.",
+            confirmLabel: "Paper'a dön"
+          });
           if (!ok) return;
         }
         await postControl("/api/mode", { paper: toPaper });
@@ -591,7 +643,7 @@
         } else {
           toast(data.engine_restarted ? "Ayarlar uygulandı; motor yeniden başlatıldı." : "Ayarlar kaydedildi.", "success");
         }
-        if (data.app_restart_required) toast("Adres/port değişikliği bir sonraki açılışta etkinleşir.", "warning");
+        if (data.app_restart_required) toast("Adres, port, tarayıcı açma ve log seviyesi değişiklikleri uygulamanın bir sonraki açılışında etkinleşir.", "warning");
         refreshStatus();
       } catch (err) {
         if (err.status === 409) {

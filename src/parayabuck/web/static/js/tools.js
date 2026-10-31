@@ -94,7 +94,7 @@
         ["Dönem", period ? period.start + " – " + period.end + " (" + period.days + " gün)" : "—", ""],
         ["Toplam getiri", pct("total_return"), tone("total_return")],
         ["Yıllık (CAGR)", pct("cagr"), tone("cagr")],
-        ["Benchmark (" + (s.benchmark_symbol || "—") + ")", pct("benchmark_return"), ""],
+        ["Kıyas (" + (s.benchmark_symbol || "—") + ")", pct("benchmark_return"), ""],
         ["En büyük düşüş", fmt.pct(Math.abs(Number(s.max_drawdown || 0)) * 100, 2), "neg"],
         ["Sharpe", fmt.num(s.sharpe, 2), ""],
         ["İşlem sayısı", fmt.num(s.number_of_trades, 0), ""],

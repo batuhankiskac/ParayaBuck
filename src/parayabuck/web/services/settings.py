@@ -110,8 +110,8 @@ def _ensure_writable(path: Any) -> None:
     writable_parent = parent.is_dir() and os.access(parent, os.W_OK | os.X_OK)
     if not writable_parent or (path.exists() and not os.access(path, os.W_OK)):
         raise ValueError(
-            f"Credential/config storage is read-only ({path}); under systemd hardening "
-            "edit the file on the host instead — the engine was left running."
+            f"Kimlik/yapılandırma dosyası salt okunur ({path}); systemd sertleştirmesi altında "
+            "dosyayı sunucuda elle düzenleyin — motor çalışmaya devam etti."
         )
 
 
@@ -254,7 +254,7 @@ class SettingsService:
             if payload.expected_config_digest is not None:
                 current = await asyncio.to_thread(_current_digest)
                 if current != payload.expected_config_digest:
-                    raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
+                    raise HTTPException(status_code=409, detail="Yapılandırma değişti; yenileyip tekrar deneyin")
 
             raw_before: dict[str, Any] = await asyncio.to_thread(_read_raw_config, manager.config_path)
             old_paper_before = manager.is_paper_mode()
@@ -367,7 +367,9 @@ class SettingsService:
             active_runtime = await asyncio.to_thread(manager.has_active_runtime)
             needs_restart = has_runtime_change
             if active_runtime and needs_restart and not payload.restart_engine:
-                raise ValueError("Stop the bot before saving settings without a restart")
+                raise ValueError(
+                    "Motor çalışırken motor ayarı değiştirilemez: “Evet, yeniden başlat” seçin veya önce botu durdurun."
+                )
             restart_engine = bool(active_runtime and needs_restart and payload.restart_engine)
 
             if is_no_op:
@@ -382,7 +384,7 @@ class SettingsService:
             if payload.expected_config_digest is not None:
                 latest = await asyncio.to_thread(_current_digest)
                 if latest != payload.expected_config_digest:
-                    raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
+                    raise HTTPException(status_code=409, detail="Yapılandırma değişti; yenileyip tekrar deneyin")
 
             # PRE-FLIGHT: the transaction below will write these files.  Verify
             # they are writable *while the engine is still running* so a
@@ -405,19 +407,21 @@ class SettingsService:
                     await asyncio.to_thread(manager.stop_engine)
                     was_stopped_for_restart = True
                     if manager.engine_state != "stopped":
-                        raise RuntimeError("Bot could not stop safely. Use the Durdur button and try again.")
+                        raise RuntimeError(
+                            "Bot güvenli şekilde durdurulamadı. Durdur düğmesini kullanıp yeniden deneyin."
+                        )
                     if payload.expected_config_digest is not None:
                         latest2 = await asyncio.to_thread(_current_digest)
                         if latest2 != payload.expected_config_digest:
                             await _best_effort_restart(manager, "Conflict after stop")
                             raise HTTPException(
-                                status_code=409, detail="Configuration has changed; refresh and try again"
+                                status_code=409, detail="Yapılandırma değişti; yenileyip tekrar deneyin"
                             )
 
                 if not was_stopped_for_restart and payload.expected_config_digest is not None:
                     latest3 = await asyncio.to_thread(_current_digest)
                     if latest3 != payload.expected_config_digest:
-                        raise HTTPException(status_code=409, detail="Configuration has changed; refresh and try again")
+                        raise HTTPException(status_code=409, detail="Yapılandırma değişti; yenileyip tekrar deneyin")
 
                 write = asyncio.ensure_future(
                     asyncio.to_thread(

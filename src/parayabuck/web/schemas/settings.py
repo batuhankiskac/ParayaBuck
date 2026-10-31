@@ -54,7 +54,7 @@ class SettingsPayload(BaseModel):
         """A sent limit must be a finite percent in (0, cap]; null is refused."""
         cap = _RISK_PERCENT_CAPS[str(info.field_name)]
         if value is None or not math.isfinite(value) or not 0 < value <= cap:
-            raise ValueError(f"must be a finite percent greater than 0 and at most {cap:g}")
+            raise ValueError(f"yüzde olarak sonlu bir sayı olmalı; 0'dan büyük ve en çok {cap:g} olmalı")
         return value
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -364,8 +365,9 @@ def test_overview_keys_match_frontend_readers(tmp_path: Path) -> None:
         "universe",
         "health",
     }
+    # Each key must be read as a property of the overview payload, not just appear as a word somewhere.
     for key in ("account", "equity", "trend_status", "risk", "execution", "health", "universe"):
-        assert f"data.{key}" in dashboard_js or f"({key}" in dashboard_js or key in dashboard_js
+        assert re.search(rf"\b(data|ov)\.{key}\b", dashboard_js), key
 
 
 # --- R4C-02: bounded decision scan ---

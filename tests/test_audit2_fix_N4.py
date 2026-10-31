@@ -145,10 +145,13 @@ def test_runbook_names_the_reset_button_and_the_halt_on_screen() -> None:
 
 def test_reset_button_only_shown_while_a_breaker_reason_is_present() -> None:
     source = _read(_JS / "ui.js")
-    assert "if (resetBtn && !breaker) resetBtn.hidden = true;" in source
-    assert source.index("if (resetBtn && !breaker) resetBtn.hidden = true;") < source.index(
-        'if (breaker) { messages.push("Güvenlik kilidi devrede ('
+    # Q3-4-5: one rule (renderEngineState) decides the button, from the same breaker the banner shows.
+    assert "if (reset) reset.hidden = !shell.breaker;" in source
+    assert "shell.breaker = (status.runtime && status.runtime.circuit_breaker_reason) || null;" in source
+    assert source.index("shell.breaker = (status.runtime") < source.index(
+        "renderEngineState(status.state, status.paper);"
     )
+    assert source.index("const breaker = shell.breaker;") < source.index("if (breaker) {")
 
 
 # --- D2-10-15: paper OFF has an inline warning next to the switch ------------
@@ -252,4 +255,5 @@ def test_equity_switch_explains_a_held_position() -> None:
     switch = html.index('id="equityTradingCheck"')
     note = html.index("Elde tutulan QLD pozisyonunu satmaz", switch)
     assert note > switch
-    assert "yeni karar vermez" in html[switch:note]
+    # D3-2-4: the hint states the engine does not start while the switch is off (owner decision).
+    assert "motor çalışmaz" in html[switch:note]

@@ -16,7 +16,7 @@ dependencies = [
     "requests>=2.31,<3",
     "alpaca-py>=0.43.5,<0.44",
     "fastapi>=0.115,<0.140",
-    "uvicorn>=0.30,<0.52",
+    "uvicorn>=0.30,<0.55",
     # alpaca-py 0.43 still imports websockets.legacy. websockets 14+ emits a
     # deprecation on every process import; 13.1 is the supported bridge until
     # Alpaca migrates its stream implementation.

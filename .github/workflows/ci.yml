@@ -3,6 +3,10 @@ name: CI
 on:
   push:
   pull_request:
+  # Weekly run, so pip-audit and the lock checks also see advisories published after the
+  # last push (S3-5-1).
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
@@ -17,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

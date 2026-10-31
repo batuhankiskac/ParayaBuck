@@ -4,6 +4,8 @@ After=network-online.target
 Wants=network-online.target
 # Five failed starts within 600 s stop the Restart= loop; the unit then stays failed
 # until `systemctl reset-failed parayabuck` and a manual start. No OnFailure= unit ships.
+# Before watchdog.conf is installed on the VM, raise StartLimitIntervalSec to at least
+# 3600 s: a wedged start cycle takes about 8 min, so 5 starts never fit in 600 s (R3-4-6).
 StartLimitIntervalSec=600
 StartLimitBurst=5
 
@@ -23,7 +25,7 @@ EnvironmentFile=/opt/parayabuck/.env
 # Single-runner guard: the trading-host designation (PARAYABUCK_TRADING_HOST=1)
 # is NOT in this template. Without it the engine refuses to start and the console
 # and backtests keep working. Only the designated host adds it, as a drop-in
-# (deploy/systemd/vm-dropin/trading-host.conf; docs/deployment.md, "Trading host").
+# (deploy/systemd/vm-dropin/trading-host.conf; docs/deployment.md, "VM drop-ins and steps").
 # Mode-aware preflight: validates the configured runtime.mode. PAPER gets
 # exactly the --paper invariant set (no live flag, no cap, paper keys); LIVE
 # gets the LIVE gate set (live keys, cap, approval key, e-mail alerts). LIVE
@@ -79,7 +81,7 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 # MemoryDenyWriteExecute stays off until the VM trial run has passed (VM trial
-# item, docs/deployment.md "Sandbox"). Not enabled here on purpose.
+# item, docs/deployment.md "Units"). Not enabled here on purpose.
 # Egress is not contained by this unit (accepted risk, docs/deployment.md
 # "Accepted risks"): the LIVE keys and the approval key sit in this process.
 

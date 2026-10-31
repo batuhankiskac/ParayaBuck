@@ -180,6 +180,7 @@ stuck at `starting` with a growing `start_retry_attempt`) and
 | `startup_error` | Permanent startup error (Alpaca 401, SQLite error, catch-up exception) | Fix the cause, then start the engine |
 | `transient_no_retry` | A manual start hit a network-class failure | Retry the start |
 | `transient_retrying` | The auto-start loop is retrying and the attempts are not clearing | Fix the network, or stop and start the engine manually |
+| `operator_stop_unrecorded` | An operator Stop took effect, but its `OPERATOR_STOPPED` record could not be written, so a restart may start the engine again | Fix the permissions of the runtime directory, then set the operator halt (`parayabuck halt`) before any restart |
 
 Transient auto-start retries keep the state at `starting` and back off
 5/15/30/60 s indefinitely; the alert fires from the third attempt and then
@@ -193,7 +194,10 @@ next to the operator halt marker, and auto-start refuses while that file exists.
 `sudo systemctl restart parayabuck` (every deploy) therefore leaves the engine
 stopped. The owner starts it again with the dashboard Başlat button, which removes
 the file. Shutdown, restarts and settings saves that stop the engine do not write
-the file, so they keep auto-start. For a hard stop that also refuses manual starts,
+the file, so they keep auto-start. If that record cannot be written, the stop still takes
+effect but does not survive a restart: `runtime_start_failed` with
+`reason=operator_stop_unrecorded` is emitted, and the next restart may start the engine.
+For a hard stop that also refuses manual starts,
 set the operator halt first (`parayabuck halt`, see `docs/operator_runbook.md`,
 "Operator halt").
 
@@ -280,6 +284,8 @@ loop therefore stops the pings and systemd restarts the unit after
 `WatchdogSec`. A stop that did not finish stops the pings too: state `stop_failed`,
 or `stopping` for more than 150 s (below the unit's `TimeoutStopSec=180`). Outside
 systemd `NOTIFY_SOCKET` is unset and the sends are no-ops.
+Until a runtime completes its first account pass, the gate stays open for 600 s after the
+start attempt begins (`_WATCHDOG_STARTUP_GRACE_SECONDS`), so a slow start is not restarted.
 
 **VM state (as of 2026-10-27).** The VM's unit is `Type=simple` with no
 `WatchdogSec`, so a wedged account loop is not restarted by systemd. Its deadman
@@ -297,10 +303,12 @@ A premarket probe runs once per NYSE session, 30 to 5 minutes before the open
 (broker clock, calendar and open-order parity against the local non-terminal
 orders). A failure raises a `reconciliation_failure` alert with
 `reason=premarket_probe_failed` and sets the reconcile-pending latch below;
-exits are never blocked.
+nothing halts. While the latch is set, the session's batch waits, SELLs included, until
+two retry intervals before the session's retry deadline. Then it is decided with BUYs held, so
+exits still go out (see "Decision retry").
 
 Alpaca does not replay trade updates, so a fill can be missed while the
-stream is down. Three events set the reconcile-pending latch
+stream is down. Four events set the reconcile-pending latch
 (`reason` in the runtime state):
 
 | Reason | Set when |
@@ -308,6 +316,7 @@ stream is down. Three events set the reconcile-pending latch
 | `trade_updates_restart` | the `pb-trade-updates` worker failed or returned |
 | `trade_feed_stale` | open orders exist, the regular session is open, and no trade update arrived for 300 s |
 | `premarket_probe_failed` | the premarket probe found clock, calendar or open-order disagreement |
+| `empty_positions_read` | the broker returned an empty positions list while the ledger still owns inventory; only a reconcile may accept a flat broker and clear the stale ownership |
 | `account_fetch_failures` (breaker, not latch) | 5 account fetches in a row failed; the halt clears only through the operator reset, which reconciles first |
 
 While the latch is set, new BUYs wait and rejected-SELL retries wait, the same
@@ -441,9 +450,8 @@ parseable. The `tax` commands exit 1 on a failure (a missing rate file, a ledger
 error, an unexpected exception) and print one line, never a traceback.
 `tax rates-fetch` refuses, and writes nothing, when a fetched USD/TRY rate differs
 from a stored one for the same day; it names the two files it wrote on success.
-Known gap, not yet wired: a failed event-journal read still makes `ops events`
-print `[]` and exit 0. `EventJournal.query(strict=True)` raises instead, and the
-ops CLI does not pass it yet.
+A failed event-journal read is an error: `ops events` prints `Event journal could not be read: ...`
+to stderr and exits 1. It never prints `[]` for a failed read.
 
 Sharing a bundle: the bundle masks account ids to `***` plus their last four
 characters (`expected_account_id`, `account_id`, `account_number` in the
@@ -649,18 +657,28 @@ one pass: a database without its halt copy can start unhalted.
 sudo systemctl stop parayabuck
 find config data -type l    # list symlinks first (prints nothing on a plain host); atomic writes refuse a link that leaves its directory, so re-point or replace each listed link before the start
 PB_USER=$(systemctl show -p User --value parayabuck)     # parayabuck on a template install
+# The active mode's ledger decides every path below (R3-3-1). Read it first:
+#   sed -n '/^runtime:/,/^[a-z]/p' config/settings.yaml    # runtime.mode and runtime.decision_db_path
+# Set DB to that decision_db_path. The defaults: PAPER data/runtime/parayabuck.sqlite3, LIVE
+# data/runtime/live/parayabuck.sqlite3. The halt marker and the peak sidecars sit beside it.
+DB=data/runtime/parayabuck.sqlite3
+RUNTIME_DIR=$(dirname "$DB")
 EVIDENCE=/var/tmp/pb-bad-$(date -u +%Y%m%dT%H%M%SZ)
 sudo install -d -o "$PB_USER" -g "$PB_USER" -m 700 "$EVIDENCE"
-sudo -u "$PB_USER" cp -a data/runtime/parayabuck.sqlite3* "$EVIDENCE"/   # keep evidence
+sudo -u "$PB_USER" cp -a "$DB"* "$EVIDENCE"/   # keep evidence
 sudo -u "$PB_USER" .venv/bin/parayabuck backup --verify-only data/backups/<file>.sqlite3
-sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 data/runtime/parayabuck.sqlite3
-sudo -u "$PB_USER" rm -f data/runtime/parayabuck.sqlite3-wal data/runtime/parayabuck.sqlite3-shm
-# Peak sidecars from the same set, when it has them (<stem> = the file name without .sqlite3).
-# Without them the peak bootstraps from the first observed equity.
-sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.paper_equity_peak.json data/runtime/paper_equity_peak.json
-sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.live_equity_peak.json data/runtime/live_equity_peak.json   # LIVE hosts only
-# The set's halt copy, when it has one, keeps the restored host halted (a DR restore must not start unhalted).
-[ -e data/backups/<stem>.OPERATOR_HALT ] && sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.OPERATOR_HALT data/runtime/OPERATOR_HALT
+sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<file>.sqlite3 "$DB"
+sudo -u "$PB_USER" rm -f "$DB-wal" "$DB-shm"
+# Peak sidecar of the active mode. Move the current one aside first, so a set without one
+# never lets the runtime adopt a newer peak (R3-3-2). A set without a sidecar leaves the peak
+# to the restored ledger's persisted high-water, or to the first observed equity.
+[ -e "$RUNTIME_DIR/paper_equity_peak.json" ] && sudo -u "$PB_USER" mv "$RUNTIME_DIR/paper_equity_peak.json" "$EVIDENCE"/   # PAPER host
+[ -e "$RUNTIME_DIR/live_equity_peak.json" ] && sudo -u "$PB_USER" mv "$RUNTIME_DIR/live_equity_peak.json" "$EVIDENCE"/     # LIVE host
+# Install the set's sidecar for the same mode, when the set has one (<stem> = the file name without .sqlite3).
+[ -e data/backups/<stem>.paper_equity_peak.json ] && sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.paper_equity_peak.json "$RUNTIME_DIR/paper_equity_peak.json"   # PAPER host
+[ -e data/backups/<stem>.live_equity_peak.json ] && sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.live_equity_peak.json "$RUNTIME_DIR/live_equity_peak.json"   # LIVE host
+# The set's halt copy keeps the restored host halted (a DR restore must not start unhalted).
+[ -e data/backups/<stem>.OPERATOR_HALT ] && sudo install -o "$PB_USER" -g "$PB_USER" -m 600 data/backups/<stem>.OPERATOR_HALT "$RUNTIME_DIR/OPERATOR_HALT"
 sudo systemctl start parayabuck
 sudo -u "$PB_USER" .venv/bin/parayabuck ops doctor; curl -s http://127.0.0.1:8000/readyz
 ```

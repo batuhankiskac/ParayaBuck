@@ -181,6 +181,8 @@ data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_s
 data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.consumed.json
 data/research_manifests/r46_treasury_auction_unwind_tlt_v2_2026_09_10_one_shot_state.json.aborted_consumed.json
 data/backups/
+# Tax exports are personal records; the repo is public (S3-3-8).
+data/tax/
 # Operator log tree; the isolation gate treats it as production state.
 /logs/
 parayabuck.sqlite3

@@ -231,6 +231,10 @@ after 6 h re-probes SIP on its own.
   anyway, capture the log line and the exception and report it: only a
   401/403 or an explicit entitlement body is accepted as an entitlement
   error.
+- A failed historical-data request opens a provider cool-down: 30 s, doubling per consecutive
+  failure, capped at 5 min (`data/alpaca.py`). Requests inside the cool-down are answered from the
+  local cache or fail closed, without another provider call. A flapping provider therefore does
+  not cost one slow timeout per caller.
 
 ## Incomplete session-close bar (`session_close_bar_incomplete`)
 
@@ -583,8 +587,24 @@ sudo systemctl start parayabuck                           # or the console start
   while the marker exists and succeeds once it is gone and reconciliation
   passes (dashboard, or `POST /api/engine/reset-safety-lock`). Check
   `parayabuck doctor` and the dashboard before starting again.
-- A stop from the dashboard is not sticky (see `docs/operations.md`, "Stop and restart"):
-  `sudo systemctl restart parayabuck` starts the engine again unless this marker exists.
+- A stop from the dashboard is sticky, through a different marker: it writes `OPERATOR_STOPPED`
+  beside this one (see `docs/operations.md`, "Stop and restart"). `sudo systemctl restart parayabuck`
+  leaves the engine stopped until the dashboard Başlat button removes that file. Only a halt
+  refuses a manual start as well.
+
+## Settings file refused at load
+
+The loader refuses a settings file rather than half-apply it. The engine and `parayabuck doctor`
+both load the file, so a refused file also stops the start.
+
+- An unknown top-level key fails the load with `Unknown top-level settings would be ignored
+  (check the spelling): <keys>`. A misspelt section is never silently ignored.
+- Each `enabled` flag the loader checks (for example `strategy.equity.enabled`) must be a real
+  YAML boolean. A quoted `"false"` fails the load (`must be a boolean (true or false)`), rather
+  than reading a disabled block as enabled.
+
+Fix the key or the value in `config/settings.yaml`, then run
+`parayabuck doctor --strict --configured-mode --offline`.
 
 ## `paper_incident` categories
 

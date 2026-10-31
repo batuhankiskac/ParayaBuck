@@ -38,7 +38,7 @@ console, settings and backtests work and the engine refuses to start — see
 | `parayabuck-deadman.service` | Oneshot `python -m parayabuck.monitoring.deadman`: pings the external heartbeat (see the dead-man section); `LoadCredential=` for the URL, no writes |
 | `parayabuck-deadman.timer` | `OnBootSec=3min`, `OnUnitActiveSec=5min`, `Persistent=true` |
 
-Both services share one sandbox: `NoNewPrivileges`, `PrivateTmp`,
+All three units share one sandbox: `NoNewPrivileges`, `PrivateTmp`,
 `ProtectSystem=strict`, `ProtectHome=true`, an empty `CapabilityBoundingSet=`,
 `PrivateDevices`, `ProtectKernelTunables/Modules/Logs`, `ProtectControlGroups`,
 `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK` (netlink only for
@@ -48,8 +48,9 @@ glibc's interface probe in `getaddrinfo`), `RestrictNamespaces`,
 the process). All three units also set `LimitCORE=0` (a crash core would hold
 the LIVE keys), `ProtectClock`, `ProtectHostname`, `RestrictRealtime`,
 `KeyringMode=private` and `RemoveIPC`. Check the result with
-`systemd-analyze security parayabuck` after installing. These directives are
-not yet run on the VM; the steps in "VM drop-ins and steps" confirm them.
+`systemd-analyze security parayabuck` after installing. Whether these directives are
+in force on the VM is not recorded here: the read-only `systemctl show` checks in
+"VM drop-ins and steps" answer it.
 
 `MemoryDenyWriteExecute` is deliberately not set. It is a VM trial item, not a
 template change: the runtime lock has no JIT, but CPython, numpy and pandas load
@@ -93,6 +94,30 @@ otherwise remove the drop-in and record the failure in `docs/OPERATIONS_LOG.md`.
 - **Doctor items not changed here.** A `#` in a credential value is not warned about
   (the SMTP line rule above is documentation only), the backup-path probe writes a
   file, and the doctor's pin check still WARNs rather than blocks.
+- **Sandbox trial items (S3-4-5, not enabled).** `ProtectProc=invisible` and
+  `ProcSubset=pid` on the three units, `SocketBindAllow=tcp:<app.port>` (with
+  `SocketBindDeny=any`) on the engine, and `MemoryDenyWriteExecute=yes` on the dead-man.
+  Each can break a start (a native library that reads `/proc`, a bind on another port),
+  and none has been run on the VM. Add them one at a time, in a drop-in, in an approved
+  window, under the trial run described in "Units". `SystemCallFilter=@system-service`
+  is already set on all three units.
+- **Start limit before the watchdog (R3-4-6, latent).** Before `vm-dropin/watchdog.conf`
+  is installed, raise `StartLimitIntervalSec` to at least 3600 s in a drop-in. A wedged
+  start cycle takes about 8 min, so five starts never fit in the 600 s window. The template
+  keeps 600 s because `tests/test_audit_fix_W18.py` pins it; changing the template needs
+  that test changed in the same commit.
+- **Backup SIGTERM handler (R3-4-7, open).** `backup.py` has no SIGTERM handler, so a stop
+  during the off-host copy records no `backup_failed`. The unit's `TimeoutStopSec=120` only
+  bounds the stop. The fix is in the backup code, not in these units.
+- **Verify, not closed: starlette advisory (S3-5-4).** The raw-r6 S7-7 advisory check for
+  `starlette==1.6.0` (`requirements.lock`) has no recorded closure, and the 2026-10-31 audit
+  could not read CI logs. Read the latest `pip-audit` step of the `locks` and `quality`
+  jobs (`gh run list --workflow=ci.yml --limit=3`, then `gh run view <id> --log`, and
+  search for `starlette`), and record the result in `docs/audit/FINDINGS-2026-10-27.md`.
+- **Verify, not closed: no unit validation in CI (D3-4-3).** CI runs no
+  `systemd-analyze verify`. A CI step would need the `/opt` paths and the `parayabuck`
+  user to exist on the runner, so it is not added here. Units are checked on the VM
+  (step 4 of "VM drop-ins and steps").
 
 `parayabuck.service` gives up after five failed starts in 600 s
 (`StartLimitBurst=5`, `StartLimitIntervalSec=600`), so a start that keeps failing
@@ -132,7 +157,7 @@ when the VM is the target; the template paths are the fresh-install default):
 |---|---|
 | `/opt/parayabuck` | `/home/batuhankiskac/ParayaBuck` (confirm with `getent passwd batuhankiskac \| cut -d: -f6`) |
 | `User=parayabuck`, `Group=parayabuck` | `User=batuhankiskac`, `Group=batuhankiskac` |
-| `ProtectHome=true` | `ProtectHome=read-only` |
+| `ProtectHome=true` | `ProtectHome=tmpfs` with `BindReadOnlyPaths=` on the checkout (engine); `ProtectHome=read-only` (backup, see the off-host copy section) |
 | `Type=notify` (`parayabuck.service`) | `Type=simple`, no watchdog until `vm-dropin/watchdog.conf` is installed |
 
 Move the VM overrides out of the copied unit and into drop-ins, so the template
@@ -140,12 +165,15 @@ can be re-copied without losing them. The examples are in `deploy/systemd/vm-dro
 
 | Drop-in | Purpose | Status |
 |---|---|---|
-| `vm-paths.conf` | VM user, group, WorkingDirectory, EnvironmentFile, `ProtectHome=read-only`, ReadWritePaths and the ExecStart/ExecStartPre paths | Example; install after replacing the home path |
+| `vm-paths.conf` | VM user, group, WorkingDirectory, EnvironmentFile, `ProtectHome=tmpfs` with `BindReadOnlyPaths=` on the checkout (the engine must not see the home directory), ReadWritePaths and the ExecStart/ExecStartPre paths | Example; install after replacing the home path |
 | `trading-host.conf` | `Environment=PARAYABUCK_TRADING_HOST=1` | Required on the trading host |
 | `watchdog.conf` | `Type=notify`, `NotifyAccess=main`, `WatchdogSec=300` | Example; orchestrator decides whether the VM installs it |
 | `hardening.conf` | `LimitCORE=0`, `ProtectClock`, `ProtectHostname`, `RestrictRealtime`, `KeyringMode=private`, `RemoveIPC` | Install on all three units on the VM |
 | `start-timeout-engine.conf` | `TimeoutStartSec=900` on `parayabuck.service` (`ExecStartPre` integrity check) | Install on the VM engine unit |
 | `start-timeout-backup.conf` | `TimeoutStartSec=3600` on `parayabuck-backup.service` (integrity check and off-host copy) | Install on the VM backup unit |
+| `unit-limits.conf` | `StartLimitIntervalSec=600`, `StartLimitBurst=5` and `TimeoutStopSec=180` on `parayabuck.service`, the template's values | Install on the VM engine unit |
+| `vm-paths-backup.conf` | Backup unit on the home-dir layout: user, WorkingDirectory, `.env.backup`, `CLOUDSDK_CONFIG`, ReadWritePaths, `TimeoutStopSec=120` | Example; install on the VM backup unit |
+| `vm-paths-deadman.conf` | Dead-man unit on the home-dir layout: user, WorkingDirectory, ExecStart | Example; install on the VM dead-man unit |
 
 A drop-in lives in `/etc/systemd/system/<unit>.service.d/<name>.conf`; create it
 with `sudo systemctl edit <unit>` (which writes `override.conf`) or copy the file
@@ -175,11 +203,19 @@ line counts only, never values.
 grep -cE '^(export )?(PARAYABUCK_TRADING_HOST|HOST|PARAYABUCK_CONTAINER)=' ~/ParayaBuck/.env
 awk -F= '/^(export )?PARAYABUCK_SMTP_(USERNAME|PASSWORD)=/ && index($0, "#") { print "inline # in " $1 }' ~/ParayaBuck/.env
 getent passwd batuhankiskac | cut -d: -f6          # must be /home/batuhankiskac
+stat -c '%a %U %n' ~/ParayaBuck/.env ~/ParayaBuck/.env.backup   # mode 600, owner batuhankiskac (error if absent)
+ls /etc/systemd/system/parayabuck*.service.d/      # the drop-ins actually installed now (D3-4-2)
+systemctl show parayabuck -p ActiveEnterTimestamp,MainPID,User,Type,WatchdogUSec   # what runs now
+git -C ~/ParayaBuck rev-parse --short HEAD         # the build that runs (record it in the log)
 
-# 1. Drop-ins for the home-dir layout (replace the home path in vm-paths.conf first).
+# 1. Drop-ins for the home-dir layout (replace the home path and user in each file first).
 sudo install -d /etc/systemd/system/parayabuck.service.d
 sudo install -m 0644 deploy/systemd/vm-dropin/vm-paths.conf      /etc/systemd/system/parayabuck.service.d/vm-paths.conf
 sudo install -m 0644 deploy/systemd/vm-dropin/trading-host.conf /etc/systemd/system/parayabuck.service.d/trading-host.conf
+sudo install -d /etc/systemd/system/parayabuck-backup.service.d
+sudo install -m 0644 deploy/systemd/vm-dropin/vm-paths-backup.conf /etc/systemd/system/parayabuck-backup.service.d/vm-paths-backup.conf
+sudo install -d /etc/systemd/system/parayabuck-deadman.service.d
+sudo install -m 0644 deploy/systemd/vm-dropin/vm-paths-deadman.conf /etc/systemd/system/parayabuck-deadman.service.d/vm-paths-deadman.conf
 
 # 2. Hardening drop-in on the three units (same file for each).
 for u in parayabuck parayabuck-backup parayabuck-deadman; do
@@ -194,12 +230,23 @@ done
 sudo install -m 0644 deploy/systemd/vm-dropin/start-timeout-engine.conf /etc/systemd/system/parayabuck.service.d/start-timeout-engine.conf
 sudo install -d /etc/systemd/system/parayabuck-backup.service.d
 sudo install -m 0644 deploy/systemd/vm-dropin/start-timeout-backup.conf /etc/systemd/system/parayabuck-backup.service.d/start-timeout-backup.conf
+sudo install -m 0644 deploy/systemd/vm-dropin/unit-limits.conf /etc/systemd/system/parayabuck.service.d/unit-limits.conf
 
 sudo systemctl daemon-reload
-systemctl show parayabuck -p User,WorkingDirectory,ProtectHome,Type,WatchdogUSec,LimitCORE,Environment,TimeoutStartUSec
-systemctl show parayabuck-backup parayabuck-deadman -p LimitCORE,ProtectClock,RemoveIPC
-systemctl show parayabuck-backup -p TimeoutStartUSec
+systemctl show parayabuck -p User,WorkingDirectory,ProtectHome,Type,WatchdogUSec,LimitCORE,Environment,TimeoutStartUSec,TimeoutStopUSec,StartLimitBurst
+systemctl show parayabuck-backup parayabuck-deadman -p User,WorkingDirectory,ProtectHome,LimitCORE,ProtectClock,RemoveIPC
+systemctl show parayabuck-backup -p TimeoutStartUSec,TimeoutStopUSec,Environment
 systemd-analyze verify /etc/systemd/system/parayabuck.service   # reports unit errors, if any
+systemd-analyze security parayabuck                              # an exposure score, not a pass/fail
+
+# 5. Pre-restart dry run (S3-4-6): doctor under the engine's own sandbox properties.
+# It starts no engine. The loader reads .env from the working directory, as the unit does; nothing is printed.
+PB_DIR=/home/batuhankiskac/ParayaBuck
+sudo systemd-run --pipe --wait --collect --uid=batuhankiskac \
+  -p WorkingDirectory="$PB_DIR" -p ProtectHome=tmpfs -p BindReadOnlyPaths="$PB_DIR" \
+  -p ProtectSystem=strict -p ReadWritePaths="$PB_DIR/config $PB_DIR/data" -p PrivateTmp=true \
+  -p NoNewPrivileges=true \
+  "$PB_DIR/.venv/bin/parayabuck" doctor --strict --configured-mode --offline
 ```
 
 Restart the engine only after the checks above print the expected values and the
@@ -251,6 +298,8 @@ the file is group- or other-readable, the backup logs a warning that names the
 | `GOOGLE_APPLICATION_CREDENTIALS` | copy tool only | key file mode `0400`, owned by `parayabuck` |
 
 Create it once and fill it: `sudo install -m 0600 -o parayabuck -g parayabuck /dev/null /opt/parayabuck/.env.backup`.
+On the home-dir VM the file is `~/ParayaBuck/.env.backup`, owned by `batuhankiskac`:
+`install -m 0600 /dev/null ~/ParayaBuck/.env.backup`.
 A host installed before this change keeps the old `.env` wiring until the backup
 unit is re-copied; `systemctl cat parayabuck-backup | grep -E 'EnvironmentFile|ENV_PATH'`
 shows which one is in force.
@@ -367,11 +416,21 @@ HTTPS request per run.
    sudo sh -c 'umask 077; printf "%s\n" "https://hc-ping.com/<uuid>" > /etc/parayabuck/healthcheck-url'
    ```
 
-3. Install and start the timer (the unit paths follow the same rewrite rules as
-   `parayabuck.service`):
+3. Install and start the timer. On a fresh host, copy the template units:
 
    ```bash
    sudo cp deploy/systemd/parayabuck-deadman.service deploy/systemd/parayabuck-deadman.timer /etc/systemd/system/
+   ```
+
+   On the home-dir VM the template names the `parayabuck` user and `/opt` paths, so it
+   fails with 217/USER or 200/CHDIR. Do not copy over an installed dead-man unit (the rule
+   in "Update by git bundle"). Read the difference, then install the path drop-in
+   `vm-paths-deadman.conf`, which sets the user, WorkingDirectory and ExecStart:
+
+   ```bash
+   diff -u /etc/systemd/system/parayabuck-deadman.service deploy/systemd/parayabuck-deadman.service || true
+   sudo install -d /etc/systemd/system/parayabuck-deadman.service.d
+   sudo install -m 0644 deploy/systemd/vm-dropin/vm-paths-deadman.conf /etc/systemd/system/parayabuck-deadman.service.d/vm-paths-deadman.conf
    sudo systemctl daemon-reload
    sudo systemctl enable --now parayabuck-deadman.timer
    sudo systemctl start parayabuck-deadman.service
@@ -385,7 +444,7 @@ the external check then alarms on the missing ping.
 ### Off-host backup copy and monthly restore drill (optional)
 
 Local snapshots stay on the VM disk. Set `PARAYABUCK_BACKUP_OFFHOST_CMD` in
-`/opt/parayabuck/.env.backup` to copy each verified snapshot off the host, for example:
+`/opt/parayabuck/.env.backup` (VM: `~/ParayaBuck/.env.backup`) to copy each verified snapshot off the host, for example:
 
 ```bash
 PARAYABUCK_BACKUP_OFFHOST_CMD=gsutil cp {path} gs://<bucket>/parayabuck/
@@ -398,16 +457,25 @@ default cannot kill a copy mid-upload. Unset (the default) means no copy. A fail
 verified local snapshot and emits `backup_failed` (reason
 `offhost_copy_failed`), which the e-mail channel forwards.
 
-Which home files the copy can read depends on the installed unit, not the
-template. The template sets `ProtectHome=true`, which hides the deploy user's home
-(`~/.config/gcloud`, `~/.ssh`). The VM runs `ProtectHome=read-only`, which does
-not hide it: a bare `gsutil` or `gcloud` command on the VM silently uses the deploy
-user's gcloud credentials. So on the VM, give the copy command a dedicated
-service-account key the `parayabuck` user can read (for example
-`GOOGLE_APPLICATION_CREDENTIALS` in `.env.backup`, with the key file mode `0400`
-and owned by `parayabuck`), and never rely on the default gcloud login. Check
-which mode is in force with `systemctl show parayabuck-backup -p ProtectHome`, and
-check the tool once by hand as the `parayabuck` user before relying on the timer.
+The copy keeps its gcloud state apart from the deploy user's login. The backup unit sets
+`CLOUDSDK_CONFIG` to a directory under `data/` (template: `/opt/parayabuck/data/gcloud`;
+the VM drop-in `vm-paths-backup.conf`: `~/ParayaBuck/data/gcloud`), so a bare `gsutil` or
+`gcloud` in the unit does not read `~/.config/gcloud`. Create that directory once, owned by
+the service user. Give the copy a dedicated service-account key the `parayabuck` user can
+read (`GOOGLE_APPLICATION_CREDENTIALS` in `.env.backup`, key file mode `0400`, owned by
+`parayabuck`), and never rely on the default gcloud login. Check the sandbox with
+`systemctl show parayabuck-backup -p ProtectHome,Environment`, then test the copy under the
+unit's own properties before relying on the timer (the tool path is a placeholder: confirm
+it exists for the service user first):
+
+```bash
+PB_DIR=/home/batuhankiskac/ParayaBuck   # template install: /opt/parayabuck
+GSUTIL=$(command -v gsutil)              # the copy tool; confirm it resolves
+sudo systemd-run --pipe --wait --collect --uid=batuhankiskac -p WorkingDirectory="$PB_DIR" \
+  -p ProtectHome=read-only -p ReadWritePaths="$PB_DIR/data" \
+  -p Environment=CLOUDSDK_CONFIG="$PB_DIR/data/gcloud" \
+  "$GSUTIL" ls gs://<bucket>/parayabuck/
+```
 
 Monthly restore drill (about 20 minutes, record the result in the operations log):
 
@@ -512,6 +580,7 @@ sudo -u parayabuck git bundle verify /var/tmp/pb.bundle   # must end with "is ok
 sudo -u parayabuck git clone -b main /var/tmp/pb.bundle /opt/parayabuck
 cd /opt/parayabuck
 sudo -u parayabuck python3 -m venv .venv
+sudo -u parayabuck .venv/bin/python -m pip install pip==26.2.1   # the CI and Dockerfile pin (S3-5-3)
 sudo -u parayabuck .venv/bin/pip install --require-hashes -r requirements.lock
 # `pip install -e .` builds the project with the build backend pinned in pyproject.toml
 # (setuptools 80.9.0, wheel 0.45.1). Those build tools are pinned but not hash-checked
@@ -523,6 +592,7 @@ sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env
 sudo install -m 0600 -o parayabuck -g parayabuck /dev/null .env.backup   # see "Backup environment file"
 # Fill both files now, then run the preflight (it refuses an empty .env):
 sudo -u parayabuck .venv/bin/parayabuck doctor --strict --configured-mode --offline
+# Fresh host only. The VM keeps its own units: see "VM drop-ins and steps".
 sudo cp deploy/systemd/parayabuck*.{service,timer} /etc/systemd/system/
 # Trading host only: the designation is a drop-in, not part of the template.
 sudo install -d /etc/systemd/system/parayabuck.service.d
@@ -628,20 +698,32 @@ git diff --stat HEAD bundle/main -- requirements.lock requirements-dev.lock pypr
 # copy it aside and reapply the saved values after the merge (a merge that touches
 # the same file refuses, and a reset --hard rollback discards it)
 git status --porcelain config/settings.yaml
+# Read-only pre-check (R3-2-5): the installed drop-ins and the env file modes, before any unit change.
+ls /etc/systemd/system/parayabuck*.service.d/
+stat -c '%a %U %n' .env .env.backup # mode 600, owner batuhankiskac
+git diff --name-only HEAD bundle/main -- deploy/systemd # the units and drop-ins that change
+# Stop before the merge, not after it: a process that is still running can import new code
+# lazily between the merge and the restart (D3-4-8). The start below brings it back up.
+sudo systemctl stop parayabuck
 git merge --ff-only bundle/main
-# when deploy/systemd/ changed in the range (git diff --name-only <deployed-sha>..HEAD -- deploy/systemd):
-# install each changed unit and run sudo systemctl daemon-reload. Before the backup
-# unit is re-copied, create /opt/parayabuck/.env.backup (see "Backup environment file"):
-# a backup unit without it fails its next timer run with no alert, and the off-host copy stops silently.
+# Units and drop-ins, only for the files the diff above printed. Never copy a template over an
+# installed unit (S3-4-1, D3-4-1): the VM's units carry hand edits, and a copy drops them
+# silently. For each changed unit, read the difference and apply it by hand:
+#   diff -u /etc/systemd/system/<unit> deploy/systemd/<unit>
+# A new drop-in is installed from deploy/systemd/vm-dropin/ into /etc/systemd/system/<unit>.service.d/,
+# one at a time, with the owner's approval. The backup unit's env file must exist before that unit
+# changes: /opt/parayabuck/.env.backup on a template install, ~/ParayaBuck/.env.backup on the VM
+# (see "Backup environment file"). Without it the next timer run fails with no alert.
+sudo systemctl daemon-reload # only after a unit or drop-in change
 .venv/bin/pip install -e . --no-deps              # when dependencies or entry points changed
 # when requirements.lock changed: the lock is a closed closure, so every
 # transitive dependency is pinned there — reinstall the whole file
 .venv/bin/pip install --require-hashes -r requirements.lock   # skip when the lock is unchanged
 .venv/bin/parayabuck doctor --strict --configured-mode --offline
-sudo systemctl restart parayabuck
+sudo systemctl start parayabuck
 ```
 
-A dashboard stop does not survive the `systemctl restart` above: the engine starts
+A dashboard stop does not survive the `systemctl start` above: the engine starts
 again unless the operator halt marker is set. Run `parayabuck halt --reason ...`
 before the restart when the engine must stay down (see `docs/operator_runbook.md`,
 "Operator halt").
@@ -680,6 +762,8 @@ curl -s http://127.0.0.1:8000/healthz
 curl -s http://127.0.0.1:8000/readyz | python3 -m json.tool   # ready=true after warmup
 sudo journalctl -u parayabuck -n 200 --no-pager
 .venv/bin/parayabuck ops status
+systemctl show parayabuck -p ActiveEnterTimestamp,MainPID   # a start after the restart
+git -C ~/ParayaBuck rev-parse --short HEAD                   # the build; record both in the log
 ```
 
 A `503` with `engine_state=warming_up` during warmup is normal. The dashboard
@@ -771,7 +855,11 @@ owner funds the Alpaca LIVE account; run them on the trading host only.
    `--no-deps` install leaves the new pins in place, so when the lock changed,
    also run `.venv/bin/pip install --require-hashes -r requirements.lock`:
    `git diff --quiet "$OLD" HEAD -- requirements.lock || .venv/bin/pip install --require-hashes -r requirements.lock`.
-   Then restart.
+   If the range changed `deploy/systemd/`, the units and drop-ins go back too (D3-4-11):
+   `git diff --name-only "$OLD" HEAD -- deploy/systemd` lists them. Restore each installed unit
+   or drop-in by hand from its previous text (`git show "$OLD":deploy/systemd/<unit>`, or the copy
+   saved before the deploy), then `sudo systemctl daemon-reload`. Then
+   `sudo systemctl start parayabuck` (step 1 stopped it).
    `config/settings.yaml` is tracked: the rolled-back commit brings its own
    config, which must match its code (e.g. a pre-2026-09-30 build needs its
    crypto keys; the current build rejects them).

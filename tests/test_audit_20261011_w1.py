@@ -242,7 +242,9 @@ def test_transient_startup_catch_up_records_one_outcome(monkeypatch: pytest.Monk
     class _Clock(datetime):
         @classmethod
         def now(cls, tz: Any = None) -> datetime:
-            moment = SESSION_CLOSE + timedelta(minutes=5)
+            # Past the SIP embargo: inside it the startup catch-up is parked for the
+            # embargo (T3-5-2) and records no outcome (see test_audit3_fix_X1).
+            moment = SESSION_CLOSE + timedelta(minutes=20)
             return moment.astimezone(tz) if tz is not None else moment
 
     monkeypatch.setattr(runtime_module, "datetime", _Clock)

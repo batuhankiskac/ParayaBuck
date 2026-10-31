@@ -181,4 +181,4 @@ def test_trading_host_refusal_points_to_the_drop_in_not_the_template() -> None:
     assert "deploy/systemd/vm-dropin/trading-host.conf" in TRADING_HOST_REFUSAL
     assert "deploy/systemd/parayabuck.service" not in TRADING_HOST_REFUSAL
     assert "PARAYABUCK_TRADING_HOST=1" in TRADING_HOST_REFUSAL
-    assert "not designated as the trading host" in TRADING_HOST_REFUSAL
+    assert "işlem makinesi olarak tanımlanmamış" in TRADING_HOST_REFUSAL

@@ -188,7 +188,7 @@ def test_refused_or_failed_reset_keeps_the_reconciliation_incidents(
         lambda _account_id: [SimpleNamespace(status="manual_intervention_required")],
     )
 
-    with pytest.raises(ValueError, match="manual intervention"):
+    with pytest.raises(ValueError, match="manuel müdahale"):
         runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason == "reconciliation_failed"

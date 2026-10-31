@@ -392,7 +392,7 @@ def test_request_live_arming_needs_a_verified_account_suffix(tmp_path: Path, mon
     manager = _live_manager(tmp_path, monkeypatch)
     created = _patch_live_broker(monkeypatch, suffix="")
 
-    with pytest.raises(ValueError, match="could not be verified"):
+    with pytest.raises(ValueError, match="doğrulanamadı"):
         manager.request_live_arming()
 
     assert manager._pending_live_arm is None
@@ -497,7 +497,7 @@ def test_api_mode_to_live_without_a_valid_arm_is_refused_and_writes_nothing(
     response = web_client(manager).post("/api/mode", json={"paper": False})
 
     assert response.status_code == 400
-    assert "fresh confirmation" in response.json()["detail"]
+    assert "yeni bir canlı onay" in response.json()["detail"]
     assert manager.config_path.read_text(encoding="utf-8") == before
 
 

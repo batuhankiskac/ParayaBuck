@@ -444,7 +444,7 @@ def test_manual_live_start_still_requires_the_interactive_arm(tmp_path: Path, mo
     monkeypatch.setattr(manager, "_live_doctor_refusal", lambda *_args: None)  # see the standing test above
     _write_standing(load_config(str(manager.config_path)))
     monkeypatch.setattr("parayabuck.runtime.EngineRuntime", lambda **kwargs: pytest.fail("must not start"))
-    with pytest.raises(ValueError, match="fresh confirmation"):
+    with pytest.raises(ValueError, match="yeni bir canlı onay"):
         manager.start_engine()
 
 

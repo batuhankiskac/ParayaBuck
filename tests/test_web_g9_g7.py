@@ -18,6 +18,7 @@ from parayabuck.portfolio.runtime_service import configuration_digest
 from parayabuck.universe import equity_universe_digest
 from parayabuck.utils.io import atomic_write
 from parayabuck.web import app as web_app
+from parayabuck.web.managers import engine as web_engine_module
 from parayabuck.web.managers.engine import EngineManager
 from tests.helpers import web_client
 
@@ -65,6 +66,7 @@ def _write_approval(
     key: str,
     digests: tuple[str, ...],
     approved_at: datetime | None = None,
+    trading_host: str = "",
 ) -> None:
     approval_time = approved_at or datetime.now(UTC) - timedelta(minutes=1)
     approval = LiveOperatorApproval(
@@ -75,6 +77,7 @@ def _write_approval(
         approved_at=approval_time,
         expires_at=approval_time + timedelta(hours=1),
         nonce="n" * 16,
+        trading_host=trading_host,
     ).signed(key)
     atomic_write(
         root / "approval.json",
@@ -224,10 +227,11 @@ def test_live_prerequisites_binding_verified_when_account_and_digests_match(tmp_
     config_path = _live_config(root)
     key = "0123456789abcdef0123456789abcdef01234567"
     digests = _expected_digests(config_path)
-    _write_approval(root, account_id="acct-live-1", key=key, digests=digests)
+    _write_approval(root, account_id="acct-live-1", key=key, digests=digests, trading_host="this-host")
     monkeypatch.setenv("PARAYABUCK_ENABLE_LIVE", "YES")
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", key)
     monkeypatch.setattr(alpaca_module, "AlpacaBroker", _FakeLiveBroker)
+    monkeypatch.setattr(web_engine_module, "trading_host_identity", lambda: "this-host")
 
     result = _manager(root).live_prerequisites()
     by_id = {entry["id"]: entry for entry in result["items"]}

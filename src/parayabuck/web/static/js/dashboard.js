@@ -39,7 +39,7 @@
       stale_decision_buy_held: "Eski karar, alım tutuldu", submit_blocked: "Gönderim engellendi",
       replan_sell_submitted: "Satış gönderildi, alım bekliyor", closed_unresolved: "Alım iptal, satış çözülmedi",
       buy_phase_submitted: "Alım gönderildi", replan_order_in_flight: "Yeniden planlanan emir çözülmedi",
-      signal_cross_check_pending: "Sinyal çapraz kontrolü bekleniyor"
+      signal_cross_check_pending: "Sinyal çapraz kontrolü bekleniyor", sip_embargo_pending: "SIP günlük barı bekleniyor"
     };
     const RECOVERED_PREFIX = "recovered_session:";
     const STRATEGY_NAMES = { equity_leveraged_trend_v1: "Kaldıraçlı endeks trendi v1" };

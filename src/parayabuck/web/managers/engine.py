@@ -44,7 +44,7 @@ from parayabuck.live_safety import (
     read_operator_halt,
 )
 from parayabuck.logger import get_logger
-from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
+from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized, trading_host_identity
 from parayabuck.utils.io import _fsync_directory, atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
@@ -629,12 +629,12 @@ class EngineManager:
         cfg = load_config(str(self.config_path))
         digests, digest_error = self._resolve_live_configuration_digests()
         if digests is None:
-            raise ValueError(f"Live configuration could not be verified: {digest_error}")
+            raise ValueError(f"Canlı yapılandırma doğrulanamadı: {digest_error}")
         try:
             authorization = load_standing_authorization(cfg, configuration_digests=digests)
         except LiveApprovalError as exc:
             _alert_live_rearm_required(str(exc))
-            raise ValueError(f"LIVE auto-start needs a manual re-arm: {exc}") from exc
+            raise ValueError(f"LIVE otomatik başlatma için elle yeniden onay gerekiyor: {exc}") from exc
         now = datetime.now(UTC)
         return LiveStartupProof(
             account_id=authorization.account_id,
@@ -911,13 +911,13 @@ class EngineManager:
             temporary_config.unlink(missing_ok=True)
         if entering_live and credentials_changed:
             self.invalidate_live_arming()
-            raise ValueError("Credentials changed; request and type a fresh live confirmation first")
+            raise ValueError("Kimlik bilgileri değişti; önce yeni bir canlı onay isteyin ve yazın")
         if entering_live:
             token = self._live_arm_token
             candidate_digest = self._digest_config(cfg_raw, paper=False)
             if token is None or token.config_digest != candidate_digest:
                 self.invalidate_live_arming()
-                raise ValueError("Settings changed after live verification; confirm the live account again")
+                raise ValueError("Ayarlar canlı doğrulamadan sonra değişti; canlı hesabı yeniden onaylayın")
         return ValidatedSettings(
             cfg_raw=cfg_raw,
             old_app=old_app,
@@ -1040,7 +1040,7 @@ class EngineManager:
             live_mode = cfg.runtime.mode.value == "live"
             if live_mode and not self._live_env_enabled():
                 raise ValueError(
-                    "Live trading is not armed. Set PARAYABUCK_ENABLE_LIVE=YES before starting the application."
+                    "Canlı işlem etkin değil. Uygulamayı başlatmadan önce PARAYABUCK_ENABLE_LIVE=YES ayarlayın."
                 )
             live_startup_proof: LiveStartupProof | None = None
             if live_mode:
@@ -1048,7 +1048,7 @@ class EngineManager:
                 live_key, live_secret = self.get_live_credentials()
                 if not live_key or not live_secret:
                     raise ValueError(
-                        f"Alpaca LIVE credentials ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) are not configured"
+                        f"Alpaca CANLI kimlik bilgileri ({LIVE_API_KEY_ENV} / {LIVE_SECRET_KEY_ENV}) yapılandırılmamış"
                     )
                 # The LIVE gates doctor enforces; manual and retry starts used to skip them.
                 refusal = self._live_doctor_refusal(cfg, live_key, live_secret)
@@ -1066,7 +1066,7 @@ class EngineManager:
                 token = self._require_valid_live_arm(key, secret, consume=False)
                 digests, digest_error = self._resolve_live_configuration_digests()
                 if digests is None:
-                    raise ValueError(f"Live configuration could not be verified: {digest_error}")
+                    raise ValueError(f"Canlı yapılandırma doğrulanamadı: {digest_error}")
                 live_startup_proof = LiveStartupProof(
                     account_id=token.account_id,
                     credential_fingerprint=token.credential_fingerprint,
@@ -1749,7 +1749,7 @@ class EngineManager:
             live_broker.account()
             suffix = live_broker.account_suffix
             if not suffix:
-                raise ValueError("Alpaca account identity could not be verified")
+                raise ValueError("Alpaca hesap kimliği doğrulanamadı")
             try:
                 verify_account_environment(
                     live=True,
@@ -2101,6 +2101,21 @@ class EngineManager:
         elif set(approval.configuration_digests) != set(expected_digests):
             binding_state = "missing"
             binding_missing = "onay dosyasındaki yapılandırma özetleri mevcut ayarlarla eşleşmiyor"
+        else:
+            # The runtime start (live_safety.LiveOperatorApproval.load_verified)
+            # refuses an approval issued for another trading host (S3-1-3).
+            try:
+                host_identity: str | None = trading_host_identity()
+            except ValueError as exc:
+                host_identity = None
+                binding_state = "unverifiable"
+                binding_missing = f"işlem makinesi kimliği doğrulanamıyor: {exc}"
+            if host_identity is not None and not hmac.compare_digest(
+                approval.trading_host.encode("utf-8", "surrogatepass"),
+                host_identity.encode("utf-8"),
+            ):
+                binding_state = "missing"
+                binding_missing = "onay dosyası bu işlem makinesi için düzenlenmemiş"
         item(
             "approval_binding",
             "Onay bu hesabı ve yapılandırmayı bağlıyor",
@@ -2149,8 +2164,8 @@ class EngineManager:
         if not valid:
             self.invalidate_live_arming()
             raise ValueError(
-                "Live trading requires a fresh confirmation for these credentials and settings."
-                " Next: re-arm LIVE in the console, then start the engine."
+                "Canlı işlem bu kimlik bilgileri ve ayarlar için yeni bir canlı onay gerektiriyor."
+                " Sonraki adım: konsolda LIVE onayını yenileyin, ardından motoru başlatın."
             )
         assert token is not None
         if consume:

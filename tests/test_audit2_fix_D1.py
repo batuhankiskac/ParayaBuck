@@ -133,7 +133,7 @@ def test_same_reason_halt_raised_during_the_reset_stays_in_force(tmp_path: Path)
         return dict(CLEAN)
 
     runtime.broker.reconcile = reconcile_with_a_fresh_halt
-    with pytest.raises(ValueError, match="raised again"):
+    with pytest.raises(ValueError, match="yeniden tetiklendi"):
         runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason == "ownership_drift"
@@ -155,7 +155,7 @@ def test_reset_failing_after_the_release_halts_again_and_can_be_reset(tmp_path: 
         raise RuntimeError("rebalance resume broke")
 
     runtime._resume_startup_rebalances = broken_resume  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="after the release"):
+    with pytest.raises(ValueError, match="serbest bırakıldıktan sonra"):
         runtime.reset_safety_lock()
 
     # Halted with a breaker the operator can reset, not "halted" with no breaker.

@@ -809,5 +809,5 @@ def test_live_save_with_an_unknown_current_mode_still_needs_the_live_arm(
     monkeypatch.setattr(manager, "get_live_credentials", lambda: (_KEY, _SECRET))
     payload = SettingsPayload(paper_mode=False, restart_engine=False)
 
-    with pytest.raises(ValueError, match="fresh confirmation"):
+    with pytest.raises(ValueError, match="yeni bir canlı onay"):
         manager._validated_settings_payload(payload)

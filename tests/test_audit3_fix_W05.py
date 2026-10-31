@@ -131,7 +131,7 @@ def test_reset_failure_after_release_emits_a_circuit_breaker_alert(
 
     runtime._persist_risk_state = fail_after_release  # type: ignore[method-assign]
 
-    with pytest.raises(ValueError, match="failed after the release"):
+    with pytest.raises(ValueError, match="serbest bırakıldıktan sonra sıfırlama başarısız"):
         runtime.reset_safety_lock()
 
     assert runtime._circuit_breaker_reason == "portfolio_runtime_failure"
@@ -494,7 +494,7 @@ def test_reset_refusal_without_a_breaker_says_there_is_nothing_to_reset(tmp_path
     runtime, ledger = _shell(tmp_path)
     runtime._state = "degraded"
 
-    with pytest.raises(ValueError, match="no circuit breaker is set"):
+    with pytest.raises(ValueError, match="devre kesici yok"):
         runtime.reset_safety_lock()
     ledger.close()
 
@@ -503,7 +503,7 @@ def test_reset_refusal_for_a_restart_limit_says_to_stop_then_start(tmp_path: Pat
     runtime, ledger = _shell(tmp_path)
     runtime._raise_halt("pb-decisions_restart_limit")
 
-    with pytest.raises(ValueError, match="Stop the engine, start it again"):
+    with pytest.raises(ValueError, match="Motoru durdurun, sonra yeniden başlatın"):
         runtime.reset_safety_lock()
     ledger.close()
 

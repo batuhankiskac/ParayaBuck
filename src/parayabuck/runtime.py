@@ -4500,15 +4500,24 @@ class EngineRuntime:
         ``rebalance_in_progress`` and ``rebalance_blocked`` leave the session
         due; so does ``rebalance_complete`` from an advance that finished the
         rebalance on this pass (its fill postdates the snapshot, so the batch
-        is planned on the next pass from a fresh account). A session that was
-        decided on this pass is never parked. True when re-queued.
+        is planned on the next pass from a fresh account). A session whose
+        inputs were not complete yet (``_INCOMPLETE_SESSION_STATUSES``, P3-2-4)
+        is parked the same way, so it is decided once they arrive instead of
+        being dropped. A session that was decided on this pass is never
+        parked. True when re-queued.
         """
-        if status not in _HELD_SESSION_STATUSES or not bars:
+        if not bars:
+            return False
+        if status in _HELD_SESSION_STATUSES:
+            reason = f"rebalance_held:{status}"
+        elif status in _INCOMPLETE_SESSION_STATUSES:
+            reason = f"incomplete_session:{status}"
+        else:
             return False
         decided = getattr(portfolio_runtime, "_session_decided", None)
         if callable(decided) and decided(max(bar.timestamp for bar in bars)):
             return False
-        return self._defer_portfolio_batch(bars, portfolio_runtime.market, f"rebalance_held:{status}")
+        return self._defer_portfolio_batch(bars, portfolio_runtime.market, reason)
 
     @staticmethod
     def _release_seeded_watermark(portfolio_runtime: Any, bars: list[Bar]) -> None:
@@ -5314,16 +5323,28 @@ class EngineRuntime:
                 if prune is not None:
                     with self._portfolio_lock:
                         prune()
+            # The batch the catch-up decides on: the newest bar of each history
+            # series, as startup_catch_up builds it (after the prune above).
+            catch_up_bars = [series[-1] for series in portfolio_runtime.history.values() if series]
+            if portfolio_runtime.market == Market.EQUITY:
                 newest = max(
                     (series[-1].timestamp for series in portfolio_runtime.history.values() if series),
                     default=None,
                 )
+                # The same SIP-embargo gate as the decision path (T3-5-2): a
+                # restart within the embargo after the close would otherwise
+                # latch on the partial decision-day bar and alert falsely.
+                if (
+                    newest is not None
+                    and catch_up_bars
+                    and self._park_until_sip_embargo(portfolio_runtime, catch_up_bars, newest)
+                ):
+                    self._release_seeded_watermark(portfolio_runtime, catch_up_bars)
+                    portfolio_runtime.startup_catch_up_status = "sip_embargo_pending"
+                    continue
                 basis_reason = self._equity_signal_basis_latch(newest) if newest is not None else None
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
-            # The batch the catch-up decides on: the newest bar of each history
-            # series, as startup_catch_up builds it.
-            catch_up_bars = [series[-1] for series in portfolio_runtime.history.values() if series]
             cross_check: CrossCheckOutcome | None = None
             if portfolio_runtime.market == Market.EQUITY and catch_up_bars:
                 # The catch-up is a session decision like any other, so it runs
@@ -6919,19 +6940,20 @@ class EngineRuntime:
         if reason is None:
             # D3-5-2: a degraded engine has no breaker to reset; say so, with the next step.
             raise ValueError(
-                "Safety lock is not operator-resettable: no circuit breaker is set, so there is nothing to reset. "
-                "The engine is degraded, not halted; it recovers when the failing worker recovers, or after a restart."
+                "Güvenlik kilidi operatör tarafından sıfırlanamaz: ayarlı bir devre kesici yok, sıfırlanacak bir şey "
+                "yok. Motor durdurulmuş değil, kısıtlı çalışıyor; arızalı iş parçacığı toparlanınca veya yeniden "
+                "başlatmadan sonra düzelir."
             )
         if reason not in recoverable:
             if reason.endswith("_restart_limit"):
                 raise ValueError(
-                    f"Safety lock is not operator-resettable: {reason} is a shared-worker restart limit that a reset "
-                    "cannot revive. Stop the engine, start it again (a restart re-arms the worker), then reset "
-                    "if the halt remains."
+                    f"Güvenlik kilidi operatör tarafından sıfırlanamaz: {reason} paylaşılan bir iş parçacığının "
+                    "yeniden başlatma sınırı; sıfırlama onu geri getiremez. Motoru durdurun, sonra yeniden başlatın "
+                    "(yeniden başlatma iş parçacığını yeniden etkinleştirir), durdurma sürüyorsa sıfırlayın."
                 )
-            raise ValueError(f"Safety lock is not operator-resettable: {reason}")
+            raise ValueError(f"Güvenlik kilidi operatör tarafından sıfırlanamaz: {reason}")
         if reason == _OPERATOR_HALT_REASON and self._operator_halt_marker_active():
-            raise ValueError("Operator halt marker is still present; run `parayabuck resume` before resetting")
+            raise ValueError("Operatör durdurma kaydı hâlâ mevcut; sıfırlamadan önce `parayabuck resume` çalıştırın")
         # A reset cannot revive a shared worker that exited: clearing the
         # breaker would report "running" while no decision/account/fill
         # processing runs. A dead decision loop is respawned after the
@@ -6945,14 +6967,14 @@ class EngineRuntime:
         dead_unrecoverable = [name for name in dead_shared if name != "pb-decisions"]
         if getattr(self, "_running", False) and dead_unrecoverable:
             raise ValueError(
-                "Safety lock cannot be reset while shared workers are stopped "
-                f"({','.join(dead_unrecoverable)}); restart the process to recover"
+                "Güvenlik kilidi, paylaşılan iş parçacıkları durduğu için sıfırlanamaz "
+                f"({','.join(dead_unrecoverable)}); kurtarmak için süreci yeniden başlatın"
             )
         if not self._events.empty():
-            raise ValueError("Market event queue must drain before resetting the safety lock")
+            raise ValueError("Güvenlik kilidini sıfırlamadan önce piyasa olay kuyruğu boşalmalı")
         if self._not_ready_symbols:
             raise ValueError(
-                "All symbol data must be ready before resetting the safety lock (not ready: "
+                "Güvenlik kilidini sıfırlamadan önce tüm sembol verileri hazır olmalı (hazır değil: "
                 f"{','.join(sorted(self._not_ready_symbols))})"
             )
         released = False
@@ -6964,7 +6986,7 @@ class EngineRuntime:
                 except Exception as exc:
                     self._reconcile_failed = True
                     self._persist_reconciliation_incident("reconciliation_failed")
-                    raise ValueError(f"Safety lock remains active until reconciliation succeeds: {exc}") from exc
+                    raise ValueError(f"Mutabakat başarılı olana kadar güvenlik kilidi aktif kalır: {exc}") from exc
                 if report.has_drift:
                     self._reconcile_failed = True
                     self._persist_reconciliation_incident("reconciliation_failed")
@@ -6972,11 +6994,12 @@ class EngineRuntime:
                     if reason == "ownership_drift":
                         # D3-5-7: the ownership order is stop -> rebase -> start -> reset.
                         hint = (
-                            " Resolve the ownership first: stop the engine, run `parayabuck ops rebase-ownership "
-                            "SYMBOL --broker-qty QTY --confirm` for each drifted symbol, start the engine, then reset."
+                            " Önce sahipliği çözün: motoru durdurun, kayan her sembol için `parayabuck ops "
+                            "rebase-ownership SYMBOL --broker-qty QTY --confirm` çalıştırın, motoru başlatın, sonra "
+                            "sıfırlayın."
                         )
                     raise ValueError(
-                        "Safety lock remains active while reconciliation reports drift: "
+                        "Mutabakat hâlâ kayma bildirirken güvenlik kilidi aktif kalır: "
                         f"{report.drift_categories}.{hint}"
                     )
                 self._last_reconciliation_at = datetime.now(UTC)
@@ -6984,7 +7007,7 @@ class EngineRuntime:
                 account_id = self.broker.account_id or "unknown"
                 entries = self.ledger.managed_entries_for_account(account_id)
                 if any(item.status == "manual_intervention_required" for item in entries):
-                    raise ValueError("A managed position still requires manual intervention")
+                    raise ValueError("Yönetilen bir pozisyon hâlâ manuel müdahale gerektiriyor")
                 account = self.broker.account()
                 self._publish_account_snapshot(account)
                 # The breaker and its incident rows clear together under the risk
@@ -7000,12 +7023,12 @@ class EngineRuntime:
                         # may have been raised again, during the broker calls above.
                         if reason == _OPERATOR_HALT_REASON and self._operator_halt_marker_active():
                             raise ValueError(
-                                "Operator halt marker is still present; run `parayabuck resume` before resetting"
+                                "Operatör durdurma kaydı hâlâ mevcut; sıfırlamadan önce `parayabuck resume` çalıştırın"
                             )
                         if getattr(self, "_halt_raised_seq", {}).get(reason) != raised_before.get(reason):
                             raise ValueError(
-                                f"Safety lock remains active: {reason} was raised again during the reset; "
-                                "reset again once it is verified"
+                                f"Güvenlik kilidi aktif kalır: {reason} sıfırlama sırasında yeniden tetiklendi; "
+                                "doğrulandıktan sonra yeniden sıfırlayın"
                             )
                         # Only the reset's own reason, and the rearmed reasons that are
                         # not in force in this process, are released. A rearmed reason
@@ -7021,8 +7044,8 @@ class EngineRuntime:
                         seq_now = getattr(self, "_halt_raised_seq", {})
                         if seq_now.get(reason) != raised_before.get(reason):
                             raise ValueError(
-                                f"Safety lock remains active: {reason} was raised again during the reset; "
-                                "reset again once it is verified"
+                                f"Güvenlik kilidi aktif kalır: {reason} sıfırlama sırasında yeniden tetiklendi; "
+                                "doğrulandıktan sonra yeniden sıfırlayın"
                             )
                         released_leftover = [
                             cleared
@@ -7079,7 +7102,9 @@ class EngineRuntime:
                 reason="portfolio_runtime_failure",
                 error=str(exc),
             )
-            raise ValueError(f"Safety lock reset failed after the release; runtime halted: {exc}") from exc
+            raise ValueError(
+                f"Güvenlik kilidi serbest bırakıldıktan sonra sıfırlama başarısız oldu; motor durduruldu: {exc}"
+            ) from exc
         finally:
             with getattr(self, "_state_lock", threading.RLock()):
                 # A halt raised by another thread since the breaker was cleared
@@ -7132,7 +7157,9 @@ class EngineRuntime:
                     reason="portfolio_runtime_failure",
                     error=str(exc),
                 )
-                raise ValueError(f"Safety lock reset, but the startup catch-up retry failed: {exc}") from exc
+                raise ValueError(
+                    f"Güvenlik kilidi sıfırlandı, ancak başlangıç catch-up yeniden denemesi başarısız oldu: {exc}"
+                ) from exc
 
     def _verify_market_halts(self, market_halts: dict[Market, str | None]) -> list[tuple[Market, str]]:
         """Clear each market halt only after its specific verified recovery.
@@ -7439,6 +7466,13 @@ _HELD_SESSION_STATUSES = frozenset(
         "replan_order_in_flight",
     }
 )
+
+
+# Portfolio results that leave a session undecided only because an input is not
+# complete yet: warmup below the minimum history, a symbol's bar missing from the
+# session's batch, or a managed position's bar missing (P3-2-4). They are parked
+# for the bounded retry instead of being dropped with no alert.
+_INCOMPLETE_SESSION_STATUSES = frozenset({"warming_up", "incomplete_strategy_batch", "incomplete_managed_batch"})
 
 
 def _catch_up_blocked(runtime: object) -> bool:

@@ -627,7 +627,7 @@ def test_safety_lock_reset_refuses_manual_intervention() -> None:
         clear_safety_incident=lambda _account, _reason=None: None,
     )
 
-    with pytest.raises(ValueError, match="manual intervention"):
+    with pytest.raises(ValueError, match="manuel müdahale"):
         runtime.reset_safety_lock()
 
 
@@ -651,7 +651,7 @@ def test_live_arm_token_is_bound_to_credentials_and_expires_on_change(tmp_path: 
     manager._require_valid_live_arm(*credentials)
 
     credentials[1] = "secret-b"
-    with pytest.raises(ValueError, match="fresh confirmation"):
+    with pytest.raises(ValueError, match="yeni bir canlı onay"):
         manager._require_valid_live_arm(*credentials)
     assert not manager._live_armed
 

@@ -2379,6 +2379,19 @@ class PortfolioRuntime:
             if rounds >= RESIDUAL_SELL_MAX_ROUNDS:
                 exhausted.append(root)
                 continue
+            if tail_status in RESIDUAL_SELL_STATUSES:
+                # P3-5-2: an exit that ended canceled or expired with unfilled
+                # quantity is operator-visible, once per order; the residual
+                # below re-sends it.
+                self._raise_operator_alert_once(
+                    (str(tail["client_order_id"]), "sell_ended_unfilled"),
+                    message="A SELL exit ended canceled or expired with unfilled quantity; a residual SELL is re-sent",
+                    category="sell_ended_unfilled",
+                    decision_id=decision_id,
+                    client_order_id=str(tail["client_order_id"]),
+                    tail_status=tail_status,
+                    unfilled_quantity=remaining,
+                )
             candidates.append((root, tail, remaining, rounds + 1))
         if not candidates and not exhausted:
             return None

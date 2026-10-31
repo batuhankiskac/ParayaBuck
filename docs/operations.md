@@ -118,11 +118,12 @@ blocks or fails trading, and no health check depends on alert delivery.
 | `circuit_breaker` | Breaker engaged (ownership drift, worker restart limit, queue overflow, persisted incident restored) | warning |
 | `data_provider_unavailable` | Warning-level data-provider outage (formerly `scanner_refresh_failure`) | warning |
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed (e-mailed) / recovered (equity entries halted meanwhile) | warning / info |
-| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | warning |
+| `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled). A SELL exit that ended canceled or expired with unfilled quantity raises it once per order with `category=sell_ended_unfilled` (e-mailed); the residual SELL is re-sent | warning |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | warning |
 | `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session (journal only, not e-mailed) | warning |
 | `decision_window_expired` | The retry window of a session-close decision ended with the session NOT decided (e-mailed, critical) | warning, critical severity |
 | `runtime_unclean_restart` | The engine started again after an unclean exit: an earlier session never recorded a clean stop (e-mailed) | warning |
+| `backup_stale` | The newest automatic backup is past the freshness bound. Raised by the engine's periodic pass, so it fires even when the backup timer is dead (e-mailed) | warning |
 | `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | warning |
 | `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | warning |
 | `exit_sell_rejected` | The broker rejected a SELL (an exit or a reduction of QLD). The engine retries it **once** at the next safe account poll (running, not warming up, no breaker or entry halt, no open order in the symbol) with the client id `<original>-retry1`, re-sized to the managed quantity still held; a rejected retry is alerted again (`state=retry_rejected`) and never retried | warning |
@@ -136,7 +137,9 @@ E-mail (opt-in) forwards `runtime_stopped_unexpected`, `runtime_start_failed`,
 `intent_recovered`, `reconciliation_failure`, the three LIVE notices,
 `live_started`, `risk_epoch_reset`, `safety_lock_reset`,
 `signal_adjustment_failure`, `market_data_degraded`, `data_provider_unavailable`,
-`backup_failed` and, when `alerting.email.daily_summary` is true, `daily_summary`.
+`backup_failed`, `backup_stale`, `decision_window_expired`,
+`runtime_unclean_restart` and, when `alerting.email.daily_summary` is true,
+`daily_summary`.
 Delivery is asynchronous and bounded:
 
 - the same incident is mailed at most every 30 min (its episode key, not the

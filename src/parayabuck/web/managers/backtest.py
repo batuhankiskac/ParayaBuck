@@ -44,7 +44,7 @@ def _configured_reports_root() -> Path:
     try:
         configured = load_config().backtest.output_dir
     except Exception as exc:
-        raise ValueError("The Web backtest report directory could not be read from the configuration") from exc
+        raise ValueError("Web backtest rapor dizini yapılandırmadan okunamadı") from exc
     return Path(configured)
 
 
@@ -92,7 +92,7 @@ class BacktestManager:
                 active_thread = self._thread is not None and self._thread.is_alive()
             except BaseException as exc:
                 raise ValueError(
-                    "The backtest thread state could not be verified; refusing to start another run"
+                    "Backtest iş parçacığı durumu doğrulanamadı; başka bir çalıştırma başlatılmıyor"
                 ) from exc
             if active_thread:
                 raise ValueError("Bir backtest zaten çalışıyor; bitmesini bekleyin")
@@ -103,7 +103,7 @@ class BacktestManager:
                     f"active ({engine_state}); stop the engine first"
                 )
             if engine_state not in _BACKTEST_ALLOWED_ENGINE_STATES:
-                raise ValueError("The trading engine state could not be verified; refusing to start a Web backtest")
+                raise ValueError("Motor durumu doğrulanamadı; Web backtesti başlatılmıyor")
             if self.reports_root is None:
                 self.reports_root = _configured_reports_root()
             reports_root = self.reports_root

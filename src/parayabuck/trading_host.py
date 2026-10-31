@@ -24,11 +24,11 @@ TRADING_HOST_ENV = "PARAYABUCK_TRADING_HOST"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 TRADING_HOST_REFUSAL = (
-    "Engine start refused: this machine is not designated as the trading host. "
-    "Only one runner may trade the shared Alpaca account. The systemd drop-in "
-    "deploy/systemd/vm-dropin/trading-host.conf sets "
-    f"{TRADING_HOST_ENV}=1 on the designated host; install that drop-in there only "
-    "(the template unit does not set it). The web console and backtests work without it."
+    "Motor başlatılamadı: bu makine işlem makinesi olarak tanımlanmamış. "
+    "Paylaşılan Alpaca hesabını yalnızca bir çalıştırıcı işletebilir. "
+    "deploy/systemd/vm-dropin/trading-host.conf systemd drop-in'i, tanımlı makinede "
+    f"{TRADING_HOST_ENV}=1 değerini ayarlar; bu drop-in yalnızca orada kurulmalıdır "
+    "(şablon birim bunu ayarlamaz). Web konsolu ve backtest bu ayar olmadan çalışır."
 )
 
 

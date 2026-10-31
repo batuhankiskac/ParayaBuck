@@ -898,5 +898,6 @@ the one-runner guard, not documentation, is what keeps a second runner out.
 Never add the variable there, and never run it while the VM engine trades.
 Inside the container the console binds `0.0.0.0` (`PARAYABUCK_CONTAINER=YES`);
 the control token and every mutating request are then served only to loopback
-or private (Docker bridge) peers, and a trading host refuses that bind
-outright.
+peers and to the bridge's default-route gateway (the host side of the Docker
+bridge, S3-1-1). Other private peers, including other containers on the same
+bridge, are refused, and a trading host refuses that bind outright.

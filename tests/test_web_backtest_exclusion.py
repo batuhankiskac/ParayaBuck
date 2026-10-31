@@ -144,7 +144,7 @@ def test_backtest_lock_is_rlock_and_reentrant():
 )
 def test_backtest_refuses_unverified_engine_state(provider):
     bm = BacktestManager(engine_state_provider=provider)
-    with pytest.raises(ValueError, match="could not be verified"):
+    with pytest.raises(ValueError, match="doğrulanamadı"):
         bm.start({})
     assert bm.state == "idle"
 

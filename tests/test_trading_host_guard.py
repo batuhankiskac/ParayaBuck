@@ -97,7 +97,7 @@ def test_runtime_start_refused_without_designation(monkeypatch: Any) -> None:
     runtime = EngineRuntime("key", "secret", Config(runtime=RuntimeConfig(mode=RuntimeMode.PAPER)))
     runtime._snapshot_writer = None
 
-    with pytest.raises(RuntimeError, match="not designated as the trading host"):
+    with pytest.raises(RuntimeError, match="işlem makinesi olarak tanımlanmamış"):
         runtime.start()
 
     assert runtime._running is False

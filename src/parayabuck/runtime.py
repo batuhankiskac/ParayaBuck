@@ -7014,6 +7014,7 @@ _HELD_SESSION_STATUSES = frozenset(
         "stale_decision_buy_held",
         "submit_blocked",
         "replan_sell_submitted",
+        "residual_sell_submitted",
         "buy_phase_submitted",
         "replan_order_in_flight",
     }

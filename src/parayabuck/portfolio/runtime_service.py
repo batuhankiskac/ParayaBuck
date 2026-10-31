@@ -2849,10 +2849,13 @@ class PortfolioRuntime:
         return keys
 
     def _alert_december_calendar_fallback(self, decision_id: str, years: list[int]) -> None:
-        """One alert per decision when the December window fell back to a weekday count (T2-10-4)."""
+        """One alert per decision when the December check could not read the NYSE calendar (T2-10-4).
+
+        The deferral is skipped and the ordinary rule executes (no weekday count is used).
+        """
         self._raise_operator_alert_once(
             (decision_id, "december_calendar_fallback"),
-            message="December deferral used the weekday fallback: the NYSE calendar was unreadable",
+            message="December deferral skipped: the NYSE calendar was unreadable; the ordinary rule applied",
             decision_id=decision_id,
             years=sorted(set(years)),
         )
@@ -3754,8 +3757,13 @@ class PortfolioRuntime:
         committed_fill = (committed or 0.0) * gap
         # Non-borrowed buying power. LIVE caps cash by the non-marginable
         # buying power where the broker reports it; PAPER keeps raw cash so its
-        # sizing stays the validated PAPER/backtest basis (Alpaca's PAPER
+        # sizing stays the validated PAPER sizing basis (Alpaca's PAPER
         # settlement semantics for that field are unverified, P2-10-4).
+        # Known divergence (audit T3-3-2): the backtest clips a BUY to the cash
+        # above the buffer at the open, but a PAPER BUY is sent at the close-sized
+        # quantity with no gap term, so a gap-up open can spend into the buffer.
+        # A sent order cannot be clipped at fill time, and a gap term would change
+        # PAPER quantities, so the basis is kept and the divergence documented.
         spendable = account.cash
         non_marginable = getattr(account, "non_marginable_buying_power", None)
         if self.mode == "live" and non_marginable is not None and math.isfinite(non_marginable):
@@ -3781,6 +3789,9 @@ class PortfolioRuntime:
             # the non-borrowed buying power, min(cash, non-marginable buying
             # power) less committed BUYs: a gap-up open of up to the margin
             # never borrows on a (multiplier >= 1) margin account.
+            # Trade-off (audit T3-3-1, deliberate): this cap makes a calm-regime
+            # entry land below its target by up to the margin, and the gap closes
+            # over one or two sessions. LIVE is disabled today.
             gap_headroom = max(0.0, (spendable - committed_fill) / gap)
             if committed is None:
                 gap_headroom = 0.0

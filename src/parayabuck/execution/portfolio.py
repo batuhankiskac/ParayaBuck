@@ -987,8 +987,9 @@ class TargetToOrderPlanner:
         ``gain_band_fallbacks`` receives one entry per downsize decided by the
         constant band because the gain band's lot book was unusable.
         ``december_calendar_fallbacks`` receives the season year whenever a strategy
-        trim's December check could not read the NYSE calendar, so the ordinary rule
-        executed instead of the deferral (T2-10-4).
+        trim that the band would hold reaches the December check and the NYSE
+        calendar cannot be read, so the ordinary rule executed instead of the
+        deferral (T2-10-4, T3-4-3).
         """
         _validate_unique_account_positions(account)
         approved = {canonical_symbol(symbol, market) for symbol in approved_symbols}
@@ -1034,6 +1035,10 @@ class TargetToOrderPlanner:
             position = positions.get(symbol)
             current_qty = position.qty if position is not None else 0.0
             managed_qty = position.managed_qty if position is not None else 0.0
+            # Sizing uses the equity the caller passes, which the runtime takes from
+            # a broker snapshot taken after the close. After-hours moves can shift
+            # the size by about 0.7pp against the decision close (audit T3-3-3). The
+            # basis is kept so PAPER and LIVE size the same way as before.
             target_qty = target_weights.get(symbol, 0.0) * account.equity / price
             current_weight = current_qty * price / account.equity if account.equity > 0 else 0.0
             target_weight = target_weights.get(symbol, 0.0)
@@ -1053,7 +1058,19 @@ class TargetToOrderPlanner:
             # band, executes, and is never deferred.
             deferral_sessions = self.policy.december_deferral_sessions
             strategy_trim = 0.0 < target_weight < current_weight and symbol not in risk_reduced
-            if december_calendar_fallbacks is not None and strategy_trim:
+            # A full exit is never held inside the band (T7-2). A mixed position
+            # whose target keeps only the external units is a full exit of the
+            # bot's own units, so it is exempt as well. It is decided first: an
+            # exit is never deferred (T3-4-1) and never reaches the gain-band hold
+            # (T3-4-2), because its target weight stays positive.
+            full_exit = (target_weight == 0.0 and current_qty > 0.0) or (
+                managed_qty > 1e-12 and target_qty <= current_qty - managed_qty + 1e-9
+            )
+            # The December check can change this decision only for a trim that
+            # the band would otherwise hold, so only that trim reads the calendar
+            # and records a calendar fallback (T3-4-3).
+            december_check = strategy_trim and gap >= self.policy.rebalance_band_pct and not full_exit
+            if december_calendar_fallbacks is not None and december_check:
                 calendar_year = december_calendar_fallback_year(target.decision_timestamp, deferral_sessions)
                 if calendar_year is not None:
                     december_calendar_fallbacks.append(calendar_year)
@@ -1062,6 +1079,7 @@ class TargetToOrderPlanner:
                 and 0.0 < target_weight < current_weight
                 and symbol not in risk_reduced
                 and gap >= self.policy.rebalance_band_pct
+                and not full_exit
                 and in_december_deferral_window(target.decision_timestamp, deferral_sessions)
             )
             gain_band_case = (
@@ -1069,12 +1087,7 @@ class TargetToOrderPlanner:
                 and 0.0 < target_weight < current_weight
                 and symbol not in risk_reduced
                 and not deferral_case
-            )
-            # A full exit is never held inside the band (T7-2). A mixed position
-            # whose target keeps only the external units is a full exit of the
-            # bot's own units, so it is exempt as well.
-            full_exit = (target_weight == 0.0 and current_qty > 0.0) or (
-                managed_qty > 1e-12 and target_qty <= current_qty - managed_qty + 1e-9
+                and not full_exit
             )
             if gap < self.policy.rebalance_band_pct and not gain_band_case and not full_exit:
                 continue

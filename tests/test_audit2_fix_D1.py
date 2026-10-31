@@ -106,7 +106,8 @@ def test_reset_keeps_a_rearmed_reason_that_is_still_in_force(tmp_path: Path) -> 
 def test_reset_releases_a_leftover_rearmed_row_that_is_not_in_force(tmp_path: Path) -> None:
     runtime, ledger = _runtime(tmp_path)
     # A row from an earlier worker state: not in memory, so nothing is live.
-    ledger.save_safety_incident("acct", "decision_worker_crashed")
+    # (decision_worker_crashed is no longer re-armed at restart, W05 / R3-4-1.)
+    ledger.save_safety_incident("acct", "final_market_event_queue_overflow")
     runtime._raise_halt("ownership_drift")
 
     runtime.reset_safety_lock()

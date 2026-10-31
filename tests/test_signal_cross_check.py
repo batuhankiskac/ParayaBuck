@@ -459,10 +459,33 @@ def test_runtime_step_alerts_close_divergence_and_stays_quiet_on_agreement(monke
     assert quiet == []
 
 
+class _Clock:
+    """Pins ``parayabuck.runtime.datetime.now`` (same pattern as test_runtime_decision_retry)."""
+
+    def __init__(self, now: datetime) -> None:
+        self.now = now
+
+    def freeze(self, moment: datetime) -> None:
+        self.now = moment
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        clock = self
+
+        class _Frozen(datetime):
+            @classmethod
+            def now(cls, tz: Any = None) -> datetime:
+                return clock.now.astimezone(tz) if tz is not None else clock.now
+
+        monkeypatch.setattr("parayabuck.runtime.datetime", _Frozen)
+
+
 def test_runtime_defers_the_batch_while_the_sip_bar_is_missing_then_reruns_it(monkeypatch) -> None:
     events: list[tuple[str, dict[str, object]]] = []
     engine = _engine(_Historical(ConnectionError("down")), events, monkeypatch)
     bars = _stream(440.0)
+    # Freeze the clock at the session close (+2 s) so the coordinator's retry
+    # horizon sits on the fixed bar date, not on the day the suite runs.
+    _Clock(_CLOSE + timedelta(seconds=2)).install(monkeypatch)
     assert engine._signal_cross_check_step(_equity_runtime(), bars) is None
     key = (Market.EQUITY, _STREAM_LABEL)
     deferred_bars, retry_at = engine._deferred_portfolio_batches[key]

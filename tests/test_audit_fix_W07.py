@@ -354,7 +354,8 @@ def test_a_reset_inside_the_window_decides_the_requeued_close_batch(
     # The operator reset lifts the halt inside the 40-minute window.
     with runtime._state_lock:
         runtime._release_halt_reason("ownership_drift")
-    _Clock.now = SESSION_CLOSE + timedelta(seconds=62)
+    # Past the SIP embargo (the basis gate parks the batch until then), still inside the window.
+    _Clock.now = SESSION_CLOSE + timedelta(minutes=16)
     runtime._run_due_deferred_portfolio_batches(now=_Clock.now)
 
     assert decided == [len(SYMBOLS)]

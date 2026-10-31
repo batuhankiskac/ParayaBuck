@@ -322,7 +322,11 @@ def test_a_buy_is_held_while_the_equity_signal_basis_is_unverified() -> None:
     sell = SimpleNamespace(side=PortfolioOrderSide.SELL)
 
     assert runtime._advance_submit_block_reason(Market.EQUITY, buy) == "buy_not_permitted"
+    # The decision path keeps SELLs flowing under the latch. The advance path
+    # holds equity SELLs too (P3-3-2): an unverified basis freezes the book.
     assert runtime._advance_submit_block_reason(Market.EQUITY, sell) is None
+    assert runtime._advance_submit_block_reason(Market.EQUITY, sell, advance_path=True) == "sell_basis_unverified"
+    assert runtime._advance_submit_block_reason(Market.CRYPTO, sell, advance_path=True) is None
 
 
 def test_a_buy_flows_once_the_equity_signal_basis_verifies() -> None:

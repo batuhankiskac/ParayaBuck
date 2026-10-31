@@ -2339,7 +2339,10 @@ class PortfolioRuntime:
         ``sell_pending``, so no BUY is sent), the closing result when nothing
         can be sent and a leg is unsettled, or ``None`` when nothing needs
         selling. Runs even when the engine is halted: a residual SELL only
-        reduces exposure.
+        reduces exposure. The caller's ``submit_gate`` still applies: on the
+        advance path an equity SELL held by the unverified signal basis is
+        skipped before its row is written and retried by a later advance
+        (P3-3-2), so the rebalance stays ``sell_pending`` meanwhile.
         """
         legs: dict[str, list[dict[str, object]]] = {}
         for row in sell_rows:

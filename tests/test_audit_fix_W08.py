@@ -65,13 +65,24 @@ class _LockThatFlipsGate:
         self._runtime = runtime
         self._changes = changes
 
-    def __enter__(self) -> _LockThatFlipsGate:
+    def _flip(self) -> None:
         for name, value in self._changes.items():
             setattr(self._runtime, name, value)
+
+    def __enter__(self) -> _LockThatFlipsGate:
+        self._flip()
         return self
 
     def __exit__(self, *exc: object) -> bool:
         return False
+
+    # The retry path takes the lock with a non-blocking acquire (C3-2-2).
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        self._flip()
+        return True
+
+    def release(self) -> None:
+        return None
 
 
 # --- A-1 / CC-6: the deferred-BUY advance -----------------------------------

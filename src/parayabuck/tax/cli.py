@@ -40,11 +40,22 @@ from parayabuck.tax.rates import (
 # Exit codes of the parayabuck CLI (docs/operations.md, "Exit codes"): 1 is a refused or
 # failed command, 64 a bad argument or value. 2 is reserved for CRITICAL health (D2-6-5).
 EXIT_FAILURE = 1
+EXIT_MISSING = 3
 EXIT_USAGE = 64
 
 
 class _UsageError(Exception):
     """A bad argument or value; the command exits EXIT_USAGE."""
+
+
+def _missing_ledger(command: str, database: Path) -> int:
+    """The ledger file a command needs is absent: nothing is created, the command exits EXIT_MISSING (F3-1-6)."""
+    print(
+        f"tax {command}: ledger {database} does not exist; nothing was created. Pass --config before the "
+        "subcommand (parayabuck --config PATH tax ...) to name the configuration whose ledger the engine writes.",
+        file=sys.stderr,
+    )
+    return EXIT_MISSING
 
 
 def _date_arg(value: str, option: str) -> date:
@@ -140,7 +151,7 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
     if writing and runtime.mode == RuntimeMode.LIVE:
         raise TaxDataError(
             f"the config is LIVE, so its ledger {configured} is the LIVE ledger; PAPER activities are not "
-            "stored there (use --live)"
+            "stored there; import PAPER activities with a PAPER configuration instead"
         )
     if writing and same_ledger_path(configured, DEFAULT_LIVE_DECISION_DB_PATH):
         raise TaxDataError(
@@ -153,13 +164,14 @@ def _ledger_for_mode(runtime: Any, *, live: bool, writing: bool) -> Path:
 def _rates_fetch(args: argparse.Namespace) -> int:
     from parayabuck.config import load_env_file
 
+    # Usage is checked before the environment, so a bad date is exit 64 even without a key (F3-5-9).
+    start = _date_arg(args.start, "--start")
+    end = _date_arg(args.end, "--end") if args.end else datetime.now(TURKEY_TIME).date()
     load_env_file()
     key = os.getenv(EVDS_KEY_ENV, "").strip()
     if not key:
         print(f"tax rates-fetch: set {EVDS_KEY_ENV} to an EVDS API key first", file=sys.stderr)
         return 1
-    start = _date_arg(args.start, "--start")
-    end = _date_arg(args.end, "--end") if args.end else datetime.now(TURKEY_TIME).date()
     counts = fetch_rates_to_files(
         start,
         end,
@@ -177,25 +189,31 @@ def _rates_fetch(args: argparse.Namespace) -> int:
 def _import_activities(args: argparse.Namespace) -> int:
     from parayabuck.config import load_env_file
     from parayabuck.execution.alpaca_client import AlpacaClient
-    from parayabuck.live_safety import mode_credentials
+    from parayabuck.live_safety import credential_env_names, mode_credentials
+    from parayabuck.monitoring.operational_event import register_secret_text
 
+    # Usage is checked first (F3-5-9); the ledger and credentials come after it.
+    since = _date_arg(args.since, "--since")
     load_env_file()
     # Resolve the ledger before any network call, so a mode mismatch fails closed.
     database = _database_path(args.config, live=bool(args.live), writing=True)
     if not database.is_file():
         # F2-9-6: the engine creates the ledger; an import must not create an empty one that a
         # later start would take for an existing ledger. Refused before any network call.
+        return _missing_ledger("import-activities", database)
+    key, secret = mode_credentials(live=bool(args.live))
+    if not key or not secret:
+        key_name, secret_name = credential_env_names(live=bool(args.live))
+        mode = "LIVE" if args.live else "PAPER"
         print(
-            f"tax import-activities: ledger {database} does not exist; nothing was created. Point --config at the "
-            "configuration whose ledger the engine writes.",
+            f"tax import-activities: Alpaca credentials are not configured for the {mode} mode; "
+            f"{key_name} and {secret_name} must both be set (environment or credentials file)",
             file=sys.stderr,
         )
         return 1
-    key, secret = mode_credentials(live=bool(args.live))
-    if not key or not secret:
-        print("tax import-activities: Alpaca credentials are not configured for this mode", file=sys.stderr)
-        return 1
-    since = _date_arg(args.since, "--since")
+    # The keys are registered as secrets before any request, as the runtime does (S3-2-8).
+    register_secret_text(key)
+    register_secret_text(secret)
     imported_on = datetime.now(TURKEY_TIME).date()
     adapter = AlpacaClient(key, secret, paper=not args.live)
     try:
@@ -240,9 +258,10 @@ def _import_activities(args: argparse.Namespace) -> int:
 
 
 def _latest_account(connection: sqlite3.Connection) -> str:
+    # The "unknown" placeholder is not an account: a real one written earlier is preferred (F3-1-2).
     row = connection.execute(
         "SELECT account_id FROM portfolio_runtime_sessions "
-        "WHERE account_id IS NOT NULL AND account_id != '' ORDER BY started_at DESC LIMIT 1"
+        "WHERE account_id IS NOT NULL AND account_id NOT IN ('', 'unknown') ORDER BY started_at DESC LIMIT 1"
     ).fetchone()
     if row is None or not row[0]:
         raise TaxDataError("no account found in the ledger; pass --account-id")
@@ -253,12 +272,20 @@ def _export(args: argparse.Namespace) -> int:
     if args.year < 2000 or args.year > 2100:
         raise _UsageError(f"--year {args.year} is out of range")
     database = _database_path(args.config, live=bool(args.live))
+    if not database.is_file():
+        return _missing_ledger("export", database)
     try:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True, timeout=5.0)
     except sqlite3.Error as exc:
         raise TaxDataError(f"cannot open ledger read-only at {database}: {exc}") from exc
     try:
         account_id = args.account_id or _latest_account(connection)
+        if account_id == "unknown":
+            # The runtime writes "unknown" when the broker reports no account id; figures for that
+            # placeholder would read as a real account, so the export refuses (F3-1-2).
+            raise TaxDataError(
+                "the ledger's account id is the placeholder 'unknown'; pass --account-id with the real account id"
+            )
         rates = load_rate_book(Path(args.usdtry), Path(args.yiufe))
         report = build_year_report(connection, account_id, args.year, rates)
     finally:

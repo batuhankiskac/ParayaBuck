@@ -20,6 +20,7 @@ in a request header, never in the URL.
 from __future__ import annotations
 
 import bisect
+import contextlib
 import csv
 import io
 import json
@@ -74,6 +75,7 @@ def evds_yiufe_series(env: Mapping[str, str] | None = None) -> str:
 
 
 USDTRY_COLUMN = "usdtry_forex_buying"
+USDTRY_SELLING_COLUMN = "usdtry_forex_selling"
 YIUFE_COLUMN = "yiufe_index"
 
 HttpGet = Callable[[str, Mapping[str, str]], Any]
@@ -286,12 +288,50 @@ def fetch_yiufe(start: date, end: date, api_key: str, http_get: HttpGet = defaul
     return indices
 
 
-def _write_csv_atomic(path: Path, header: list[str], rows: list[list[str]]) -> None:
+def _csv_text(header: list[str], rows: list[list[str]]) -> str:
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer)
     writer.writerow(header)
     writer.writerows(rows)
-    atomic_write(path, buffer.getvalue())
+    return buffer.getvalue()
+
+
+def _read_text_or_none(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
+def write_text_pair(first: Path, first_text: str, second: Path, second_text: str) -> None:
+    """Replace two files as one unit (S3-3-7).
+
+    ``first`` is replaced, then ``second``. When the second write fails, ``first`` is put
+    back to its previous text (or removed when it did not exist) and the error is raised,
+    so a failed run never leaves the pair disagreeing.
+    """
+    previous = _read_text_or_none(first)
+    atomic_write(first, first_text)
+    try:
+        atomic_write(second, second_text)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            if previous is None:
+                first.unlink(missing_ok=True)
+            else:
+                atomic_write(first, previous)
+        raise
+
+
+def _usdtry_selling(path: Path) -> tuple[bool, dict[str, str]]:
+    """Whether ``usdtry.csv`` carries the optional selling column, and its text by ISO day."""
+    if not path.exists():
+        return False, {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if USDTRY_SELLING_COLUMN not in (reader.fieldnames or []):
+            return False, {}
+        return True, {(row.get("date") or "").strip(): (row.get(USDTRY_SELLING_COLUMN) or "").strip() for row in reader}
 
 
 def _yiufe_sources(path: Path) -> dict[str, str]:
@@ -326,6 +366,8 @@ def fetch_rates_to_files(
     """
     key = os.getenv(EVDS_KEY_ENV, "") if api_key is None else api_key
     usd: dict[date, float] = load_usdtry_csv(Path(usdtry_path)) if Path(usdtry_path).exists() else {}
+    # The optional selling column is kept as it was; a rewrite must not drop operator data (F3-1-3).
+    has_selling, selling = _usdtry_selling(Path(usdtry_path))
     fetched_usd = fetch_usd_try(start, end, key, http_get)
     usd_differing = sorted(day for day, rate in fetched_usd.items() if day in usd and usd[day] != rate)
     if usd_differing:
@@ -352,15 +394,17 @@ def fetch_rates_to_files(
     sources = _yiufe_sources(Path(yiufe_path))
     label = f"TCMB EVDS {evds_yiufe_series()}"
     indices.update(fetched)
-    _write_csv_atomic(
+    usd_header = ["date", USDTRY_COLUMN] + ([USDTRY_SELLING_COLUMN] if has_selling else [])
+    usd_rows = [
+        [day.isoformat(), repr(usd[day])] + ([selling.get(day.isoformat(), "")] if has_selling else [])
+        for day in sorted(usd)
+    ]
+    yiufe_rows = [[month, repr(indices[month]), sources.get(month) or label] for month in sorted(indices)]
+    write_text_pair(
         Path(usdtry_path),
-        ["date", USDTRY_COLUMN],
-        [[day.isoformat(), repr(usd[day])] for day in sorted(usd)],
-    )
-    _write_csv_atomic(
+        _csv_text(usd_header, usd_rows),
         Path(yiufe_path),
-        ["month", YIUFE_COLUMN, "source"],
-        [[month, repr(indices[month]), sources.get(month) or label] for month in sorted(indices)],
+        _csv_text(["month", YIUFE_COLUMN, "source"], yiufe_rows),
     )
     return {"usdtry_rows": len(usd), "yiufe_rows": len(indices)}
 

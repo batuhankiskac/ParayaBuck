@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS tax_activities (
 
 # One row per import: the account's activities were read for dates from ``covered_from``
 # through ``covered_through`` (inclusive). The endpoint has no end date, so an import
-# covers from its start up to the day before it ran (that day may be incomplete).
+# covers from its start up to two days before it ran: the day before the run may still
+# be receiving postings (F3-1-4), so it is not treated as complete.
 _COVERAGE_SQL = """
 CREATE TABLE IF NOT EXISTS tax_import_coverage (
     account_id TEXT NOT NULL,
@@ -275,11 +276,12 @@ def record_coverage(
 ) -> date:
     """Record that an import from ``since`` ran on ``imported_on``; returns the covered-through day.
 
-    The day before ``imported_on`` is the last day treated as complete, so an import
-    that runs on 1 January covers the whole previous year.
+    Two days before ``imported_on`` is the last day treated as complete: the day before the
+    run may still be receiving postings. An import that runs on 2 January covers the whole
+    previous year; one that runs on 1 January does not.
     """
     ensure_table(connection)
-    covered_through = imported_on - timedelta(days=1)
+    covered_through = imported_on - timedelta(days=2)
     stamp = (imported_at or datetime.now(UTC)).isoformat()
     connection.execute(
         "INSERT INTO tax_import_coverage (account_id, covered_from, covered_through, imported_at) VALUES (?, ?, ?, ?)",

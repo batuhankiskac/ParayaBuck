@@ -36,10 +36,16 @@ from parayabuck.tax.dividends import (
     load_activities,
 )
 from parayabuck.tax.errors import LedgerError, MissingIndexError, MissingRateError, MissingTableError, TaxDataError
-from parayabuck.tax.ledger import TURKEY_TIME, LotDisposal, build_disposals, read_fills, unobserved_fee_symbols
-from parayabuck.tax.rates import DEFAULT_USDTRY_PATH, DEFAULT_YIUFE_PATH, RateBook, load_rate_book
+from parayabuck.tax.ledger import (
+    TURKEY_TIME,
+    LotDisposal,
+    build_disposals,
+    fee_gap_symbols,
+    read_fills,
+    stream_zero_fee_symbols,
+)
+from parayabuck.tax.rates import DEFAULT_USDTRY_PATH, DEFAULT_YIUFE_PATH, RateBook, load_rate_book, write_text_pair
 from parayabuck.tax.rules import US_TREATY_WITHHOLDING_CAP, declaration_threshold_tl, progressive_tax
-from parayabuck.utils.io import atomic_write
 
 COLUMNS: tuple[str, ...] = (
     "section",
@@ -212,11 +218,19 @@ def build_year_report(
             "temettü ve faiz toplamı beyan eşiğinin altında; beyan zorunluluğu görünmüyor. "
             "dividend_tax_due_tl yine de ihtiyatlı olarak gösteriliyor."
         )
-    fee_gaps = unobserved_fee_symbols(disposals, read_fills(connection, account_id)) if disposals else []
+    fills = read_fills(connection, account_id) if disposals else []
+    fee_gaps = fee_gap_symbols(disposals, fills)
     if fee_gaps:
         notes.append(
             f"{', '.join(fee_gaps)}: bazı dolumların broker komisyonu gözlenmedi ve 0 sayıldı; "
             "kazanç ve vergi bu yüzden olduğundan biraz yüksek (ihtiyatlı) olabilir."
+        )
+    stream_zero = stream_zero_fee_symbols(disposals, fills)
+    if stream_zero:
+        # Informational only: the trade stream carries no commission field, and equity orders are commission-free.
+        notes.append(
+            f"{', '.join(stream_zero)}: akış (stream) dolumlarında komisyon alanı gelmiyor; hisse senedi emirleri "
+            "komisyonsuz olduğu için 0 sayıldı. Bu beklenen durumdur, eksik kayıt anlamına gelmez."
         )
     if net_gain < 0:
         notes.append("net loss for the year; not carried forward and no tax is due on it (rule 3)")
@@ -308,8 +322,13 @@ def export_year(report: YearReport, out: Path) -> tuple[Path, Path]:
     for row in rows:
         writer.writerow({key: row.get(key, "") for key in COLUMNS})
     summary_path = out.parent / f"{out.stem}.summary.json"
-    atomic_write(out, buffer.getvalue())
-    atomic_write(summary_path, json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n")
+    # One pair: a failed summary write restores the CSV, so the two files never disagree (S3-3-7).
+    write_text_pair(
+        out,
+        buffer.getvalue(),
+        summary_path,
+        json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n",
+    )
     return out, summary_path
 
 

@@ -271,7 +271,7 @@ def test_coverage_must_start_by_january_and_end_by_december(tmp_path: Path) -> N
         record_coverage(connection, ACCOUNT, date(2026, 1, 1), date(2026, 10, 27))  # ends too early
         assert coverage_spans_year(connection, ACCOUNT, 2026) is False
         through = record_coverage(connection, ACCOUNT, date(2026, 1, 1), date(2027, 1, 2))
-        assert through == date(2027, 1, 1)  # the day before the import ran
+        assert through == date(2026, 12, 31)  # two days before the import ran (F3-1-4)
         assert coverage_spans_year(connection, ACCOUNT, 2026) is True
         assert coverage_spans_year(connection, "OTHER-ACCOUNT", 2026) is False
     finally:

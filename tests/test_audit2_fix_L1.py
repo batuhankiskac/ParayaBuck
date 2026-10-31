@@ -463,7 +463,7 @@ def test_tax_import_refuses_to_create_a_missing_ledger(
 
     code = tax_cli._import_activities(Namespace(config=None, live=False, since="2026-01-01"))
 
-    assert code == 1
+    assert code == 3  # a missing input is exit 3 (F3-1-6)
     assert "does not exist" in capsys.readouterr().err
     assert not ledger_path.parent.exists()
 

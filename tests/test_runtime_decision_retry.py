@@ -147,9 +147,9 @@ def test_reconcile_failure_alone_requeues_and_clears_without_an_operator_reset(
     assert engine._process_portfolio_timestamp(_bars()) is False
     assert (Market.EQUITY, SESSION_LABEL) in engine._deferred_portfolio_batches
 
-    # Reconcile recovers 60 s later: the parked batch decides.
+    # Reconcile recovers; past the SIP embargo the parked batch decides.
     engine._reconcile_failed = False
-    clock.freeze(SESSION_CLOSE + timedelta(seconds=62))
+    clock.freeze(SESSION_CLOSE + timedelta(minutes=16))
     engine._run_due_deferred_portfolio_batches(now=clock.now)
 
     assert engine._deferred_portfolio_batches == {}
@@ -326,8 +326,12 @@ def test_early_close_retry_deadline_is_the_actual_close_not_16_et(
 def test_full_close_to_deferral_to_retry_chain_decides_the_session(
     monkeypatch: pytest.MonkeyPatch, _capture_alerts: list[tuple[str, dict[str, object]]]
 ) -> None:
-    """16:00:02 the SIP cross-check defers; 16:01:02 a reconcile failure
-    defers again; 16:02:02 everything is clear and the session is decided."""
+    """16:16 the SIP cross-check defers; 16:17 a reconcile failure
+    defers again; 16:18 everything is clear and the session is decided.
+
+    The decision waits for the SIP embargo (16:15) before anything else runs,
+    so the chain starts after it.
+    """
     decided: list[list[Bar]] = []
 
     def _decide(bars: list[Bar], **kwargs: Any) -> SimpleNamespace:
@@ -335,7 +339,7 @@ def test_full_close_to_deferral_to_retry_chain_decides_the_session(
         return _result()
 
     engine = _engine((_portfolio_runtime(_decide),))
-    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock = _Clock(SESSION_CLOSE + timedelta(minutes=16))
     clock.install(monkeypatch)
 
     key = (Market.EQUITY, SESSION_LABEL)
@@ -350,19 +354,19 @@ def test_full_close_to_deferral_to_retry_chain_decides_the_session(
     engine._signal_cross_check_step = _cross_check_defers
     assert engine._process_portfolio_timestamp(_bars()) is False
     assert decided == []
-    assert engine._deferred_portfolio_batches[key][1] == SESSION_CLOSE + timedelta(seconds=62)
+    assert engine._deferred_portfolio_batches[key][1] == SESSION_CLOSE + timedelta(minutes=17)
 
     # 2. The second source answers, but a reconcile error is still active.
     engine._signal_cross_check_step = lambda *_args, **_kwargs: False
     engine._reconcile_failed = True
-    clock.freeze(SESSION_CLOSE + timedelta(seconds=62))
+    clock.freeze(SESSION_CLOSE + timedelta(minutes=17))
     engine._run_due_deferred_portfolio_batches(now=clock.now)
     assert decided == []
-    assert engine._deferred_portfolio_batches[key][1] == SESSION_CLOSE + timedelta(seconds=122)
+    assert engine._deferred_portfolio_batches[key][1] == SESSION_CLOSE + timedelta(minutes=18)
 
     # 3. Reconciliation recovers; the retry runs the decision.
     engine._reconcile_failed = False
-    clock.freeze(SESSION_CLOSE + timedelta(seconds=122))
+    clock.freeze(SESSION_CLOSE + timedelta(minutes=18))
     engine._run_due_deferred_portfolio_batches(now=clock.now)
 
     assert decided == [_bars()]
@@ -459,7 +463,7 @@ def test_network_error_after_the_decision_was_persisted_still_fails_closed(
 ) -> None:
     monkeypatch.setattr(runtime_module, "automate_incident_recovery", lambda *_a, **_k: None)
     engine = _engine((_runtime_with_repository(_broker_read_timeout, decided=True),))
-    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock = _Clock(SESSION_CLOSE + timedelta(minutes=16))
     clock.install(monkeypatch)
 
     assert engine._process_portfolio_timestamp(_bars()) is True
@@ -478,7 +482,7 @@ def test_domain_error_before_any_order_is_persisted_still_fails_closed(
         raise ValueError("Strategy emitted a symbol outside the active universe")
 
     engine = _engine((_runtime_with_repository(_invalid, decided=False),))
-    clock = _Clock(SESSION_CLOSE + timedelta(seconds=2))
+    clock = _Clock(SESSION_CLOSE + timedelta(minutes=16))
     clock.install(monkeypatch)
 
     assert engine._process_portfolio_timestamp(_bars()) is True

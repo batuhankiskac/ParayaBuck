@@ -34,7 +34,12 @@ from parayabuck.core.models import (
     PositionSnapshot,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
-from parayabuck.data.adjustment import adequate_coverage, covers_session, split_continuity_breach
+from parayabuck.data.adjustment import (
+    adequate_coverage,
+    covers_session,
+    signal_session_date,
+    split_continuity_breach,
+)
 from parayabuck.data.alpaca import BatchOutcome, HistoricalProviderCooldown
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
@@ -270,8 +275,9 @@ _SESSION_CLOSE_FLUSH_GRACE_SECONDS = 30.0
 # Bounded retry for the provider (SIP) daily bar that replaces an incomplete
 # stream-built session-close bar. The first attempt is at the session's SIP
 # embargo (the earliest moment the provider's bar for that session is final).
+# Retries run until one interval before the decision window closes, so a
+# short provider outage or a late SIP bar does not cost the session (T3-2-2).
 _SESSION_CLOSE_FALLBACK_INTERVAL = timedelta(minutes=1)
-_SESSION_CLOSE_FALLBACK_ATTEMPTS = 4
 # Operator-facing text for inventory in the shared brokerage account that the
 # bot does not own: crypto (support was removed) and equity symbols outside the
 # strategy universe. ParayaBuck never trades, pins, streams or protects them;
@@ -4265,12 +4271,22 @@ class EngineRuntime:
         Runs OUTSIDE ``_ingestion_lock``: it is a network call and the stream
         must keep ingesting while it waits. The provider's bar for a session
         is final only after the SIP embargo, which is where ``retry_at``
-        starts, so a fetched bar is never a partial one. Bounded attempts: a
-        session with no decision bar places no order, and the intent watchdog
-        owns the alarm if the fallback never lands.
+        starts, so a fetched bar is never a partial one. Retries are bounded by
+        the decision window (not a fixed attempt count): a session with no
+        decision bar places no order, and the intent watchdog owns the alarm
+        if the fallback never lands.
         """
         pending = getattr(self, "_session_close_fallback", None)
         if pending is None or now < pending.retry_at:
+            return
+        retry_interval, retry_window = self._decision_retry_settings()
+        resolve_by = self._decision_session_close(pending.session) + retry_window - retry_interval
+        if now >= resolve_by:
+            log.error(
+                "SIP daily-bar fallback exhausted for session %s: no equity decision this session",
+                pending.session.isoformat(),
+            )
+            self._session_close_fallback = None
             return
         client = getattr(self, "_historical", None)
         if client is None:
@@ -4315,14 +4331,50 @@ class EngineRuntime:
             pending.symbols = remaining
             pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
             return
-        if pending.attempts >= _SESSION_CLOSE_FALLBACK_ATTEMPTS:
-            log.error(
-                "SIP daily-bar fallback exhausted for session %s: no equity decision this session",
-                pending.session.isoformat(),
-            )
-            self._session_close_fallback = None
-            return
         pending.retry_at = now + _SESSION_CLOSE_FALLBACK_INTERVAL
+
+    def _utcnow(self) -> datetime:
+        """The wall clock the basis verifier and its embargo gate read.
+
+        A seam: tests inject a fixed moment so a decision on a fixed session
+        does not depend on the day the suite runs.
+        """
+        return datetime.now(UTC)
+
+    def _park_until_sip_embargo(self, portfolio_runtime: Any, bars: list[Bar], decision_timestamp: datetime) -> bool:
+        """Re-queue an equity session-close decision until its provider bar is final.
+
+        The basis verifier adopts only FINAL provider bars, and a session's
+        daily bar is partial until its close plus the SIP embargo. Verifying
+        before that point always fails the decision-day coverage check, so
+        every session close latched the equity book and sent a false "signal
+        basis UNVERIFIED" alert (T3-5-2, P3-5-1; T3-5-1 when the cross-check is
+        off). The batch waits here, silently like the cross-check park, until
+        the verifier's own finality test passes for the decision bar. A
+        decision that is already final is never parked. True when parked.
+        """
+        now = self._utcnow()
+        embargo = self._signal_cross_check_coordinator().sip_embargo
+        if provider_day_bar_is_final(decision_timestamp, now, embargo):
+            return False
+        session = decision_timestamp.astimezone(NEW_YORK).date()
+        retry_at = self._decision_session_close(session) + embargo
+        if retry_at <= now:
+            # Not final yet the embargo has already run out (a calendar the
+            # verifier cannot close): do not spin. The verifier decides and
+            # fails closed with its own alert.
+            return False
+        deferred = getattr(self, "_deferred_portfolio_batches", None)
+        if not isinstance(deferred, dict):
+            deferred = {}
+            self._deferred_portfolio_batches = deferred
+        deferred[(portfolio_runtime.market, decision_timestamp)] = (list(bars), retry_at)
+        log.info(
+            "Equity decision %s waits for the SIP embargo to pass (basis verification), retry at %s",
+            decision_timestamp.isoformat(),
+            retry_at.isoformat(),
+        )
+        return True
 
     def _decision_retry_settings(self) -> tuple[timedelta, timedelta]:
         """(retry interval, retry window) for deferred session-close decisions."""
@@ -4698,6 +4750,9 @@ class EngineRuntime:
             entry_latch = getattr(self, "_entry_risk_latch", {}).get(portfolio_runtime.market)
             if portfolio_runtime.market == Market.EQUITY:
                 decision_timestamp = max(bar.timestamp for bar in relevant)
+                if self._park_until_sip_embargo(portfolio_runtime, relevant, decision_timestamp):
+                    deferred_any = True
+                    continue
                 basis_reason = self._equity_signal_basis_latch(decision_timestamp)
                 if basis_reason is not None:
                     entry_latch = basis_reason if entry_latch is None else f"{entry_latch}|{basis_reason}"
@@ -5552,7 +5607,7 @@ class EngineRuntime:
         symbols = list(self._equity_signal_basis_symbols())
         if not symbols:
             return True
-        end = datetime.now(UTC)
+        end = self._utcnow()
         # The coverage REQUIREMENT comes from what the strategy can actually
         # READ — the oldest bar of its trailing required window — NOT from
         # the network request boundary: Alpaca's inclusive `start` yields a
@@ -6063,7 +6118,9 @@ class EngineRuntime:
                     ready = ready and (
                         len(series) >= runtime.strategy.minimum_history_bars
                         and expected_latest is not None
-                        and series[-1].timestamp == expected_latest
+                        # Session, not label: an adopted provider bar carries
+                        # the 00:00 ET label while the stream bar keeps 09:30 ET.
+                        and signal_session_date(series[-1].timestamp) == signal_session_date(expected_latest)
                     )
                 if ready:
                     self._not_ready_symbols.discard(symbol)

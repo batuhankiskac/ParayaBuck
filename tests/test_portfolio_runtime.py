@@ -1077,7 +1077,8 @@ def test_portfolio_decision_skips_when_lease_invalidates_at_handoff() -> None:
         return False
 
     runtime._account_snapshot_lease_is_current = invalidate_before_use
-    timestamp = datetime.now(UTC)
+    # A fixed, past session: its bar is final, so the basis gate does not park the decision.
+    timestamp = datetime(2026, 9, 29, 13, 30, tzinfo=UTC)
     runtime._process_portfolio_timestamp(
         [Bar(timestamp, "AAPL", "1d", 100.0, 100.0, 100.0, 100.0, 1_000.0, Market.EQUITY)]
     )

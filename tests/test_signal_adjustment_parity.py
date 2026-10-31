@@ -509,9 +509,12 @@ def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> N
         "parayabuck.runtime.alerts",
         type("A", (), {"emit": staticmethod(lambda kind, **kw: None)}),
     )
-    # A decision day anchored to NOW so the fixture can span the real
-    # full-history window the verifier demands (~minimum_history_bars).
-    decision_ts = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
+    # A fixed, past NYSE session (Tue 2026-09-29, 16:00 ET = 20:00 UTC). The
+    # verifier's clock is pinned one hour after that close, past the SIP
+    # embargo, so the decision-day bar is final on every day the suite runs.
+    decision_ts = datetime(2026, 9, 29, 20, 0, tzinfo=UTC)
+    verified_at = decision_ts + timedelta(hours=1)
+    # The fixture still spans the real full-history window the verifier demands.
     span_days = 420
     window_dates = [decision_ts - timedelta(days=offset) for offset in range(span_days)][::-1]
     decision_bar = _bar("AAA", decision_ts, 42.0)
@@ -522,6 +525,7 @@ def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> N
     # Provider covers the ENTIRE required window INCLUDING the decision-day
     # bar: the decision passes clean.
     engine, captured = _process_engine({"AAA": _series(span_days)}, window_dates)
+    engine._utcnow = lambda: verified_at  # type: ignore[method-assign]
     equity_ns = engine._portfolio_runtimes[0]
     equity_ns.history["AAA"].append(decision_bar)
     engine._process_portfolio_timestamp([decision_bar])
@@ -530,6 +534,7 @@ def test_decision_requires_verified_through_decision_timestamp(monkeypatch) -> N
     # Provider LAGS (missing exactly the decision-day bar): fail closed.
     lagging = {"AAA": _series(span_days - 1)}
     engine2, captured2 = _process_engine(lagging, window_dates)
+    engine2._utcnow = lambda: verified_at  # type: ignore[method-assign]
     equity_ns2 = engine2._portfolio_runtimes[0]
     equity_ns2.history["AAA"].append(decision_bar)
     engine2._process_portfolio_timestamp([decision_bar])

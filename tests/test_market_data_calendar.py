@@ -318,9 +318,12 @@ def test_session_close_fallback_gives_up_within_bounded_attempts(monkeypatch: py
     engine._historical = _Historical(error=ConnectionError("provider down"))
     engine._arm_session_close_fallback({"SPY": close - timedelta(minutes=2)}, close)
     now = close + timedelta(minutes=15)
-    for _attempt in range(runtime_module._SESSION_CLOSE_FALLBACK_ATTEMPTS + 1):
+    # Retries run every minute, well past the old four-attempt cap, until one
+    # interval before the 40-minute decision window closes.
+    while engine._session_close_fallback is not None and now < close + timedelta(minutes=40):  # type: ignore[attr-defined]
         engine._run_session_close_fallback(now)
         now += timedelta(minutes=1)
+    assert len(engine._historical.calls) > 4  # type: ignore[attr-defined]
     # Bounded: an unreachable provider never becomes an endless retry loop,
     # and the intent watchdog owns the missing-decision alarm.
     assert engine._session_close_fallback is None  # type: ignore[attr-defined]

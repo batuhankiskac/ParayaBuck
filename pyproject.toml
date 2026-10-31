@@ -20,7 +20,7 @@ dependencies = [
     # alpaca-py 0.43 still imports websockets.legacy. websockets 14+ emits a
     # deprecation on every process import; 13.1 is the supported bridge until
     # Alpaca migrates its stream implementation.
-    "websockets>=13.1,<14",
+    "websockets>=13.1,<18",
     "jinja2>=3.1,<4",
     "pandas-market-calendars>=5.4.0,<6",
 ]

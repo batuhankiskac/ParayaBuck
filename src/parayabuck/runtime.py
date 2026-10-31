@@ -35,9 +35,11 @@ from parayabuck.core.models import (
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.data.adjustment import (
+    SplitContinuityJump,
     adequate_coverage,
     covers_session,
     signal_session_date,
+    split_continuity_anomaly,
     split_continuity_breach,
 )
 from parayabuck.data.alpaca import BatchOutcome, HistoricalProviderCooldown
@@ -197,6 +199,25 @@ def _is_transient_network_error(exc: BaseException) -> bool:
     if isinstance(exc, (ProtectionReconciliationError, AmbiguousOrderState)):
         return False
     return is_network_failure(exc)
+
+
+# The split-basis verifier's one in-call retry. A failed provider request opens
+# the provider cool-down (X2), which is 30 s after the first failure, so the
+# retry waits for a cool-down that is at most this long rather than hitting the
+# gate and failing again.
+_SIGNAL_VERIFY_RETRY_BACKOFF_SECONDS = 0.5
+_SIGNAL_VERIFY_COOLDOWN_MAX_WAIT_SECONDS = 35.0
+
+
+def _signal_verify_retry_delay(client: object, attempt: int, now: datetime) -> float:
+    """Seconds the verifier waits before its retry after a transient failure."""
+    delay = _SIGNAL_VERIFY_RETRY_BACKOFF_SECONDS * (attempt + 1)
+    cooldown_until = getattr(client, "_provider_cooldown_until", None)
+    if isinstance(cooldown_until, datetime):
+        remaining = (cooldown_until - now).total_seconds()
+        if 0 < remaining <= _SIGNAL_VERIFY_COOLDOWN_MAX_WAIT_SECONDS:
+            delay = max(delay, remaining + 0.05)
+    return delay
 
 
 # No bare "locked": it substring-matches "blocked" (the broker's
@@ -1604,6 +1625,72 @@ class EngineRuntime:
             }
         )
         return payload
+
+    def _report_split_continuity_anomalies(self, anomalies: dict[str, tuple[SplitContinuityJump, ...]]) -> None:
+        """One operator warning per (symbol, session) for a non-standard provider jump.
+
+        Never a halt: the adoption decision is unchanged. The verifier runs
+        every hour and the jump stays in the window for months, so each
+        (symbol, session) is announced once per process.
+        """
+        reported = getattr(self, "_split_anomaly_reported", None)
+        if reported is None:
+            reported = set()
+            self._split_anomaly_reported = reported
+        for symbol in sorted(anomalies):
+            for jump in anomalies[symbol]:
+                key = (symbol, jump.session)
+                if key in reported:
+                    continue
+                reported.add(key)
+                alerts.emit(
+                    "split_continuity_anomaly",
+                    message=(
+                        f"Provider history for {symbol} jumps {jump.ratio:.3f}x between "
+                        f"{jump.previous_session.isoformat()} and {jump.session.isoformat()}, which is not a "
+                        "standard split ratio. Adoption is not halted; confirm the corporate action."
+                    ),
+                    symbol=symbol,
+                    session=jump.session.isoformat(),
+                    previous_session=jump.previous_session.isoformat(),
+                    ratio=round(jump.ratio, 4),
+                )
+
+    def _check_provider_cooldown(self) -> None:
+        """Alert once when the historical provider enters its failure cool-down,
+        and once when it clears.
+
+        Without this the cool-down was visible only as raw status fields: a
+        provider outage that held or starved decisions raised no alert of its
+        own. A decision held by an unverified basis already alerts through the
+        verifier; this is the provider-side half of that signal.
+        """
+        status = self.market_data_status()
+        if not status.get("available"):
+            return
+        active = status.get("provider_cooldown_until") is not None
+        previous = getattr(self, "_provider_cooldown_active", None)
+        self._provider_cooldown_active = active
+        if previous == active or (previous is None and not active):
+            return
+        if active:
+            alerts.emit(
+                "data_provider_unavailable",
+                message=(
+                    "Historical data provider failed; requests are paused for a cool-down and "
+                    "decisions use the local cache or wait."
+                ),
+                state="cooldown",
+                provider_cooldown_until=status.get("provider_cooldown_until"),
+                provider_failure_streak=status.get("provider_failure_streak"),
+            )
+        else:
+            alerts.emit(
+                "data_provider_unavailable",
+                message="Historical data provider cool-down cleared; provider requests resumed.",
+                state="recovered",
+                provider_failure_streak=status.get("provider_failure_streak"),
+            )
 
     def _check_market_data_feed(self) -> None:
         """Alert once when the effective historical feed stops being the
@@ -5720,8 +5807,9 @@ class EngineRuntime:
                 if not _is_transient_network_error(exc) or attempt == 1:
                     self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
                     return False
-                # Transient: bounded retry with short backoff.
-                time.sleep(0.5 * (attempt + 1))
+                # Transient: one bounded retry, after the provider cool-down
+                # the failure just opened has ended (or a short backoff).
+                time.sleep(_signal_verify_retry_delay(history_client, attempt, datetime.now(UTC)))
                 continue
         # A provider outage is answered from the local warmup cache, and that
         # cache is the very history this call is supposed to verify against.
@@ -5760,19 +5848,30 @@ class EngineRuntime:
         if inadequate:
             self._record_signal_adjustment_failure("provider coverage incomplete for symbols: " + ",".join(inadequate))
             return False
-        # A provider window whose newest close sits at a standard split ratio
-        # from the stored tail, while its prior sessions still carry the
-        # pre-split basis, is a split the provider has not rebased yet.
-        # Adopting it would pair post-split closes with pre-split history.
+        # A provider window with a consecutive jump at a standard split ratio,
+        # on a basis the provider has not rebased, is a split it has not
+        # rebased yet. Adopting it would pair post-split closes with pre-split
+        # history, so it halts. A non-standard jump is only reported (below).
         discontinuous = [
             symbol
             for symbol in symbols
             if split_continuity_breach(final.get(symbol, ()), _stored_signal_series(runtimes, symbol))
         ]
+        self._report_split_continuity_anomalies(
+            {
+                symbol: anomalies
+                for symbol in symbols
+                if (
+                    anomalies := split_continuity_anomaly(
+                        final.get(symbol, ()), _stored_signal_series(runtimes, symbol)
+                    )
+                )
+            }
+        )
         if discontinuous:
             self._record_signal_adjustment_failure(
-                "split continuity unverified (newest provider close is a split ratio from the stored tail; "
-                "prior sessions unrebased) for symbols: " + ",".join(discontinuous)
+                "split continuity unverified (a provider jump sits at a standard split ratio on an unrebased "
+                "basis) for symbols: " + ",".join(discontinuous)
             )
             return False
         verified_through_by_symbol = {symbol: max(bar.timestamp for bar in final[symbol]) for symbol in symbols}
@@ -6080,6 +6179,7 @@ class EngineRuntime:
                 except Exception:
                     log.warning("Deferred equity BUY resume after basis verification failed", exc_info=True)
             self._check_market_data_feed()
+            self._check_provider_cooldown()
         except Exception as exc:  # defensive: never kill the monitor
             worker.last_error = str(exc)
             log.warning("Signal adjustment monitor pass failed: %s", exc)
@@ -7348,6 +7448,10 @@ class EngineRuntime:
             sip_embargo_minutes=self.app_config.signal_cross_check.sip_embargo_minutes,
         )
         self._historical = history
+        try:
+            history.prune_cache(datetime.now(UTC))
+        except Exception as exc:  # retention is hygiene: it never blocks warmup
+            log.warning("Warmup cache retention prune failed: %s", exc)
         log.info("Warmup starting for %d symbols", len(self.symbols))
         self._warmup_symbols(history, self.symbols, retry=False)
         self._refresh_readiness()

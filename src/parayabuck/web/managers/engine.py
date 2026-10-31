@@ -1657,7 +1657,10 @@ class EngineManager:
             )
         from parayabuck.execution.alpaca import AlpacaBroker
         from parayabuck.live_safety import LiveApprovalError, verify_account_environment
+        from parayabuck.monitoring.operational_event import register_secret_text
 
+        register_secret_text(key)
+        register_secret_text(secret)
         live_broker = AlpacaBroker(key, secret, paper=False)
         try:
             live_broker.account()
@@ -1925,7 +1928,10 @@ class EngineManager:
             return None, None
         try:
             from parayabuck.execution.alpaca import AlpacaBroker
+            from parayabuck.monitoring.operational_event import register_secret_text
 
+            register_secret_text(key)
+            register_secret_text(secret)
             live_broker = AlpacaBroker(key, secret, paper=False)
             try:
                 live_broker.account()

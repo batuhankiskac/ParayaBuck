@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import math
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from parayabuck.core.models import Market
-from parayabuck.data.alpaca_stream import guard_sdk_cast, supervise_sdk_stream, wait_for_sdk_loop
+from parayabuck.data.alpaca_stream import guard_sdk_cast, reset_sdk_loop, supervise_sdk_stream, wait_for_sdk_loop
 from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_client import parse_broker_timestamp
 from parayabuck.logger import get_logger
@@ -15,6 +16,9 @@ from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.utils.objects import field_value as _field
 
 log = get_logger("parayabuck.execution.alpaca_updates")
+
+# Longest stop() waits for the SDK to acknowledge a stop (the data stream's SDK stop is bounded the same way).
+_STOP_TIMEOUT_SECONDS = 5.0
 
 # Event given to a trade-update frame the SDK could not decode. It is not in the
 # runtime's booking vocabulary, so the runtime schedules a reconciliation.
@@ -217,6 +221,8 @@ class AlpacaTradingUpdateStream:
         )
 
     def run(self) -> None:
+        # Cleared before the mark, so a stop() racing this run waits for the new loop.
+        reset_sdk_loop(self._stream)
         # The mark is set before the flag is read: a stop() that sets the flag
         # after this read still sees the mark and waits for the SDK loop.
         self._run_entered = True
@@ -234,7 +240,26 @@ class AlpacaTradingUpdateStream:
         # dereferences that loop, so a never-run stream has nothing to stop.
         if getattr(self._stream, "_loop", ...) is None:
             return
-        self._stream.stop()
+        # alpaca-py's TradingStream.stop() waits for the loop without a timeout, so a busy
+        # loop would block the engine's stop. The wait is bounded; the SDK call runs on a
+        # daemon thread so a hung one cannot keep the process alive.
+        outcome: dict[str, BaseException] = {}
+
+        def _stop_sdk() -> None:
+            try:
+                self._stream.stop()
+            except BaseException as exc:  # re-raised on the caller's thread below
+                outcome["error"] = exc
+
+        stopper = threading.Thread(target=_stop_sdk, name="alpaca-trade-updates-stop", daemon=True)
+        stopper.start()
+        stopper.join(_STOP_TIMEOUT_SECONDS)
+        if stopper.is_alive():
+            raise TimeoutError(
+                f"Alpaca trade updates stream did not acknowledge stop within {_STOP_TIMEOUT_SECONDS:.0f}s"
+            )
+        if "error" in outcome:
+            raise outcome["error"]
 
 
 def _identity_update(raw: Any) -> TradeUpdate | None:

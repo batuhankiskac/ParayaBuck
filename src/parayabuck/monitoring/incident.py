@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from parayabuck.monitoring.operational_event import account_episode_token, mask_account_text
+
 
 class IncidentCategory(StrEnum):
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
@@ -182,9 +184,12 @@ class IncidentRecord:
 
         ``incident_id`` is a fresh uuid per record, so keying a throttle on it
         never coalesces a repeat. The episode is the category on one account,
-        strategy and market: its repeats share one key.
+        strategy and market: its repeats share one key. The account enters as a
+        hash token, so the key (which reaches the journal and the alert text)
+        never carries the account id.
         """
-        return ":".join(str(part or "") for part in (self.category.value, self.account_id, self.strategy, self.market))
+        account = account_episode_token(self.account_id)
+        return ":".join(str(part or "") for part in (self.category.value, account, self.strategy, self.market))
 
 
 def create_incident(
@@ -216,7 +221,9 @@ def create_incident(
         trading_halted=spec.trading_halts,
         retry_attempt=retry_attempt,
         next_retry_at=next_retry_at,
-        error=error,
+        # The error text may name the account (a persistence or broker message): mask it here,
+        # so the incident, its alert and the journal never carry the full id.
+        error=mask_account_text(error, account_id) if error and account_id else error,
         payload=payload or {},
     )
 

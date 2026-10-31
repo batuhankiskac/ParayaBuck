@@ -134,12 +134,13 @@ def _scrub_error(text: str, settings: Any, env: Mapping[str, str] | None) -> str
     """An SMTP error text without the login or the routing addresses.
 
     A refusal names the recipients and the sender (``SMTPRecipientsRefused``), and
-    that text reaches the journal and the diagnostic bundle, so the addresses are
-    scrubbed with the credentials.
+    that text reaches the journal and the diagnostic bundle, so the addresses and
+    the relay host (a connect error names it) are scrubbed with the credentials.
     """
     username, password = _smtp_credentials(env)
     addresses = [str(address) for address in getattr(settings, "to_addresses", ()) or ()]
     addresses.append(str(getattr(settings, "from_address", "") or ""))
+    addresses.append(str(getattr(settings, "smtp_host", "") or ""))
     return _scrub(text, (password, username, *addresses))
 
 

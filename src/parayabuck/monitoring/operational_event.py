@@ -138,6 +138,20 @@ def mask_account_number(value: object) -> str:
     return f"***{text[-4:]}" if len(text) > 4 else ("***" if text else "")
 
 
+def mask_account_text(text: str, account_id: object) -> str:
+    """``text`` with every occurrence of the account id replaced by its masked form."""
+    raw = str(account_id or "").strip()
+    if not raw or raw == "unknown":
+        return text
+    return text.replace(raw, mask_account_number(raw))
+
+
+def account_episode_token(account_id: object) -> str:
+    """Opaque, stable token for one account, for throttle and episode keys (no account digits)."""
+    raw = str(account_id or "")
+    return hashlib.sha256(raw.encode()).hexdigest()[:16] if raw else ""
+
+
 def _masked_account(value: object) -> str | None:
     """The top-level account id as the journal and the operator surfaces show it (masked)."""
     return mask_account_number(value) if value not in (None, "") else None
@@ -159,9 +173,12 @@ def _redact_item(key: str, value: object) -> object:
 # megabytes of one word run (a bundled blob), and an unbounded lazy prefix is
 # quadratic on it.
 _TEXT_SECRET_ASSIGNMENT = re.compile(
-    r"""(?i)((?<![\w-])[\w-]{0,40}(?:secret|passw(?:or)?d|passphrase|token|ticket|api[-_]?key|private[-_]?key|"""
-    r"""access[-_]?key|authorization|credential|signature)[\w-]{0,20}["']?\s*[:=]\s*["']?)"""
-    r"""(?!\*\*\*|\[redacted\])[^\s"',&;}\]]+"""
+    r"""(?i)((?<![\w-])[\w-]{0,40}(?:secret|passw(?:or)?d|passphrase|token|ticket|api[-_ ]?key|private[-_ ]?key|"""
+    r"""access[-_ ]?key|secret[-_ ]?key|approval[-_ ]?key|webhook[-_ ]?url|authorization|credential|signature)"""
+    r"""[\w-]{0,20}["']?\s*[:=]\s*["']?)"""
+    # A quoted value runs to its closing quote, so a secret with spaces is covered whole;
+    # an unquoted value ends at whitespace. An already-masked value (or a Bearer marker) is left alone.
+    r"""(?!\*\*\*|\[redacted\]|bearer \*\*\*)(?:(?<=")[^"\n]*|(?<=')[^'\n]*|[^\s"',&;}\]]+)"""
 )
 _TEXT_BEARER = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]+=*")
 _TEXT_SECRET_MIN_LENGTH = 8
@@ -184,8 +201,10 @@ def register_secret_text(value: object) -> None:
 
 def redact_text(text: str) -> str:
     """Scrub credentials from free text: assignments, Bearer tokens and registered literal values."""
-    scrubbed = _TEXT_SECRET_ASSIGNMENT.sub(r"\1***REDACTED***", text)
-    scrubbed = _TEXT_BEARER.sub("Bearer ***REDACTED***", scrubbed)
+    # Bearer first: an assignment pass that ran first would mask the word "Bearer"
+    # after ``Authorization:`` and leave the token itself in the text.
+    scrubbed = _TEXT_BEARER.sub("Bearer ***REDACTED***", text)
+    scrubbed = _TEXT_SECRET_ASSIGNMENT.sub(r"\1***REDACTED***", scrubbed)
     with _text_secret_lock:
         values = tuple(_text_secret_values)
     for value in values:
@@ -380,7 +399,10 @@ __all__ = [
     "OperationalEvent",
     "Severity",
     "create_event",
+    "account_episode_token",
     "deterministic_event_id",
+    "mask_account_number",
+    "mask_account_text",
     "random_event_id",
     "redact_fields",
     "redact_text",

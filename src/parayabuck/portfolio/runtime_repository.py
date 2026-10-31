@@ -29,7 +29,7 @@ from parayabuck.execution.portfolio import (
     _client_order_id,
 )
 from parayabuck.logger import get_logger
-from parayabuck.monitoring.operational_event import mask_account_number
+from parayabuck.monitoring.operational_event import account_episode_token, mask_account_number
 from parayabuck.portfolio.models import TargetPortfolio
 from parayabuck.portfolio.ownership_rebase import (
     ACQUIRE,
@@ -2401,7 +2401,7 @@ class PortfolioStateRepository:
                 category="ownership_surplus_unconfirmed",
                 incident_id=f"ownership_surplus:{market.value}:{symbol}:{format_quantity(broker_quantity)}",
                 # One episode per symbol: a moving broker quantity is the same surplus, not a new one.
-                episode_key=f"ownership_surplus:{account_id}:{market.value}:{symbol}",
+                episode_key=f"ownership_surplus:{account_episode_token(account_id)}:{market.value}:{symbol}",
                 symbol=symbol,
                 market=market.value,
                 owned_quantity=owned,

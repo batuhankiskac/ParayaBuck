@@ -610,12 +610,14 @@ def configure_global_journal(observability: ObservabilityConfig) -> EventJournal
             max_events=observability.event_max_events,
         )
         _global_is_configured = True
-        if replaced is not None:
-            # The default journal may already have a writer thread running.
-            # Stop it here: otherwise it is orphaned and polls for the
-            # process lifetime, writing to its old path.
-            replaced.stop()
-        return _global_journal
+        installed = _global_journal
+    if replaced is not None:
+        # The default journal may already have a writer thread running. Stop it
+        # here: otherwise it is orphaned and polls for the process lifetime, writing
+        # to its old path. The writer join can take up to its timeout, so it runs
+        # outside _global_lock, which every get_journal() caller waits on.
+        replaced.stop()
+    return installed
 
 
 def emit_journal(event: OperationalEvent, *, path: str | Path | None = None) -> bool:

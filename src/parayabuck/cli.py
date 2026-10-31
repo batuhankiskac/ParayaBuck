@@ -463,6 +463,10 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         check_approval_key(hmac_secret)
     except ValueError as exc:
         raise SystemExit(f"{config.live.operator_approval_key_env}: {exc}") from None
+    from parayabuck.monitoring.operational_event import register_secret_text
+
+    register_secret_text(key)
+    register_secret_text(secret)
     broker = AlpacaBroker(key, secret, paper=False)
     try:
         broker.account()  # Read-only identity verification against the live endpoint.
@@ -1328,6 +1332,10 @@ def _run_doctor(args: argparse.Namespace) -> int:
         if not args.offline and paper_checks and api_key and secret:
             broker = None
             try:
+                from parayabuck.monitoring.operational_event import register_secret_text
+
+                register_secret_text(api_key)
+                register_secret_text(secret)
                 broker = AlpacaBroker(api_key, secret, paper=True)
                 broker._client.get_account()
                 add("alpaca PAPER reachable", True, "account ok")
@@ -2267,6 +2275,10 @@ def _pinned_account_mismatch(config: Config, account_id: str, pinned: str) -> st
             "set, so the pin cannot be verified."
         )
     try:
+        from parayabuck.monitoring.operational_event import register_secret_text
+
+        register_secret_text(key)
+        register_secret_text(secret)
         broker = AlpacaBroker(key, secret, paper=not live)
     except Exception as exc:
         return f"broker.expected_account_id ({pinned}): the broker could not be reached to verify the pin ({exc})."

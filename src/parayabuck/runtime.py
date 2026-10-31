@@ -34,7 +34,13 @@ from parayabuck.core.models import (
     PositionSnapshot,
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
-from parayabuck.data.adjustment import adequate_coverage, covers_session, split_continuity_breach
+from parayabuck.data.adjustment import (
+    SplitContinuityJump,
+    adequate_coverage,
+    covers_session,
+    split_continuity_anomaly,
+    split_continuity_breach,
+)
 from parayabuck.data.alpaca import BatchOutcome
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
@@ -1521,6 +1527,36 @@ class EngineRuntime:
             }
         )
         return payload
+
+    def _report_split_continuity_anomalies(self, anomalies: dict[str, tuple[SplitContinuityJump, ...]]) -> None:
+        """One operator warning per (symbol, session) for a non-standard provider jump.
+
+        Never a halt: the adoption decision is unchanged. The verifier runs
+        every hour and the jump stays in the window for months, so each
+        (symbol, session) is announced once per process.
+        """
+        reported = getattr(self, "_split_anomaly_reported", None)
+        if reported is None:
+            reported = set()
+            self._split_anomaly_reported = reported
+        for symbol in sorted(anomalies):
+            for jump in anomalies[symbol]:
+                key = (symbol, jump.session)
+                if key in reported:
+                    continue
+                reported.add(key)
+                alerts.emit(
+                    "split_continuity_anomaly",
+                    message=(
+                        f"Provider history for {symbol} jumps {jump.ratio:.3f}x between "
+                        f"{jump.previous_session.isoformat()} and {jump.session.isoformat()}, which is not a "
+                        "standard split ratio. Adoption is not halted; confirm the corporate action."
+                    ),
+                    symbol=symbol,
+                    session=jump.session.isoformat(),
+                    previous_session=jump.previous_session.isoformat(),
+                    ratio=round(jump.ratio, 4),
+                )
 
     def _check_provider_cooldown(self) -> None:
         """Alert once when the historical provider enters its failure cool-down,
@@ -5513,19 +5549,30 @@ class EngineRuntime:
         if inadequate:
             self._record_signal_adjustment_failure("provider coverage incomplete for symbols: " + ",".join(inadequate))
             return False
-        # A provider window whose newest close sits at a standard split ratio
-        # from the stored tail, while its prior sessions still carry the
-        # pre-split basis, is a split the provider has not rebased yet.
-        # Adopting it would pair post-split closes with pre-split history.
+        # A provider window with a consecutive jump at a standard split ratio,
+        # on a basis the provider has not rebased, is a split it has not
+        # rebased yet. Adopting it would pair post-split closes with pre-split
+        # history, so it halts. A non-standard jump is only reported (below).
         discontinuous = [
             symbol
             for symbol in symbols
             if split_continuity_breach(final.get(symbol, ()), _stored_signal_series(runtimes, symbol))
         ]
+        self._report_split_continuity_anomalies(
+            {
+                symbol: anomalies
+                for symbol in symbols
+                if (
+                    anomalies := split_continuity_anomaly(
+                        final.get(symbol, ()), _stored_signal_series(runtimes, symbol)
+                    )
+                )
+            }
+        )
         if discontinuous:
             self._record_signal_adjustment_failure(
-                "split continuity unverified (newest provider close is a split ratio from the stored tail; "
-                "prior sessions unrebased) for symbols: " + ",".join(discontinuous)
+                "split continuity unverified (a provider jump sits at a standard split ratio on an unrebased "
+                "basis) for symbols: " + ",".join(discontinuous)
             )
             return False
         verified_through_by_symbol = {symbol: max(bar.timestamp for bar in final[symbol]) for symbol in symbols}

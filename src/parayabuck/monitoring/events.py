@@ -59,6 +59,10 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Market data: the effective historical feed stopped being the configured
     # one (SIP entitlement downgrade to IEX) and later recovered.
     "market_data_degraded",
+    # The provider's split-adjusted history holds a one-session jump that is not
+    # a standard split ratio (a 3:2 split, or a large one-day move). Reported
+    # once per (symbol, session) for the operator; it never halts the book.
+    "split_continuity_anomaly",
     # A session closed with missing stream minutes: the incomplete daily bar
     # was withheld and the SIP daily bar is fetched for the decision.
     "session_close_bar_incomplete",
@@ -99,6 +103,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "signal_source_mismatch",
         "decision_deferred",
         "market_data_degraded",
+        "split_continuity_anomaly",
         "session_close_bar_incomplete",
         "exit_sell_rejected",
         "live_rearm_required",
@@ -151,6 +156,7 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
         "market_data_degraded",
         "data_provider_unavailable",
         "backup_failed",
+        "split_continuity_anomaly",
     }
 )
 

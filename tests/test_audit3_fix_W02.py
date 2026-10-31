@@ -7,6 +7,7 @@ production paths.
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -15,8 +16,9 @@ import pytest
 
 from parayabuck.core.models import Bar, Market
 from parayabuck.data import alpaca as alpaca_module
-from parayabuck.data.adjustment import split_continuity_breach
+from parayabuck.data.adjustment import split_continuity_anomaly, split_continuity_breach
 from parayabuck.data.alpaca import AlpacaHistoricalData, HistoricalProviderCooldown
+from parayabuck.portfolio.runtime_service import PortfolioRuntime
 from parayabuck.runtime import EngineRuntime, _signal_verify_retry_delay
 
 D0 = datetime(2026, 10, 19, 4, 0, tzinfo=UTC)
@@ -59,23 +61,48 @@ def test_t3_1_2_a_rebased_window_stays_consistent_with_a_stream_built_prior() ->
     assert split_continuity_breach(rebased, stored) is False
 
 
-def test_t3_1_3_a_non_standard_three_for_two_ratio_halts_for_an_operator() -> None:
+def test_a_two_for_one_split_is_a_breach_and_not_an_anomaly() -> None:
     stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
-    provider = [*stored, _bar("AAA", D3, 66.7)]  # 3-for-2 reads 1.5
+    provider = [*stored, _bar("AAA", D3, 50.0)]
     assert split_continuity_breach(provider, stored) is True
+    assert split_continuity_anomaly(provider, stored) == ()
 
 
-def test_t3_1_3_two_for_one_with_a_large_split_day_rally_halts() -> None:
-    # A 2-for-1 with a 30% split-day rally reads 1.54, outside the standard band.
+def test_t3_1_3_a_three_for_two_jump_is_an_anomaly_not_a_breach() -> None:
+    # 1.5 is not a KNOWN_SPLIT_RATIOS entry: reported to the operator, never a halt.
+    stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
+    provider = [*stored, _bar("AAA", D3, 66.7)]
+    assert split_continuity_breach(provider, stored) is False
+    anomalies = split_continuity_anomaly(provider, stored)
+    assert [(jump.previous_session, jump.session, jump.standard) for jump in anomalies] == [
+        (D2.date(), D3.date(), False)
+    ]
+
+
+def test_t3_1_3_a_two_for_one_with_a_large_split_day_rally_is_an_anomaly_not_a_breach() -> None:
+    # A 2-for-1 with a 30% split-day rally reads 1.54, outside the 2.0 band.
     stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
     provider = [*stored, _bar("AAA", D3, 65.0)]
-    assert split_continuity_breach(provider, stored) is True
+    assert split_continuity_breach(provider, stored) is False
+    assert len(split_continuity_anomaly(provider, stored)) == 1
+
+
+def test_a_thirty_percent_crash_day_is_an_anomaly_not_a_breach() -> None:
+    # A -30% one-day move on an otherwise consistent window (a genuine crash,
+    # not a split): no breach, so the book is not halted; one operator warning.
+    stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
+    provider = [*stored, _bar("AAA", D3, 70.0)]
+    assert split_continuity_breach(provider, stored) is False
+    anomalies = split_continuity_anomaly(provider, stored)
+    assert len(anomalies) == 1
+    assert anomalies[0].session == D3.date()
 
 
 def test_t3_1_3_an_ordinary_twenty_percent_move_passes() -> None:
     stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
     provider = [*stored, _bar("AAA", D3, 80.0)]  # reads 1.25: an ordinary move
     assert split_continuity_breach(provider, stored) is False
+    assert split_continuity_anomaly(provider, stored) == ()
 
 
 def test_a_large_drop_inside_a_rebased_window_is_not_a_breach() -> None:
@@ -295,3 +322,51 @@ def test_c3_5_5_prune_cache_drops_bars_past_the_retention_window(tmp_path: Any) 
         adjustment="splits",
     )
     assert [bar.timestamp for bar in kept] == [recent.timestamp]
+
+
+# --- Non-standard provider jumps: adopted, reported once, never halted ---------
+
+
+class _WindowProvider:
+    def __init__(self, windows: dict[str, list[Bar]]) -> None:
+        self.windows = windows
+
+    def get_bars_batch(
+        self, symbols: Any, timeframe: Any, *, start: Any, end: Any, adjustment: Any, outcome: Any = None
+    ) -> Any:
+        return {symbol: list(self.windows[symbol]) for symbol in symbols if symbol in self.windows}
+
+
+def test_a_crash_day_window_is_adopted_and_reported_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(
+        "parayabuck.runtime.alerts",
+        type("A", (), {"emit": staticmethod(lambda kind, **kw: events.append(kind))}),
+    )
+    stored = [_bar("AAA", D0, 100.0), _bar("AAA", D1, 100.0), _bar("AAA", D2, 100.0)]
+    provider = [*stored, _bar("AAA", D3, 70.0)]  # a genuine -30% day, priors consistent
+    runtime = PortfolioRuntime.__new__(PortfolioRuntime)
+    runtime.market = Market.EQUITY
+    runtime.strategy = SimpleNamespace(timeframe="1d", minimum_history_bars=2)
+    runtime.symbols = ("AAA",)
+    runtime.history = {"AAA": list(stored)}
+    runtime.signal_verified_through_by_symbol = {}
+    runtime.previous_timestamp = None
+    engine = EngineRuntime.__new__(EngineRuntime)
+    engine._warming_up = False
+    engine._circuit_breaker_reason = None
+    engine._reconcile_failed = False
+    engine._state_lock = threading.RLock()
+    engine._portfolio_lock = threading.RLock()
+    engine._entry_risk_latch = {Market.EQUITY: None}
+    engine._market_entry_halts = {Market.EQUITY: None}
+    engine._portfolio_runtimes = (runtime,)
+    engine._symbols_by_market = {Market.EQUITY: {"AAA"}}
+    engine._historical = _WindowProvider({"AAA": provider})
+
+    assert engine.verify_equity_signal_basis(required_through=D3) is True
+    engine._signal_verify_dedup = None  # force a second real verification
+    assert engine.verify_equity_signal_basis(required_through=D3) is True
+
+    assert events.count("split_continuity_anomaly") == 1
+    assert "signal_adjustment_failure" not in events

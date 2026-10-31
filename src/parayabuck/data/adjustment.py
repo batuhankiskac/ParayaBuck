@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime
 
 from parayabuck.core.models import Bar
@@ -48,10 +49,10 @@ from parayabuck.markets.timeframes import NEW_YORK
 # standard ratio, and would need a drop of about 40% or more to read as 2.0.
 SPLIT_CONTINUITY_RELATIVE_BAND = 0.15
 # A consecutive provider jump at or beyond this ratio (old/new, either way) is
-# a split candidate even when it is not a standard ratio: a 3:2 split reads
-# 1.5, and a 2:1 split with a large split-day move reads 1.4 to 1.8. It sits
-# above the one-session drops a 2x index ETF takes on a bad day (about 25%),
-# so an ordinary crash day is not mistaken for a split.
+# examined at all. A jump that is near a standard ratio is a breach; any other
+# jump at this size (a 3:2 split, a crash day) is an operator anomaly only.
+# It sits above the one-session drops a 2x index ETF takes on a bad day
+# (about 25%), so ordinary moves are never examined.
 SPLIT_CONTINUITY_JUMP_RATIO = 1.4
 
 
@@ -130,27 +131,34 @@ def _rebased_by_known_ratio(provider_close: float, stored_close: float) -> bool:
     return any(abs(ratio - candidate) <= SPLIT_CONTINUITY_RELATIVE_BAND * candidate for candidate in KNOWN_SPLIT_RATIOS)
 
 
-def split_continuity_breach(provider: Sequence[Bar], stored: Sequence[Bar]) -> bool:
-    """Whether a provider window looks like a split it has not rebased yet.
+@dataclass(frozen=True)
+class SplitContinuityJump:
+    """One consecutive provider jump that the stored history shares a pre-jump session with.
 
-    A split leaves the post-split closes on the new basis while the prior
-    sessions still carry the pre-split basis. Adopting such a window pairs
-    post-split closes with pre-split history, and a held position reads as a
-    crash (a spurious SELL). Every consecutive pair of provider closes is
-    scanned, not only the newest one: a stored post-split tail (a stream bar
-    for the split day) moves the split out of the newest position while the
-    jump stays inside the window.
+    ``ratio`` is the earlier close over the later close. ``standard`` is True
+    when the ratio sits within the relative band of a KNOWN split ratio: only
+    those jumps are a basis breach. A non-standard jump (a crash day, a 3:2
+    split) is reported, never halted on.
+    """
 
-    A window whose stored sessions sit at a standard split ratio from the
-    provider close has been rebased (a consistent basis) and returns False.
-    Otherwise a consecutive provider jump at or beyond
-    ``SPLIT_CONTINUITY_JUMP_RATIO`` in either direction is a breach. This is
-    deliberately fail-closed: a non-standard ratio halts for an operator
-    rather than being guessed at. An empty window, an empty stored history, or
-    no stored session shared with the provider returns False.
+    previous_session: date
+    session: date
+    ratio: float
+    standard: bool
+
+
+def _continuity_jumps(provider: Sequence[Bar], stored: Sequence[Bar]) -> tuple[bool, tuple[SplitContinuityJump, ...]]:
+    """(rebased, jumps) for one symbol's provider window against its stored history.
+
+    ``rebased`` is True when a stored session sits at a standard split ratio
+    from the provider close: the provider rebased its priors, a consistent
+    basis, and no jump is a basis question. Otherwise every consecutive pair of
+    final provider closes at or beyond ``SPLIT_CONTINUITY_JUMP_RATIO`` (either
+    direction) is returned, when the stored history shares a session on its
+    pre-jump side. Empty input or no shared session gives (False, ()).
     """
     if not provider or not stored:
-        return False
+        return False, ()
     provider_close: dict[date, float] = {}
     for bar in sorted(provider, key=lambda item: item.timestamp):
         provider_close[signal_session_date(bar.timestamp)] = bar.close
@@ -159,21 +167,58 @@ def split_continuity_breach(provider: Sequence[Bar], stored: Sequence[Bar]) -> b
         stored_close[signal_session_date(bar.timestamp)] = bar.close
     overlap = sorted(session for session in provider_close if session in stored_close)
     if not overlap:
-        return False
+        return False, ()
     for session in overlap:
         if _rebased_by_known_ratio(provider_close[session], stored_close[session]):
-            return False  # the provider rebased its priors: a consistent basis
+            return True, ()
+    jumps: list[SplitContinuityJump] = []
     ordered = sorted(provider_close.items())
-    for (earlier, earlier_close), (_later, later_close) in zip(ordered, ordered[1:]):
+    for (earlier, earlier_close), (later, later_close) in zip(ordered, ordered[1:]):
         if not (math.isfinite(earlier_close) and earlier_close > 0 and math.isfinite(later_close) and later_close > 0):
             continue
         ratio = earlier_close / later_close
-        jump = ratio >= SPLIT_CONTINUITY_JUMP_RATIO or ratio <= 1.0 / SPLIT_CONTINUITY_JUMP_RATIO
+        if not (ratio >= SPLIT_CONTINUITY_JUMP_RATIO or ratio <= 1.0 / SPLIT_CONTINUITY_JUMP_RATIO):
+            continue
         # The jump is a basis question only when the stored history shares a
         # session on its unrebased pre-jump side.
-        if jump and any(session <= earlier for session in overlap):
-            return True
-    return False
+        if any(session <= earlier for session in overlap):
+            standard = any(
+                abs(ratio - candidate) <= SPLIT_CONTINUITY_RELATIVE_BAND * candidate for candidate in KNOWN_SPLIT_RATIOS
+            )
+            jumps.append(SplitContinuityJump(earlier, later, ratio, standard))
+    return False, tuple(jumps)
+
+
+def split_continuity_breach(provider: Sequence[Bar], stored: Sequence[Bar]) -> bool:
+    """Whether a provider window looks like a split it has not rebased yet.
+
+    A split leaves the post-split closes on the new basis while the prior
+    sessions still carry the pre-split basis. Adopting such a window pairs
+    post-split closes with pre-split history, and a held position reads as a
+    crash (a spurious SELL). Every consecutive pair of provider closes is
+    scanned, not only the newest one: a stored post-split tail moves the split
+    out of the newest position while the jump stays inside the window.
+
+    A breach is a consecutive jump whose ratio sits near a KNOWN split ratio,
+    on a window that has not been rebased. A non-standard jump (a 3:2 split, or
+    a large one-day move such as a crash day) is NOT a breach: it is reported
+    by ``split_continuity_anomaly`` for the operator, and never halts the book.
+    """
+    rebased, jumps = _continuity_jumps(provider, stored)
+    return not rebased and any(jump.standard for jump in jumps)
+
+
+def split_continuity_anomaly(provider: Sequence[Bar], stored: Sequence[Bar]) -> tuple[SplitContinuityJump, ...]:
+    """Non-standard provider jumps on an unrebased window, for an operator warning.
+
+    Empty for a rebased window, for a window with no stored overlap, and for
+    jumps that are a standard split ratio (those are a breach, see
+    ``split_continuity_breach``).
+    """
+    rebased, jumps = _continuity_jumps(provider, stored)
+    if rebased:
+        return ()
+    return tuple(jump for jump in jumps if not jump.standard)
 
 
 def merge_provider_authority(
@@ -245,6 +290,8 @@ __all__ = [
     "adequate_coverage",
     "covers_session",
     "merge_provider_authority",
+    "SplitContinuityJump",
     "signal_session_date",
+    "split_continuity_anomaly",
     "split_continuity_breach",
 ]

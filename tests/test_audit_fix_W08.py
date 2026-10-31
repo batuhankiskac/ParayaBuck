@@ -293,11 +293,12 @@ def test_decision_is_deferred_when_reconciliation_fails_while_waiting(monkeypatc
     assert deferred == ["reconciliation_failed"]
 
 
-def test_decision_is_dropped_when_a_hard_halt_is_raised_while_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_decision_is_deferred_when_a_hard_halt_is_raised_while_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Audit wave 3 P3-2-1: a halt raised while waiting defers the session instead of dropping it.
     runtime, deferred, _ = _decision_runtime(monkeypatch)
     runtime._portfolio_lock = _LockThatFlipsGate(runtime, _circuit_breaker_reason="ownership_drift")
     runtime._process_portfolio_timestamp(list(_CRYPTO_BAR))
-    assert deferred == []
+    assert deferred == ["halted:ownership_drift"]
 
 
 # --- Trade-update handler: C6/Perf 6, CC-9 and the refused-fill add-on ------

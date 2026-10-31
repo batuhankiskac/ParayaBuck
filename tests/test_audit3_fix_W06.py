@@ -80,7 +80,7 @@ def test_stale_stop_failed_snapshot_is_critical(tmp_path: Path) -> None:
     check = _check_runtime_heartbeat(snapshot, SESSION_OPEN, 120.0)
 
     assert check.status is HealthStatus.CRITICAL
-    assert "heartbeat stale" in check.summary
+    assert "kalp atışı" in check.summary and "eski" in check.summary
 
 
 def test_clean_stop_snapshot_stays_planned_blocked(tmp_path: Path) -> None:

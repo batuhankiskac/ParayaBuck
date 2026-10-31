@@ -3981,9 +3981,10 @@ class EngineRuntime:
             # force until a second reset (R3-1-3). A live bar still proves the
             # reconnect, so it clears the matching halt here too.
             with getattr(self, "_state_lock", threading.RLock()):
-                cleared_after_respawn = self._market_entry_halts.get(market) == f"{worker_name}_restart_limit"
+                halts = getattr(self, "_market_entry_halts", {})
+                cleared_after_respawn = halts.get(market) == f"{worker_name}_restart_limit"
                 if cleared_after_respawn:
-                    self._market_entry_halts[market] = None
+                    halts[market] = None
             if cleared_after_respawn:
                 log.warning(
                     "Market halt cleared after verified reconnect: market=%s recovery_action=market_halt_cleared",

@@ -341,7 +341,7 @@ def test_confirm_refuses_while_the_engine_heartbeat_is_fresh(
     code = _rebase(db, "--broker-qty", "50", "--confirm", "100", "--plan-digest", digest)
 
     assert code == 1
-    assert "engine heartbeat is live" in capsys.readouterr().err
+    assert "the parayabuck unit is active" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
 
 

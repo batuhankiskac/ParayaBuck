@@ -36,7 +36,7 @@ def test_unrestored_restart_limit_incident_is_not_a_risk_block(tmp_path: Path) -
     ledger.close()
     check = _check_risk(db, None)
     assert check.status == HealthStatus.BLOCKED
-    assert check.summary == "1 active safety incidents"
+    assert check.summary == "1 aktif güvenlik olayı"
 
 
 def test_market_entry_halt_makes_overall_degraded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -13,11 +13,18 @@ WorkingDirectory=/opt/parayabuck
 # "Backup environment file").
 EnvironmentFile=/opt/parayabuck/.env.backup
 Environment=ENV_PATH=/opt/parayabuck/.env.backup
+# The off-host copy runs under ProtectHome, so gcloud keeps its state in a writable path
+# under data/ and never reads the deploy user's own gcloud login (S3-4-4). Create it once,
+# owned by the service user. Use GOOGLE_APPLICATION_CREDENTIALS in .env.backup for the key.
+Environment=CLOUDSDK_CONFIG=/opt/parayabuck/data/gcloud
 ExecStart=/opt/parayabuck/.venv/bin/parayabuck backup
 # The off-host copy may take up to 900 s per artifact (backup.OFFHOST_TIMEOUT_SECONDS)
 # and runs sequentially. systemd's default start timeout (90 s) would SIGTERM a copy
 # mid-upload with no backup_failed alert, so the start budget is one hour (S2-7-1).
 TimeoutStartSec=3600
+# A SIGTERM during the off-host copy: a handler would record backup_failed, but none exists
+# yet (backup.py, R3-4-7). A GCS upload is committed only when it completes.
+TimeoutStopSec=120
 # A failed run exits non-zero (the unit shows failed in `systemctl status`)
 # and records a `backup_failed` alert in the log and the event journal
 # (`parayabuck ops events --kind backup_failed`). `parayabuck doctor` reports

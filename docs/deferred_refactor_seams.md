@@ -75,3 +75,15 @@ post-soak hardening; current hardening keeps `non-root`,
 `restart unless-stopped`, `stop_grace_period 30s`, loopback
 `127.0.0.1:8000:8000`, `UMask 0077`, `NoNewPrivileges`, `PrivateTmp`,
 `ProtectSystem=strict`.
+
+## Audit 2026-10-30 (AUDIT_FINDINGS.md) — deferred
+
+Source: `docs/audit/raw-r8.md` (wave 3, 2026-10-28) and `docs/audit/FINDINGS-2026-10-27.md` §10. `AUDIT_FINDINGS.md` itself is not in the repository.
+
+These items are intentionally deferred under `AGENTS.md`, which requires the current strategy, risk, persistence, backup, recovery and PAPER/LIVE boundaries to be preserved unless a task explicitly asks for a behaviour change. Each needs its own task, its own tests and the owner's approval.
+
+- **EngineRuntime clock injection.** About 57 `datetime.now(UTC)` sites remain in the engine. Only a narrow verifier clock seam was added. Injecting the clock everywhere changes every time-dependent test and the decision timestamps.
+- **runtime.py, runtime_service.py and ledger.py seams.** See the "Remaining hotspots" and "Safe seams" sections above. No extraction until the ledger invariants have their own test seam.
+- **runtime.py tuning constants to config.** A behaviour-adjacent move that needs its own tests and the owner's decision.
+- **Blanket exception-handler audit.** Not run as one sweep. Handlers are reviewed per finding.
+- **Web API rate limiting.** Not added. The surface is loopback-only and the control token is already bound to it.

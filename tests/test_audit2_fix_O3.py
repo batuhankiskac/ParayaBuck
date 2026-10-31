@@ -78,7 +78,10 @@ def test_vm_paths_drop_in_replaces_the_template_layout_for_the_home_dir() -> Non
     service = _directives(VM_DROPIN / "vm-paths.conf", "Service")
     assert "User=batuhankiskac" in service
     assert "WorkingDirectory=/home/batuhankiskac/ParayaBuck" in service
-    assert "ProtectHome=read-only" in service
+    # S3-4-2: the engine sees the checkout only, never the deploy user's home.
+    assert "ProtectHome=tmpfs" in service
+    assert "BindReadOnlyPaths=/home/batuhankiskac/ParayaBuck" in service
+    assert "ProtectHome=read-only" not in service
     # EnvironmentFile=, ExecStart= and ExecStartPre= are list keys: an empty assignment
     # first, or the template value would stay and the unit would have two of them.
     for key in ("EnvironmentFile", "ExecStart", "ExecStartPre", "ReadWritePaths"):

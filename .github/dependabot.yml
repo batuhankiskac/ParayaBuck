@@ -1,0 +1,15 @@
+version: 2
+# Weekly version and security updates (S3-5-1). Dependabot's pip ecosystem reads
+# pyproject.toml and the requirement files, not uv.lock. A version PR therefore
+# changes pyproject.toml and fails `uv lock --check` in CI until uv.lock and the
+# exported requirements are regenerated with `uv lock` and `uv export`.
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

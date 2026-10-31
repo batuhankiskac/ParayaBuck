@@ -27,6 +27,10 @@ _SLEEP_STEP_SECONDS = 1.0
 _STABLE_SESSION_SECONDS = 60.0
 # Longest a stop() waits for the SDK event loop that a racing run() is about to create.
 _SDK_LOOP_WAIT_SECONDS = 1.0
+# Longest one connect and authentication attempt may take. alpaca-py awaits the
+# server's connected and auth replies without a timeout, so a silent server would
+# otherwise hold the attempt (and the stream) forever.
+_CONNECT_TIMEOUT_SECONDS = 30.0
 
 
 def wait_for_sdk_loop(stream: Any) -> None:
@@ -39,6 +43,41 @@ def wait_for_sdk_loop(stream: Any) -> None:
     deadline = time.monotonic() + _SDK_LOOP_WAIT_SECONDS
     while getattr(stream, "_loop", None) is None and time.monotonic() < deadline:
         time.sleep(0.01)
+
+
+async def _connect_bounded(stream: Any, connect: Callable[[], Awaitable[None]], timeout: float) -> None:
+    """Run one connect and authentication attempt under a deadline that a stop interrupts.
+
+    The attempt is cancelled at ``timeout`` (the ``asyncio.wait_for`` contract) and
+    as soon as the stream's ``_should_run`` flag drops, so a stop that arrives
+    during a reconnect is not held up by the connect. The check runs every
+    ``_SLEEP_STEP_SECONDS``.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    attempt = asyncio.ensure_future(connect())
+    try:
+        while not attempt.done():
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError(f"Alpaca stream did not connect and authenticate within {timeout:.0f}s")
+            if not getattr(stream, "_should_run", True):
+                raise ConnectionError("Alpaca stream stopped during connect")
+            await asyncio.wait({attempt}, timeout=min(_SLEEP_STEP_SECONDS, remaining))
+    finally:
+        if not attempt.done():
+            attempt.cancel()
+    attempt.result()
+
+
+def reset_sdk_loop(stream: Any) -> None:
+    """Forget the event loop a previous run() left behind (alpaca-py never clears it).
+
+    Called before each run(), so a stop() that races the run waits for the loop
+    this run creates, and not for the stale one, which never runs again.
+    """
+    if hasattr(stream, "_loop"):
+        stream._loop = None
 
 
 def _backoff_seconds(failures: int) -> float:
@@ -70,6 +109,7 @@ def supervise_sdk_stream(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     clock: Callable[[], float] = time.monotonic,
     on_reconnect: Callable[[], None] | None = None,
+    connect_timeout: float = _CONNECT_TIMEOUT_SECONDS,
 ) -> None:
     """Wrap alpaca-py's connect step with backoff, socket cleanup and alerts.
 
@@ -82,8 +122,11 @@ def supervise_sdk_stream(
     The SDK also re-enters this step with no delay after a dropped session.
     A session shorter than ``_STABLE_SESSION_SECONDS`` is therefore backed off
     before it is reopened, and the backoff resets only after a stable session.
-    ``on_reconnect`` runs after each successful reconnect, so the owner can
-    schedule a reconciliation for updates missed while the stream was down.
+    ``on_reconnect`` runs after each successful connect that follows a session or
+    a failed attempt, so the owner can schedule a reconciliation for updates missed
+    while the stream was down (a first connect after failures included). Each
+    connect and authentication attempt is bounded by ``connect_timeout`` and is
+    interrupted by a stop request.
     """
     start = getattr(stream, "_start_ws", None)
     if start is None:
@@ -94,6 +137,7 @@ def supervise_sdk_stream(
         "auth_failed": False,
         "session_started_at": None,
         "connected_before": False,
+        "connect_failed": False,
     }
     auth = getattr(stream, "_auth", None)
     if auth is not None:
@@ -123,9 +167,10 @@ def supervise_sdk_stream(
                 if not getattr(stream, "_should_run", True):
                     raise ConnectionError(f"Alpaca {label} stream stopped during reconnect backoff")
         try:
-            await start()
+            await _connect_bounded(stream, start, connect_timeout)
         except Exception as exc:
             state["failures"] += 1
+            state["connect_failed"] = True
             state["auth_failures"] = state["auth_failures"] + 1 if state["auth_failed"] else 0
             try:
                 await stream.close()
@@ -153,7 +198,11 @@ def supervise_sdk_stream(
             raise
         state["session_started_at"] = clock()
         state["auth_failures"] = 0
-        if state["connected_before"] and on_reconnect is not None:
+        # Updates may have been missed since the last good session, or while the first
+        # connects were failing: either way the owner must reconcile.
+        recovered = state["connected_before"] or state["connect_failed"]
+        state["connect_failed"] = False
+        if recovered and on_reconnect is not None:
             try:
                 on_reconnect()
             except Exception:
@@ -276,6 +325,9 @@ class AlpacaBarStream:
                 subscribe_updated(stock_updated_handler, *stock_symbols)
 
     def run_stock(self) -> None:
+        # alpaca-py keeps the loop of an earlier run; clear it first, so a stop() racing
+        # this run waits for the new loop and not for the stale one (which never runs).
+        reset_sdk_loop(self.stock)
         # The mark is set before the flag is read: a stop() that sets the flag
         # after this read still sees the mark and waits for the SDK loop.
         self._run_entered = True

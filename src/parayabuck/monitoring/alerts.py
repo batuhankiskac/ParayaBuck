@@ -161,6 +161,7 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
         with _lock:
             fields = {**_alert_context, **fields}
         throttle_key = _throttle_key(kind, dict(fields))
+        suppressed: tuple[float, int] | None = None
         with _lock:
             throttle = _throttle_seconds
             now = time.monotonic()
@@ -169,15 +170,20 @@ def emit(kind: str, *, message: str, **fields: object) -> None:
                 _suppressed_count += 1
                 repeats = _suppressed_by_key.get(throttle_key, 0) + 1
                 _suppressed_by_key[throttle_key] = repeats
-                log.info(
-                    "Alert %s suppressed (throttle window %.0fs; %d repeat(s) of %s): %s",
-                    kind,
-                    throttle,
-                    repeats,
-                    throttle_key,
-                    message,
-                )
-                return
+                suppressed = (throttle, repeats)
+        if suppressed is not None:
+            # Logged outside the lock: a stalled stderr or journald pipe must not
+            # block every other alert emitter (which may hold its own runtime lock).
+            throttle, repeats = suppressed
+            log.info(
+                "Alert %s suppressed (throttle window %.0fs; %d repeat(s) of %s): %s",
+                kind,
+                throttle,
+                repeats,
+                throttle_key,
+                message,
+            )
+            return
         # The journal redacts its copy; the log line must never carry a
         # secret-named field in the clear either
         log.log(_severity(kind, fields), "ALERT %s: %s fields=%s", kind, message, redact_fields(fields))

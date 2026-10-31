@@ -26,7 +26,19 @@ class RedactingFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
-        return redact_text(super().format(record))
+        try:
+            return redact_text(super().format(record))
+        except Exception:
+            # A formatting error would reach Handler.handleError, which writes the raw
+            # message and arguments to stderr unredacted. Emit a fixed placeholder instead.
+            return redact_text(f"{record.levelname} {record.name}: <log record could not be formatted>")
+
+
+# Records no handler claims (third-party WARNING lines when nothing configured the root
+# logger) go to ``logging.lastResort``, which has no formatter of its own: give it the
+# redacting one so those lines are scrubbed like every other sink's.
+if logging.lastResort is not None:
+    logging.lastResort.setFormatter(RedactingFormatter("%(message)s"))
 
 
 def _pin_library_loggers() -> None:

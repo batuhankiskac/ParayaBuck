@@ -171,7 +171,7 @@ class RiskPeakService:
                         row = None
                     else:
                         raise RiskStatePersistenceError(
-                            f"portfolio_high_water read failed for {account_id}: {exc}"
+                            f"portfolio_high_water read failed for {mask_account_number(account_id)}: {exc}"
                         ) from exc
                 if row is not None:
                     try:
@@ -181,11 +181,11 @@ class RiskPeakService:
                         raise
                     except Exception as exc:
                         raise RiskStatePersistenceError(
-                            f"portfolio_high_water row corrupt for {account_id}: {row!r}: {exc}"
+                            f"portfolio_high_water row corrupt for {mask_account_number(account_id)}: {row!r}: {exc}"
                         ) from exc
                     if hw_peak is not None and (not math.isfinite(hw_peak) or hw_peak < 0):
                         raise RiskStatePersistenceError(
-                            f"portfolio_high_water peak corrupt for {account_id}: {hw_peak!r}"
+                            f"portfolio_high_water peak corrupt for {mask_account_number(account_id)}: {hw_peak!r}"
                         )
                 try:
                     rows = self.ledger.connection.execute(
@@ -197,7 +197,9 @@ class RiskPeakService:
                     if "no such table" in str(exc):
                         rows = []
                     else:
-                        raise RiskStatePersistenceError(f"risk_state read failed for {account_id}: {exc}") from exc
+                        raise RiskStatePersistenceError(
+                            f"risk_state read failed for {mask_account_number(account_id)}: {exc}"
+                        ) from exc
                 rs_peak: float | None = None
                 rs_epoch: int | None = None
                 if rows:
@@ -207,7 +209,9 @@ class RiskPeakService:
                             p = json.loads(payload_str)
                             # A row without its peak is not a zero peak: fail closed.
                             if not isinstance(p, dict) or "peak_equity" not in p:
-                                raise RiskStatePersistenceError(f"risk_state row for {account_id} lacks peak_equity")
+                                raise RiskStatePersistenceError(
+                                    f"risk_state row for {mask_account_number(account_id)} lacks peak_equity"
+                                )
                             pe = int(p.get("peak_epoch", 0) or 0)
                             pk = float(p["peak_equity"])
                             if not math.isfinite(pk) or pk < 0:
@@ -226,7 +230,7 @@ class RiskPeakService:
                         rs_epoch = max_epoch
                     elif len(rows) > 0:
                         raise RiskStatePersistenceError(
-                            f"risk_state rows for {account_id} all unreadable/corrupt: {len(rows)} rows"
+                            f"risk_state rows for {mask_account_number(account_id)} all unreadable/corrupt: {len(rows)} rows"
                         )
                 if hw_peak is None and rs_peak is None:
                     return None, None
@@ -244,7 +248,9 @@ class RiskPeakService:
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as exc:
-            raise RiskStatePersistenceError(f"persisted peak query failed for {account_id}: {exc}") from exc
+            raise RiskStatePersistenceError(
+                f"persisted peak query failed for {mask_account_number(account_id)}: {exc}"
+            ) from exc
 
     def ensure_reconciled(self, account_id: str) -> None:
         if not account_id:
@@ -252,7 +258,7 @@ class RiskPeakService:
         existing = self._peak_account_id
         if existing is not None and existing != account_id:
             raise RuntimeError(
-                f"Account identity changed from {existing} to {account_id} — fail closed; peak is account-scoped and must not cross accounts"
+                f"Account identity changed from {mask_account_number(existing)} to {mask_account_number(account_id)} — fail closed; peak is account-scoped and must not cross accounts"
             )
         if self._peak_reconciled and existing == account_id:
             return
@@ -285,10 +291,14 @@ class RiskPeakService:
                         # Fail closed (docs/execution_architecture.md): a foreign peak is never
                         # ignored and overwritten, because the drawdown baseline would re-base
                         # to the new account's equity.
-                        log.error("Peak sidecar account mismatch: sidecar=%s current=%s", acct, account_id)
+                        log.error(
+                            "Peak sidecar account mismatch: sidecar=%s current=%s",
+                            mask_account_number(acct),
+                            mask_account_number(account_id),
+                        )
                         raise RiskStatePersistenceError(
-                            f"Peak sidecar at {self._peak_state_path} is bound to account {acct}, "
-                            f"not {account_id}; refusing to start. Verify the account before moving the sidecar aside."
+                            f"Peak sidecar at {self._peak_state_path} is bound to account {mask_account_number(acct)}, "
+                            f"not {mask_account_number(account_id)}; refusing to start. Verify the account before moving the sidecar aside."
                         )
                     else:
                         sidecar_peak, sidecar_epoch, sidecar_account_id, is_legacy = peak, epoch_val, acct, False
@@ -308,7 +318,7 @@ class RiskPeakService:
                         log.error(
                             "Peak sidecar fingerprint mismatch: sidecar=%s current_account=%s",
                             fp[:8],
-                            account_id[:8],
+                            mask_account_number(account_id),
                         )
                         raise RiskStatePersistenceError(
                             f"Peak sidecar at {self._peak_state_path} is bound to another account "
@@ -326,14 +336,15 @@ class RiskPeakService:
             self._bootstrap_pending = True
             log.warning(
                 "No peak sidecar or persisted high-water for account=%s; drawdown baseline bootstraps from the first observed equity",
-                account_id,
+                mask_account_number(account_id),
             )
         elif sidecar_peak is None and persisted_peak is not None:
             peak_final, epoch_final = float(persisted_peak), int(persisted_epoch or 0)
         elif sidecar_peak is not None and persisted_peak is None:
             if is_legacy:
                 log.warning(
-                    "Legacy peak sidecar without account_id for account=%s — rewriting bound sidecar", account_id
+                    "Legacy peak sidecar without account_id for account=%s — rewriting bound sidecar",
+                    mask_account_number(account_id),
                 )
             peak_final, epoch_final = float(sidecar_peak), int(sidecar_epoch or 0)
         else:
@@ -353,7 +364,7 @@ class RiskPeakService:
                     "Legacy sidecar peak=%s persisted=%s for account=%s — resolved to %s (epoch %s)",
                     sidecar_peak,
                     persisted_peak,
-                    account_id,
+                    mask_account_number(account_id),
                     peak_final,
                     epoch_final,
                 )

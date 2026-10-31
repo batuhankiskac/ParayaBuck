@@ -34,6 +34,24 @@ class IncidentSeverity(StrEnum):
     CRITICAL = "critical"
 
 
+# Categories with a taxonomy row but NO raise site in this build (checked against
+# runtime.py and monitoring/paper_incident.py). Their halt flags and operator
+# actions describe the intended behaviour only: no alert and no halt reason
+# carries them today. A future raise site must add the call; nothing here
+# raises them. ``docs/paper_incident_taxonomy.md`` and the operator runbook say the same.
+RESERVED_INCIDENT_CATEGORIES: frozenset[IncidentCategory] = frozenset(
+    {
+        IncidentCategory.ORDER_DRIFT,
+        IncidentCategory.SIGNAL_HISTORY_UNVERIFIED,
+        IncidentCategory.STATE_RESTORE_FAILED,
+        IncidentCategory.DUPLICATE_DECISION,
+        IncidentCategory.DUPLICATE_ORDER_RISK,
+        IncidentCategory.CLOCK_OR_SESSION_MISMATCH,
+        IncidentCategory.RESTART_RECOVERY_FAILED,
+    }
+)
+
+
 @dataclass(frozen=True)
 class IncidentSpec:
     category: IncidentCategory
@@ -222,6 +240,7 @@ def create_incident(
 
 
 __all__ = [
+    "RESERVED_INCIDENT_CATEGORIES",
     "IncidentCategory",
     "IncidentSeverity",
     "IncidentSpec",

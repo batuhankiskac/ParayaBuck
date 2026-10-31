@@ -307,16 +307,20 @@ class EmailAlertSink:
             self._worker = threading.Thread(target=self._run, name="pb-email-alerts", daemon=True)
             self._worker.start()
 
-    def accepts(self, kind: str) -> bool:
+    def accepts(self, kind: str, fields: Mapping[str, object] | None = None) -> bool:
         if kind == _DELIVERY_FAILED_KIND:
             return False
         if kind == "daily_summary":
             return bool(getattr(self.settings, "daily_summary", False))
+        if kind == "signal_source_mismatch":
+            # Only the IEX-only decision (no second source to check against) is
+            # mailed; a trend or close disagreement stays in the journal.
+            return fields is not None and str(fields.get("category", "") or "") == "secondary_unavailable"
         return kind in EMAIL_ALERT_KINDS
 
     def notify(self, kind: str, message: str, fields: Mapping[str, object], throttle_key: str) -> bool:
         """Enqueue one alert e-mail; False when filtered, coalesced or dropped."""
-        if self._closed or not self.accepts(kind):
+        if self._closed or not self.accepts(kind, fields):
             return False
         now = self._clock()
         window = max(0.0, float(self.settings.min_interval_minutes)) * 60.0

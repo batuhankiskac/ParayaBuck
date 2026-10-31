@@ -161,6 +161,9 @@ class EventJournal:
         self._stats = JournalStats()
         self._writes_since_cleanup = 0
         self._started = False
+        # Set by a completed stop(): a later emit writes synchronously instead of
+        # lazily starting a writer nobody joins (its queued rows would die at exit).
+        self._stopped_by_stop = False
         self._read_only = False
         self._ensure_schema()
 
@@ -221,6 +224,7 @@ class EventJournal:
             if self._started:
                 return
             self._stop.clear()
+            self._stopped_by_stop = False
             self._writer_thread = threading.Thread(target=self._writer_loop, name="pb-journal-writer", daemon=True)
             self._writer_thread.start()
             self._started = True
@@ -251,6 +255,7 @@ class EventJournal:
                 return
             # A later start() must spawn a fresh writer instead of enqueuing onto a dead one
             self._started = False
+            self._stopped_by_stop = True
             self._writer_thread = None
             leftover = self._queue.qsize()
             if leftover:
@@ -400,6 +405,10 @@ class EventJournal:
             account_id = mask_account_number(event.account_id) if event.account_id else None
             event = replace(event, fields=redact_fields(event.fields), account_id=account_id)
             if event.kind in SAFETY_JOURNAL_KINDS:
+                return self._flush_batch([event], maintain=False)
+            if not self._started and getattr(self, "_stopped_by_stop", False):
+                # After an explicit stop no writer is running: write this row now, on
+                # the caller's thread, rather than starting a writer nobody joins.
                 return self._flush_batch([event], maintain=False)
             # ensure writer started lazily
             if not self._started:

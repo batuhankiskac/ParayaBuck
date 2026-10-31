@@ -137,7 +137,9 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     state = str(data.get("runtime_state") or data.get("state") or "unknown")
     # A stop the engine wrote itself is planned (maintenance, operator stop) and is checked
     # before staleness, so the snapshot's age after a clean stop does not page as CRITICAL (D2-6-3).
-    if state in {"stopped", "stop_failed"}:
+    # A failed stop is not planned: its workers may still be alive, so a stale
+    # ``stop_failed`` snapshot falls through to the staleness check (Q3-2-1).
+    if state == "stopped":
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.BLOCKED,

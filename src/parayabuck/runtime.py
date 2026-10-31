@@ -35,7 +35,7 @@ from parayabuck.core.models import (
 )
 from parayabuck.data import AlpacaBarStream, AlpacaHistoricalData, TimeframeAggregator
 from parayabuck.data.adjustment import adequate_coverage, covers_session, split_continuity_breach
-from parayabuck.data.alpaca import BatchOutcome
+from parayabuck.data.alpaca import BatchOutcome, HistoricalProviderCooldown
 from parayabuck.execution.alpaca import (
     AlpacaBroker,
     AmbiguousOrderState,
@@ -72,7 +72,7 @@ from parayabuck.live_safety import (
     verify_account_environment,
 )
 from parayabuck.logger import get_logger
-from parayabuck.markets.nyse_calendar import sessions_around
+from parayabuck.markets.nyse_calendar import session_bounds, sessions_around
 from parayabuck.markets.symbols import canonical_symbol
 from parayabuck.markets.timeframes import (
     NEW_YORK,
@@ -1849,6 +1849,9 @@ class EngineRuntime:
                 self._state = "halted"
             elif self._state not in _ENTRY_BLOCKING_STATES:
                 self._state = "running" if self._has_ready_symbols() else "warming_up"
+        # Read before this start records its own row: a start that finds earlier
+        # rows without an end follows an unclean exit (a kill, an OOM, a watchdog kill).
+        unclean_previous = self._unended_runtime_sessions()
         record_session = getattr(self.ledger, "record_runtime_session", None)
         if record_session is not None:
             # Observability-only; fake ledgers in unit tests may omit it.
@@ -1890,6 +1893,17 @@ class EngineRuntime:
             symbols=len(self.symbols),
             timeframes=",".join(sorted(self.aggregators)),
         )
+        if unclean_previous:
+            # The automatic restart after a crash is mailed: an unattended exit
+            # must not be silent just because the engine came back up.
+            alerts.emit(
+                "runtime_unclean_restart",
+                message="Engine restarted after an unclean exit: earlier session(s) never recorded a clean stop",
+                mode=self.mode.value,
+                previous_sessions=len(unclean_previous),
+                previous_started_at=unclean_previous[-1]["started_at"],
+                previous_mode=unclean_previous[-1]["mode"],
+            )
         if not self.paper:
             # Manual and standing-authorization LIVE starts both pass here; mailed,
             # so an unattended LIVE start is never silent.
@@ -3510,7 +3524,9 @@ class EngineRuntime:
                     "Trade update for %s refused by the portfolio ledger; reconciliation scheduled",
                     update.client_order_id,
                 )
-                self._schedule_reconcile()
+                # Latch entries too: a reconcile already running would absorb a bare
+                # schedule, and the unbooked fill must not be bought past.
+                self._set_reconcile_pending("refused_fill_frame")
                 return
             # A rejected portfolio order is an operator-visible event: the
             # dependent rebalance replans smaller (or absent) buys, so the
@@ -4173,8 +4189,9 @@ class EngineRuntime:
                 deadline.isoformat(),
             )
             alerts.emit(
-                "decision_deferred",
+                "decision_window_expired",
                 message="Session-close decision retry window expired; session not decided",
+                severity="critical",
                 market=market.value,
                 decision_timestamp=decision_timestamp.isoformat(),
                 reason=reason,
@@ -5642,8 +5659,9 @@ class EngineRuntime:
                         "retry_window_ended_while_parked",
                     )
                     alerts.emit(
-                        "decision_deferred",
+                        "decision_window_expired",
                         message="Session-close decision retry window expired; session not decided",
+                        severity="critical",
                         market=market.value,
                         decision_timestamp=decision_timestamp.isoformat(),
                         reason="retry_window_ended_while_parked",
@@ -5902,7 +5920,13 @@ class EngineRuntime:
             return
         symbols = sorted(self._not_ready_snapshot())
         log.info("Retrying incomplete warmup for %d symbols", len(symbols))
-        self._warmup_symbols(history, symbols, retry=True)
+        answered = self._warmup_symbols(history, symbols, retry=True)
+        if answered is False:
+            # The round never reached the provider (it was inside a failure
+            # cool-down from its first batch): it used no retry attempt, so the
+            # backoff must not grow for it.
+            with getattr(self, "_state_lock", threading.RLock()):
+                self._warmup_retry_attempt = max(0, int(getattr(self, "_warmup_retry_attempt", 0)) - 1)
         self._refresh_readiness()
 
     def _has_ready_symbols(self) -> bool:
@@ -6045,7 +6069,8 @@ class EngineRuntime:
                 except Exception:
                     log.warning("Periodic reconciliation observation failed", exc_info=True)
                 account_id = self.broker.account_id or "unknown"
-                if getattr(self, "_reconcile_failed", False):
+                failure_recovered = bool(getattr(self, "_reconcile_failed", False))
+                if failure_recovered:
                     self._reconcile_failed = False
                     runtime_metrics_store.record_event("reconciliation_recovered")
                     alerts.emit(
@@ -6053,12 +6078,23 @@ class EngineRuntime:
                         message="Periodic reconciliation recovered",
                         account_id=account_id,
                     )
+                cleared_reason: str | None = None
                 with getattr(self, "_state_lock", threading.RLock()):
                     if int(getattr(self, "_reconcile_pending_seq", 0)) == requested_seq:
                         cleared_reason = getattr(self, "_reconcile_pending_reason", None)
                         self._reconcile_pending_reason = None
                         if cleared_reason is not None:
                             log.info("Reconcile-pending latch cleared after a clean reconciliation: %s", cleared_reason)
+                if cleared_reason is not None and not failure_recovered:
+                    # The latch held new entries and its clear reopened them: say so, once,
+                    # unless the failure recovery above already announced this clean run.
+                    runtime_metrics_store.record_event("reconciliation_recovered")
+                    alerts.emit(
+                        "reconciliation_recovered",
+                        message="Reconcile-pending latch cleared after a clean reconciliation; new entries resumed",
+                        account_id=account_id,
+                        latch_reason=cleared_reason,
+                    )
                 # C9-6: under the risk-state lock, so a concurrent
                 # _persist_risk_state cannot re-save a row this clean
                 # reconcile has just cleared.
@@ -6270,6 +6306,10 @@ class EngineRuntime:
                 return
             session_date, opened = min(due, key=lambda item: item[1])
             self._premarket_probed_sessions.add(session_date)
+            # Only recent sessions can come due again: keep a week so the set stays bounded.
+            self._premarket_probed_sessions = {
+                day for day in self._premarket_probed_sessions if day >= session_date - timedelta(days=7)
+            }
             account_id = self.broker.account_id or "unknown"
             open_local = [order.client_order_id for order in self._portfolio_repository.open_orders(account_id)]
             result = premarket_probe(
@@ -6329,12 +6369,21 @@ class EngineRuntime:
             if not open_orders:
                 return
             trigger = getattr(self, "_trade_feed_probe_at", None)
+            # A stamp written after the previous close (an order sent at 16:20 ET
+            # and left working overnight) is not silence during this session: the
+            # clock starts at the session open.
+            bounds = session_bounds(now.astimezone(NEW_YORK).date())
+            session_open = bounds[0] if bounds is not None else None
             silent_seconds = 0.0
             for order in open_orders:
                 client_order_id = str(getattr(order, "client_order_id", "") or "")
                 # setdefault: the first check that sees an order starts its clock.
                 last_seen = stamps.setdefault(client_order_id, now)
-                reference = max(last_seen, trigger) if trigger is not None else last_seen
+                reference = last_seen
+                if trigger is not None:
+                    reference = max(reference, trigger)
+                if session_open is not None:
+                    reference = max(reference, session_open)
                 silent_seconds = max(silent_seconds, (now - reference).total_seconds())
             if silent_seconds < _TRADE_FEED_STALE_SECONDS:
                 return
@@ -6906,6 +6955,17 @@ class EngineRuntime:
         orders = repository.orders_for_decision(current.decision_id)
         return all(is_terminal_order_status(str(order["status"])) for order in orders)
 
+    def _unended_runtime_sessions(self) -> list[dict[str, str]]:
+        """Earlier engine starts without a recorded end (never raises; [] when unknown)."""
+        finder = getattr(self.ledger, "unended_runtime_sessions", None)
+        if finder is None:
+            return []
+        try:
+            return [dict(row) for row in finder()]
+        except Exception:
+            log.warning("Previous-session check failed", exc_info=True)
+            return []
+
     def _warmup(self) -> None:
         history = AlpacaHistoricalData(
             self.api_key,
@@ -6926,7 +6986,7 @@ class EngineRuntime:
                 ",".join(sorted(self._not_ready_symbols)),
             )
 
-    def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> None:
+    def _warmup_symbols(self, history: AlpacaHistoricalData, symbols: list[str], *, retry: bool) -> bool:
         """Download split-adjusted signal history for ``symbols`` and seed it.
 
         Only the strategy signal cadences are fetched, on the SPLITS basis
@@ -6935,6 +6995,7 @@ class EngineRuntime:
         matching portfolio runtime under the portfolio lock.
         """
         group = list(symbols)
+        provider_answered = False
         for timeframe in sorted(self._strategy_timeframes):
             strategy_requirements = [
                 runtime.strategy.minimum_history_bars + 5
@@ -6960,6 +7021,7 @@ class EngineRuntime:
                     # was never stored, so the signals would read one session further
                     # back. The symbol stays not ready and the warmup retry covers it.
                     incomplete = outcome.incomplete
+                    provider_answered = True
                     for symbol in symbol_batch:
                         if symbol in incomplete:
                             log.warning(
@@ -6990,6 +7052,17 @@ class EngineRuntime:
                         # (discard + retry startup) instead of starting an
                         # engine with no history.
                         raise
+                    if isinstance(exc, HistoricalProviderCooldown):
+                        # Every later request of this client is refused the same way
+                        # until the cool-down lapses: end the round here instead of
+                        # logging one skip per remaining batch. The symbols stay not
+                        # ready for the next scheduled retry.
+                        log.warning(
+                            "Warmup%s round ended early: provider in failure cool-down (%s)",
+                            " retry" if retry else "",
+                            exc,
+                        )
+                        return provider_answered
                     log.warning(
                         "Warmup%s batch skipped %s symbols=%d: %s",
                         " retry" if retry else "",
@@ -6997,6 +7070,7 @@ class EngineRuntime:
                         len(symbol_batch),
                         exc,
                     )
+        return True
 
 
 _CATCH_UP_TRANSIENT_STATUSES = frozenset({"warming_up", "incomplete_strategy_batch"})

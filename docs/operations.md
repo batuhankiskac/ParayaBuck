@@ -120,7 +120,9 @@ blocks or fails trading, and no health check depends on alert delivery.
 | `signal_adjustment_failure` / `signal_adjustment_recovery` | Split-basis verification failed (e-mailed) / recovered (equity entries halted meanwhile) | warning / info |
 | `paper_incident` | Specific incidents (e.g. stuck deferred BUY, unknown order canceled) | warning |
 | `signal_source_mismatch` | IEX and SIP daily bars disagree on the trend (position held), their closes diverge, or the SIP bar is missing | warning |
-| `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session, plus one when the retry window expires without a decision | warning |
+| `decision_deferred` | A session-close decision was re-queued because a recoverable gate (reconcile breaker, stale account snapshot, invalidated snapshot lease, transient broker fetch) was active; one per session (journal only, not e-mailed) | warning |
+| `decision_window_expired` | The retry window of a session-close decision ended with the session NOT decided (e-mailed, critical) | warning, critical severity |
+| `runtime_unclean_restart` | The engine started again after an unclean exit: an earlier session never recorded a clean stop (e-mailed) | warning |
 | `market_data_degraded` | The effective historical feed stopped being the configured one (SIP entitlement downgrade to IEX), and again when it recovers | warning |
 | `session_close_bar_incomplete` | A session closed with stream minutes missing: the incomplete daily bar was withheld and the SIP daily bar is fetched for the decision | warning |
 | `exit_sell_rejected` | The broker rejected a SELL (an exit or a reduction of QLD). The engine retries it **once** at the next safe account poll (running, not warming up, no breaker or entry halt, no open order in the symbol) with the client id `<original>-retry1`, re-sized to the managed quantity still held; a rejected retry is alerted again (`state=retry_rejected`) and never retried | warning |
@@ -339,7 +341,7 @@ the watchdog still reports it missing, and it outlives the second-source
 deferral it must survive (`sip_embargo_minutes` 15 + `retry_window_minutes`
 10 = 25 min after the close). The first deferral of a session emits
 `decision_deferred`; retries only log `Decision deferred for retry`.
-`retry_window_ended` marks a session that was genuinely lost.
+`decision_window_expired` (not `decision_deferred`) marks a session that was genuinely lost.
 
 A restart does not lose the session either: if the newest completed session is
 a scheduled boundary with no persisted decision, startup decides it

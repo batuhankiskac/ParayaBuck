@@ -45,7 +45,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
 from parayabuck.core.models import AccountSnapshot, Market
-from parayabuck.markets.nyse_calendar import NEW_YORK, sessions_around
+from parayabuck.markets.nyse_calendar import NEW_YORK, calendar_degraded_reason, sessions_around
 from parayabuck.markets.symbols import canonical_symbol
 
 # Absolute weight, as a fraction of account equity, by which a position may
@@ -294,9 +294,16 @@ def evaluate_equity(
     *,
     running_since: datetime | None,
     settings: IntentWatchdogSettings,
+    calendar_degraded: bool | None = None,
 ) -> list[IntentAlarm]:
     alarms: list[IntentAlarm] = []
-    due = last_due_equity_session(now, settings.equity_decision_grace)
+    if calendar_degraded is None:
+        calendar_degraded = calendar_degraded_reason() is not None
+    # While the NYSE calendar is degraded the weekday fallback counts holidays as
+    # due sessions, so a missed-decision alarm would be false (and would fail
+    # readiness and the dead-man). The check is skipped until the calendar is back,
+    # as the premarket probe skips its schedule comparisons.
+    due = None if calendar_degraded else last_due_equity_session(now, settings.equity_decision_grace)
     if due is not None:
         due_session, deadline = due
         latest_session = latest.decision_timestamp.astimezone(NEW_YORK).date() if latest is not None else None

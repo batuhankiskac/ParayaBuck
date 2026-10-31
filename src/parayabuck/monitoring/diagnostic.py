@@ -444,9 +444,13 @@ def _run_doctor_checks(
 
         rp = receipt_module.default_receipt_dir()
         rp.mkdir(parents=True, exist_ok=True)
-        test = rp / ".write_test"
-        test.write_text("ok", encoding="utf-8")
-        test.unlink(missing_ok=True)
+        # S3-3-4: a random O_EXCL name, so a planted symlink at a fixed name is never written through.
+        probe_fd, probe_name = tempfile.mkstemp(prefix=".write_test.", dir=rp)
+        try:
+            os.write(probe_fd, b"ok")
+        finally:
+            os.close(probe_fd)
+        Path(probe_name).unlink(missing_ok=True)
         _add("receipt_dir", "OK", "writable")
     except Exception as exc:
         _add("receipt_dir", "CRITICAL", f"not writable: {exc}")

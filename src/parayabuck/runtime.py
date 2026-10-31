@@ -1353,6 +1353,34 @@ class EngineRuntime:
         except Exception:
             log.warning("Standing LIVE authorization check failed", exc_info=True)
 
+    _BACKUP_CHECK_INTERVAL_SECONDS = 3600.0
+    _BACKUP_STALE_RENOTIFY_SECONDS = 12 * 3600.0
+
+    def _maybe_check_backup_freshness(self, now: datetime | None = None) -> None:
+        """Hourly, every mode: e-mail ``backup_stale`` while the newest automatic backup is
+        past the freshness bound (R3-3-4). Runs in the engine's account loop, so it still
+        fires when the backup timer is dead. Repeats at most every 12 h while stale.
+        Never raises and never touches trading."""
+        try:
+            from parayabuck.backup import backup_stale_reason
+
+            now_mono = time.monotonic()
+            last = getattr(self, "_backup_check_last_mono", None)
+            if now is None and last is not None and now_mono - last < self._BACKUP_CHECK_INTERVAL_SECONDS:
+                return
+            self._backup_check_last_mono = now_mono
+            reason = backup_stale_reason(self.app_config.backup.path, now=now)
+            if reason is None:
+                self._backup_stale_notified_mono = None
+                return
+            notified = getattr(self, "_backup_stale_notified_mono", None)
+            if notified is not None and now_mono - notified < self._BACKUP_STALE_RENOTIFY_SECONDS:
+                return
+            self._backup_stale_notified_mono = now_mono
+            alerts.emit("backup_stale", message=reason, backup_dir=str(self.app_config.backup.path))
+        except Exception:
+            log.warning("Backup freshness check failed", exc_info=True)
+
     def _intent_watchdog_pass(self, now: datetime | None = None) -> list[dict[str, str]]:
         """Compare scheduled intent with the decision DB and account.
 
@@ -2624,6 +2652,7 @@ class EngineRuntime:
                 self._maybe_check_trade_feed_freshness()
                 self._maybe_run_intent_watchdog()
                 self._maybe_check_standing_authorization()
+                self._maybe_check_backup_freshness()
                 # The periodic readiness refresh (warming_up -> running
                 # promotion and the bounded warmup retry) runs on this loop:
                 # the decision loop only wakes for the daily decision bar.

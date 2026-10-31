@@ -403,13 +403,13 @@ def test_engine_unit_start_timeout_covers_the_doctor_preflight() -> None:
 
 def test_backup_unit_start_timeout_covers_the_offhost_copy() -> None:
     unit = REPO / "deploy" / "systemd" / "parayabuck-backup.service"
-    assert _unit_values(unit, "TimeoutStartSec") == ["TimeoutStartSec=3600"]
+    assert _unit_values(unit, "TimeoutStartSec") == ["TimeoutStartSec=6600"]
 
 
 def test_vm_start_timeout_drop_ins_match_the_templates() -> None:
     engine = REPO / "deploy" / "systemd" / "vm-dropin" / "start-timeout-engine.conf"
     backup = REPO / "deploy" / "systemd" / "vm-dropin" / "start-timeout-backup.conf"
     assert _unit_values(engine, "TimeoutStartSec") == ["TimeoutStartSec=900"]
-    assert _unit_values(backup, "TimeoutStartSec") == ["TimeoutStartSec=3600"]
+    assert _unit_values(backup, "TimeoutStartSec") == ["TimeoutStartSec=6600"]
     assert "[Service]" in engine.read_text(encoding="utf-8")
     assert "[Service]" in backup.read_text(encoding="utf-8")

@@ -457,15 +457,16 @@ def test_paper_auto_start_is_unchanged(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 def test_authorize_live_standing_days_writes_and_revoke_deletes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = _live_config(tmp_path)
     monkeypatch.setattr(cli, "AlpacaBroker", _FakeLiveBroker)
     monkeypatch.setenv("PARAYABUCK_OPERATOR_APPROVAL_KEY", _HMAC)
     monkeypatch.setenv("ALPACA_LIVE_API_KEY", "AKlive")
     monkeypatch.setenv("ALPACA_LIVE_SECRET_KEY", "live-secret")
-    with pytest.raises(SystemExit, match="between 1 and 30"):
-        cli._authorize_live(config, _authorize_args(standing_days=45))  # type: ignore[arg-type]
+    # F3-5-6: an out-of-range --standing-days is a usage error (64), not a refusal (1).
+    assert cli._authorize_live(config, _authorize_args(standing_days=45)) == cli.EXIT_USAGE  # type: ignore[arg-type]
+    assert "between 1 and 30" in capsys.readouterr().err
     assert cli._authorize_live(config, _authorize_args(standing_days=7)) == 0  # type: ignore[arg-type]
     path = standing_authorization_file(config)
     assert path is not None and path.exists()

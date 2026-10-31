@@ -23,6 +23,7 @@ from parayabuck.config import Config, ObservabilityConfig
 from parayabuck.monitoring import journal as journal_module
 from parayabuck.monitoring import observe as observe_module
 from parayabuck.monitoring.journal import EventJournal, configure_global_journal, get_journal
+from parayabuck.monitoring.operational_event import OperationalEvent
 from parayabuck.runtime import EngineRuntime
 from parayabuck.runtime_health import WorkerHealth
 
@@ -50,20 +51,29 @@ def _wait_for_kind(journal: EventJournal, kind: str, expected: int, timeout: flo
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_absence(journal: EventJournal, kind: str, expected: int, timeout: float = 1.0) -> bool:
-    """Hold ``timeout`` seconds asserting no row beyond ``expected`` appears.
+def _wait_for_absence(journal: EventJournal, kind: str, expected: int) -> bool:
+    """True when ``kind`` holds exactly ``expected`` rows after the writer has caught up.
 
-    The writer is a background thread, so a duplicate row lands after a delay:
-    let the queue drain first, then keep the window open past one flush.
+    The writer is a background thread that commits in queue order. A barrier
+    event enqueued now is visible only after every earlier event, a duplicate
+    included, has been committed, so the count is read at a known point instead
+    of inside a wall-clock window that a loaded machine can outlast.
     """
-    drain_deadline = time.monotonic() + 5.0
-    while not journal._queue.empty() and time.monotonic() < drain_deadline:
-        time.sleep(0.01)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if len(journal.query(kind=kind, limit=50)) != expected:
+    barrier_kind = "test_absence_barrier"
+    journal.emit(
+        OperationalEvent(
+            event_id=f"barrier-{kind}",
+            occurred_at=datetime.now(UTC),
+            kind=barrier_kind,
+            severity="INFO",
+            message="absence barrier",
+        )
+    )
+    deadline = time.monotonic() + 10.0
+    while not journal.query(kind=barrier_kind, limit=1):
+        if time.monotonic() >= deadline:
             return False
-        time.sleep(0.02)
+        time.sleep(0.01)
     return len(journal.query(kind=kind, limit=50)) == expected
 
 

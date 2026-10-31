@@ -241,22 +241,27 @@ def test_cooldown_serves_the_cache_when_it_covers_the_window(tmp_path: Any) -> N
 def _race_stop_against_sdk_start(stream: Any, sdk: Mock, run: Any) -> float:
     """Call ``run`` so that the SDK loop appears only after a stop() has begun.
 
-    The fake SDK run() sets the loop 50 ms later on this thread, while a helper
-    thread calls stop(). Returns how long the helper's stop() took.
+    The fake SDK run() starts a helper thread that calls stop(), waits on an
+    event until that helper has entered stop(), and only then sets the loop on
+    this thread. The race is forced by the event, not by a sleep. Returns how long
+    the helper's stop() took.
     """
     stopped_after: list[float] = []
+    stop_entered = threading.Event()
 
     def stop_worker() -> None:
         started = time.monotonic()
+        stop_entered.set()
         stream.stop()
         stopped_after.append(time.monotonic() - started)
 
     def fake_sdk_run(*_args: Any) -> None:
         helper = threading.Thread(target=stop_worker)
         helper.start()
-        time.sleep(0.05)
+        assert stop_entered.wait(5), "the helper never entered stop()"
         sdk._loop = object()  # alpaca-py creates its event loop on entry to run()
         helper.join(timeout=5)
+        assert not helper.is_alive(), "stop() did not return once the loop appeared"
 
     sdk.run.side_effect = fake_sdk_run
     run()
@@ -291,10 +296,12 @@ def test_stop_of_a_never_started_stream_does_not_wait() -> None:
     sdk._loop = None
     stream._stream = sdk
 
-    started = time.monotonic()
-    stream.stop()
+    # Completion, not a wall-clock bound: stop() must return on its own thread.
+    helper = threading.Thread(target=stream.stop, daemon=True)
+    helper.start()
+    helper.join(timeout=10)
 
-    assert time.monotonic() - started < 0.5
+    assert not helper.is_alive(), "stop() of a never-started stream did not return"
     sdk.stop.assert_not_called()
 
 

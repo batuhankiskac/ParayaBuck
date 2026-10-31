@@ -37,9 +37,9 @@ class _BlockingFlaky(_FlakyRuntime):
         super().start()
 
 
-def test_shutdown_during_in_flight_transient_start_does_not_wait_on_retries(monkeypatch: Any) -> None:
+def test_shutdown_during_in_flight_transient_start_does_not_wait_on_retries(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _BlockingFlaky(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
     monkeypatch.setattr(manager, "should_auto_start", lambda: True)
     lifespan = create_lifespan(lambda: manager)
 

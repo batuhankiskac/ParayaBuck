@@ -200,7 +200,7 @@ def test_p9_1_superseded_sell_in_flight_holds_the_new_decision(tmp_path) -> None
     assert runtime.previous_timestamp == before
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
     # P2-7-2: the rebalance stays open while its superseded SELL is working.
-    assert _phase(repository, first.decision_id)[0] == REBALANCE_PHASE_SELL_PENDING
+    assert _phase(repository, first.decision_id) == (REBALANCE_PHASE_SELL_PENDING, "active")
 
     # The SELL settles; the advance path does not resume the stale BUY side.
     _settle(repository, sell, "sell-fill")

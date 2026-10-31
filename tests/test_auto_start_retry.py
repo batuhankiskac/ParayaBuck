@@ -468,7 +468,7 @@ class _FlakyRuntime:
         return SimpleNamespace(state="running")
 
 
-def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime) -> EngineManager:
+def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime, tmp_path: Path) -> EngineManager:
     monkeypatch.setattr(runtime_module, "EngineRuntime", lambda **kwargs: flaky)
     monkeypatch.setattr(
         engine_module,
@@ -478,6 +478,9 @@ def _manager_with(monkeypatch: Any, flaky: _FlakyRuntime) -> EngineManager:
     manager = EngineManager()
     manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+    # A start clears the operator Stop record: keep it out of the checkout's data/runtime.
+    stop_marker = tmp_path / "runtime" / engine_module.OPERATOR_STOP_MARKER_FILENAME
+    monkeypatch.setattr(manager, "_operator_stop_marker", lambda: stop_marker)
     return manager
 
 
@@ -489,9 +492,9 @@ async def _wait_for_retry_pending(manager: EngineManager) -> None:
     raise AssertionError("auto-start retry was never scheduled")
 
 
-def test_first_transient_fails_second_succeeds(monkeypatch: Any) -> None:
+def test_first_transient_fails_second_succeeds(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=1)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     async def _no_wait(_delay: float) -> None:
         await _REAL_SLEEP(0)
@@ -510,9 +513,9 @@ def test_first_transient_fails_second_succeeds(monkeypatch: Any) -> None:
     assert manager._retry_task is None
 
 
-def test_backoff_is_bounded_and_capped(monkeypatch: Any) -> None:
+def test_backoff_is_bounded_and_capped(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=5)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
     recorded_delays: list[float] = []
     attempts_at_sleep: list[int] = []
 
@@ -531,9 +534,9 @@ def test_backoff_is_bounded_and_capped(monkeypatch: Any) -> None:
     assert manager._retry_attempt == 0  # reset after success
 
 
-def test_permanent_failure_stops_retrying(monkeypatch: Any) -> None:
+def test_permanent_failure_stops_retrying(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999, transient=False)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     with pytest.raises(RuntimeError, match="ownership safety failure"):
         asyncio.run(manager.auto_start_engine())
@@ -545,11 +548,9 @@ def test_permanent_failure_stops_retrying(monkeypatch: Any) -> None:
     assert manager._retry_attempt == 0
 
 
-def test_manual_start_transient_failure_goes_to_error_without_retry(
-    monkeypatch: Any,
-) -> None:
+def test_manual_start_transient_failure_goes_to_error_without_retry(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     with pytest.raises(TransientStartupError):
         manager.start_engine()  # manual path: no auto_start, no retry
@@ -560,9 +561,9 @@ def test_manual_start_transient_failure_goes_to_error_without_retry(
     assert flaky.start_calls == 1
 
 
-def test_stop_while_waiting_retry_cancels_it(monkeypatch: Any) -> None:
+def test_stop_while_waiting_retry_cancels_it(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     async def scenario() -> None:
         task = asyncio.create_task(manager.auto_start_engine())
@@ -581,9 +582,9 @@ def test_stop_while_waiting_retry_cancels_it(monkeypatch: Any) -> None:
     assert flaky.start_calls == 1  # no attempt fired after the cancellation
 
 
-def test_shutdown_while_waiting_retry_cancels_it(monkeypatch: Any) -> None:
+def test_shutdown_while_waiting_retry_cancels_it(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
     monkeypatch.setattr(manager, "should_auto_start", lambda: True)
     state = WebState(engine_manager=manager, backtest_manager=manager._backtest_manager)
 
@@ -599,9 +600,9 @@ def test_shutdown_while_waiting_retry_cancels_it(monkeypatch: Any) -> None:
     assert flaky.start_calls == 1  # shutdown canceled the pending retry
 
 
-def test_manual_start_while_retry_pending_is_refused(monkeypatch: Any) -> None:
+def test_manual_start_while_retry_pending_is_refused(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     async def scenario() -> None:
         task = asyncio.create_task(manager.auto_start_engine())
@@ -620,9 +621,9 @@ def test_manual_start_while_retry_pending_is_refused(monkeypatch: Any) -> None:
     assert manager.engine_state == "stopped"
 
 
-def test_successful_start_resets_retry_counters(monkeypatch: Any) -> None:
+def test_successful_start_resets_retry_counters(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=2)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
 
     recorded_delays: list[float] = []
 
@@ -643,9 +644,9 @@ def test_successful_start_resets_retry_counters(monkeypatch: Any) -> None:
     assert manager.last_engine_error is None
 
 
-def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any) -> None:
+def test_status_exposes_retry_info_only_while_retrying(monkeypatch: Any, tmp_path: Path) -> None:
     flaky = _FlakyRuntime(failures=999)
-    manager = _manager_with(monkeypatch, flaky)
+    manager = _manager_with(monkeypatch, flaky, tmp_path)
     # get_status needs a parseable-but-harmless config in this test.
     monkeypatch.setattr(
         status_service,

@@ -449,8 +449,10 @@ def _day_grid(start: datetime, end: datetime) -> list[datetime]:
     return stamps
 
 
-def _today() -> datetime:
-    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+# The window's end is a fixed past day, not the wall clock: the bars are synthetic,
+# and a "today" taken as UTC midnight names the previous New York session between
+# 00:00 and 04:00 UTC, so the assertions would depend on when the suite ran.
+_FIXED_END = datetime(2026, 9, 1, tzinfo=UTC)
 
 
 class _FakeStockBars:
@@ -548,7 +550,7 @@ def _seed_cache(cache: Any, stamps: list[datetime]) -> None:
 def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: Any) -> None:
     """The verifier reads ``get_bars_batch``: a symbol the provider did not
     answer may be served from the cache only as a DEGRADED answer."""
-    end = _today()
+    end = _FIXED_END
     start = end - timedelta(days=8)
     grid = _day_grid(start, end)
     _seed_cache(warmup_cache, grid)
@@ -572,7 +574,7 @@ def test_plain_fetch_never_counts_cache_rows_as_provider_coverage(warmup_cache: 
 def test_plain_fetch_resolves_a_due_sip_reprobe(warmup_cache: Any) -> None:
     """A downgraded client whose SIP re-probe is due queries SIP again."""
 
-    end = _today()
+    end = _FIXED_END
     start = end - timedelta(days=8)
     provider = _FakeStockBars()
     history = _plain_history(warmup_cache, provider)

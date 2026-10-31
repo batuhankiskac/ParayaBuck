@@ -23,11 +23,14 @@ from parayabuck.web.managers import engine as engine_module
 from parayabuck.web.managers.engine import EngineManager
 
 
-def _manager(monkeypatch: pytest.MonkeyPatch) -> EngineManager:
+def _manager(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> EngineManager:
     monkeypatch.setattr(engine_module, "_scan_tracked_secrets", lambda root: None)
     manager = EngineManager()
     manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+    # A start clears the operator Stop record: keep it out of the checkout's data/runtime.
+    stop_marker = tmp_path / "runtime" / engine_module.OPERATOR_STOP_MARKER_FILENAME
+    monkeypatch.setattr(manager, "_operator_stop_marker", lambda: stop_marker)
     return manager
 
 
@@ -139,9 +142,9 @@ def test_high_water_at_or_below_active_peak_is_left_alone() -> None:
     [("starting", "error"), ("stopping", "stopped")],
 )
 def test_refused_auto_retry_settles_left_state(
-    monkeypatch: pytest.MonkeyPatch, left_state: str, expected_state: str
+    monkeypatch: pytest.MonkeyPatch, left_state: str, expected_state: str, tmp_path: Path
 ) -> None:
-    manager = _manager(monkeypatch)
+    manager = _manager(monkeypatch, tmp_path)
     manager.engine_state = left_state
 
     def refused(*, auto_start: bool = False) -> None:
@@ -178,8 +181,8 @@ class _StopDuringWarmupRuntime:
         return SimpleNamespace(state="stopped")
 
 
-def test_generic_start_failure_during_stop_ends_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_generic_start_failure_during_stop_ends_stopped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     monkeypatch.setattr(
         runtime_module,
         "EngineRuntime",
@@ -200,8 +203,10 @@ def test_generic_start_failure_during_stop_ends_stopped(monkeypatch: pytest.Monk
 # ---------------------------------------------------------------------------
 
 
-def test_operator_stop_during_settings_window_refuses_the_restart(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_operator_stop_during_settings_window_refuses_the_restart(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     monkeypatch.setattr(engine_module, "trading_host_authorized", lambda: True)
     monkeypatch.setattr(manager, "_operator_halt_refusal", lambda: None)
     monkeypatch.setattr(manager, "_write_operator_stop_marker", lambda: None)
@@ -216,8 +221,10 @@ def test_operator_stop_during_settings_window_refuses_the_restart(monkeypatch: p
     assert manager.runtime is None
 
 
-def test_operator_stop_during_settings_window_never_refuses_a_manual_start(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_operator_stop_during_settings_window_never_refuses_a_manual_start(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     monkeypatch.setattr(engine_module, "trading_host_authorized", lambda: True)
     monkeypatch.setattr(manager, "_operator_halt_refusal", lambda: None)
     monkeypatch.setattr(manager, "_write_operator_stop_marker", lambda: None)
@@ -233,8 +240,8 @@ def test_operator_stop_during_settings_window_never_refuses_a_manual_start(monke
     assert manager._settings_stop_requested is False
 
 
-def test_settings_restart_stop_does_not_block_its_own_start(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_settings_restart_stop_does_not_block_its_own_start(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     manager.begin_settings_write()
     manager.stop_engine()  # the settings save's own stop, not an operator request
     manager.end_settings_write()
@@ -247,15 +254,17 @@ def test_settings_restart_stop_does_not_block_its_own_start(monkeypatch: pytest.
 
 
 @pytest.mark.parametrize("held_state", ["stopping", "stop_failed"])
-def test_status_probe_keeps_manager_stop_states(monkeypatch: pytest.MonkeyPatch, held_state: str) -> None:
-    manager = _manager(monkeypatch)
+def test_status_probe_keeps_manager_stop_states(
+    monkeypatch: pytest.MonkeyPatch, held_state: str, tmp_path: Path
+) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     manager.runtime = SimpleNamespace(health=lambda: SimpleNamespace(state="running"))
     manager.engine_state = held_state
     assert manager.current_engine_state() == held_state
 
 
-def test_status_probe_still_reports_runtime_health(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_status_probe_still_reports_runtime_health(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     manager.runtime = SimpleNamespace(health=lambda: SimpleNamespace(state="running"))
     manager.engine_state = "starting"
     assert manager.current_engine_state() == "running"
@@ -266,8 +275,8 @@ def test_status_probe_still_reports_runtime_health(monkeypatch: pytest.MonkeyPat
 # ---------------------------------------------------------------------------
 
 
-def test_refresh_does_not_publish_a_dropped_brokers_account(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_refresh_does_not_publish_a_dropped_brokers_account(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     monkeypatch.setattr(manager, "_read_paper_mode", lambda: True)
 
     class _OldBroker:
@@ -294,8 +303,8 @@ def test_refresh_does_not_publish_a_dropped_brokers_account(monkeypatch: pytest.
     assert snapshot["source"] == "unavailable"
 
 
-def test_refresh_publishes_when_the_broker_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_refresh_publishes_when_the_broker_is_unchanged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     monkeypatch.setattr(manager, "_read_paper_mode", lambda: True)
 
     class _Broker:
@@ -325,8 +334,8 @@ def test_refresh_publishes_when_the_broker_is_unchanged(monkeypatch: pytest.Monk
 # ---------------------------------------------------------------------------
 
 
-def test_invalidate_live_arming_waits_for_the_state_lock(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch)
+def test_invalidate_live_arming_waits_for_the_state_lock(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, tmp_path)
     done = threading.Event()
 
     def invalidate() -> None:

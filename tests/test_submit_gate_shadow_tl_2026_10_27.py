@@ -203,6 +203,26 @@ def test_failing_clock_does_not_affect_a_day_batch(tmp_path, monkeypatch) -> Non
     assert not any("clock" in message.lower() for message in warnings)
 
 
+def test_failing_clock_on_a_non_day_batch_warns_and_submits(tmp_path, monkeypatch) -> None:
+    """The only branch where a failed clock read matters: a non-DAY batch is
+    submitted, and the failure is logged so the operator can see the gate was off."""
+    warnings: list[str] = []
+    monkeypatch.setattr(runtime_service.log, "warning", lambda message, *args, **kwargs: warnings.append(message))
+    monkeypatch.setattr(runtime_service, "RUNTIME_ORDER_TIME_IN_FORCE", "gtc")
+    broker = _ClockBroker(RuntimeError("clock endpoint down"))
+    runtime, repository, decision_id = _runtime_with_decision(tmp_path, broker)
+    sent_before = len(broker.submitted)
+    order = _order(decision_id, "AAPL", PortfolioOrderSide.BUY, 10.0, client_order_id="gtc-aapl")
+
+    submitted = runtime._submit_orders((order,))
+
+    assert len(submitted) == 1
+    assert broker.clock_calls >= 1  # the gate was consulted (the batch is non-DAY)
+    assert [sent.client_order_id for sent in broker.submitted[sent_before:]] == ["gtc-aapl"]
+    assert _status_of(repository, decision_id, "gtc-aapl") == "submitted"
+    assert any("clock unavailable" in message for message in warnings)
+
+
 def test_broker_without_clock_keeps_todays_behaviour(tmp_path) -> None:
     broker = _SimBroker()
     assert not hasattr(broker, "clock")

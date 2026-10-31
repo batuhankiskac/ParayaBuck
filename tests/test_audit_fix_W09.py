@@ -77,6 +77,9 @@ def _manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, factory: Any = Non
     monkeypatch.setattr(manager, "get_credentials", lambda: (_KEY, _SECRET))
     monkeypatch.setattr(manager, "get_paper_credentials", lambda: (_KEY, _SECRET))
     monkeypatch.setattr(manager, "_operator_halt_refusal", lambda: None)
+    # A start clears the operator Stop record: keep it out of the checkout's data/runtime.
+    stop_marker = tmp_path / "runtime" / engine_module.OPERATOR_STOP_MARKER_FILENAME
+    monkeypatch.setattr(manager, "_operator_stop_marker", lambda: stop_marker)
     return manager
 
 
@@ -638,14 +641,16 @@ def test_shutdown_wait_for_a_stuck_start_is_bounded(tmp_path: Path, monkeypatch:
     exit_elapsed: list[float] = []
 
     async def run() -> None:
-        started = time.monotonic()
+        exit_started: list[float] = []
         async with lifespan(None):
             for _ in range(500):
                 if made and made[0].entered.is_set():
                     break
                 await asyncio.sleep(0.01)
             threading.Timer(1.5, made[0].release.set).start()
-        exit_elapsed.append(time.monotonic() - started)
+            # Only the shutdown is timed: the wait for the start to enter is not part of it.
+            exit_started.append(time.monotonic())
+        exit_elapsed.append(time.monotonic() - exit_started[0])
 
     asyncio.run(asyncio.wait_for(run(), 10))
 

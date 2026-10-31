@@ -7,7 +7,6 @@ no socket is opened, no credential is real and nothing is sent.
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -268,18 +267,27 @@ def test_smtp_failure_is_journaled_scrubbed_and_never_raised(monkeypatch: pytest
 
 
 def test_notify_never_blocks_on_a_hung_mail_server() -> None:
+    """notify() returns while the worker is stuck in the SMTP handshake.
+
+    The worker stays blocked until the notify loop has finished, so a notify that
+    waited on the worker could never complete; the check is that the loop
+    completes, not that it beats a wall-clock budget that load can exceed.
+    """
     release = threading.Event()
 
     class _HangingSMTP(_FakeSMTP):
         def ehlo(self) -> None:
-            release.wait(5)
+            release.wait(60)
 
     sink = EmailAlertSink(_settings(), env=_ENV, smtp_factory=_HangingSMTP, start_worker=True)
     try:
-        started = time.monotonic()
-        for index in range(100):
-            sink.notify("order_rejected", "m", {}, f"order_rejected:{index}")
-        assert time.monotonic() - started < 1.0
+        notifier = threading.Thread(
+            target=lambda: [sink.notify("order_rejected", "m", {}, f"order_rejected:{index}") for index in range(100)],
+            daemon=True,
+        )
+        notifier.start()
+        notifier.join(timeout=30)
+        assert not notifier.is_alive(), "notify() blocked on the hung mail server"
     finally:
         release.set()
         sink.close()

@@ -359,6 +359,24 @@ def _sell_leg_owed_quantity(rows: Sequence[dict[str, object]], root: str, tail: 
     return float(str(base["quantity"])) - filled
 
 
+def _sell_row_precedes(earlier: str, later: str) -> bool:
+    """Whether SELL id ``earlier`` is an earlier attempt at ``later``'s own exit.
+
+    A residual, a retry of the same leg, or the planned id a re-plan
+    ``-replan{n}`` came from. Such a row never carries the exit a second time,
+    so it must not block a retry of ``later`` (P3-4-2).
+    """
+    if earlier == later:
+        return False
+    if later.startswith(f"{earlier}{REPLAN_ORDER_SUFFIX}"):
+        return True
+    earlier_root = _sell_leg_root(earlier)
+    later_root = _sell_leg_root(later)
+    if earlier_root != later_root:
+        return False
+    return _sell_chain_position(earlier, earlier_root) < _sell_chain_position(later, later_root)
+
+
 def emit_exit_sell_rejected_safe(
     *,
     client_order_id: str,
@@ -809,7 +827,13 @@ class PortfolioRuntime:
         # earlier configuration already decided: the newest decision of any
         # digest counts for its session.
         latest = self.repository.latest_decision_target(self.account_id, self.market)
-        if latest is not None and self._session_key(latest[0]) == self._session_key(timestamp):
+        if (
+            latest is not None
+            and self._session_key(latest[0]) == self._session_key(timestamp)
+            and not self._decision_closed_by_digest_change(
+                self.repository.latest_decision_id(self.account_id, self.market)
+            )
+        ):
             return True
         if not self._daily_equity_signal():
             return False
@@ -1996,7 +2020,11 @@ class PortfolioRuntime:
             # Pure risk-reducing decision: nothing depends on a sell outcome,
             # so the whole order set can be submitted immediately. Persist
             # decision + orders atomically so a crash cannot leave a
-            # half-decision (decision without orders).
+            # half-decision (decision without orders). The SELLs carry a
+            # ``sell_pending`` rebalance row (no BUY side), so a SELL that is
+            # gate-held, partly filled, canceled or expired is settled by the
+            # same advance path as any sell phase: residual re-send, retry and
+            # the operator alert.
             decision_id = self.repository.record_decision_with_orders(
                 self.session_id,
                 self.account_id,
@@ -2006,11 +2034,21 @@ class PortfolioRuntime:
                 self.market,
                 orders,
                 initial_status="submitting",
+                rebalance_phase=REBALANCE_PHASE_SELL_PENDING if sells else None,
                 drawdown_liquidation_state=self._drawdown_liquidation_write(risk),
             )
             self._decision_recorded = True
             # Orders are already persisted as submitting; submit them idempotently.
             submitted = self._submit_orders(orders, submit_gate=submit_gate)
+            if sells:
+                _emit_rebalance_phase_safe(
+                    decision_id,
+                    None,
+                    REBALANCE_PHASE_SELL_PENDING,
+                    market=self._market_name(),
+                    account_id=self.account_id,
+                    session_id=self.session_id,
+                )
             _emit_decision_summary_safe(
                 decision_id=decision_id,
                 market=self._market_name(),
@@ -2663,6 +2701,78 @@ class PortfolioRuntime:
         self._alert_stuck_legs(current.decision_id, stuck)
         return PortfolioRuntimeResult(current.decision_id, None, None, (), (), "rebalance_complete")
 
+    def _close_on_stuck_legs(self, decision_id: str, from_phase: str, stuck: Sequence[str]) -> PortfolioRuntimeResult:
+        """Close a rebalance whose legs are aged out, discarding its deferred BUYs (P2-7-4)."""
+        log.critical(
+            "Rebalance closed with legs still open past their age limit; deferred BUYs discarded: "
+            "market=%s decision=%s legs=%s",
+            self._market_name(),
+            decision_id,
+            ",".join(stuck),
+        )
+        self.repository.update_rebalance_execution(
+            decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED
+        )
+        _emit_rebalance_phase_safe(
+            decision_id,
+            from_phase,
+            REBALANCE_PHASE_COMPLETE,
+            market=self._market_name(),
+            account_id=self.account_id,
+            session_id=self.session_id,
+            reason=REBALANCE_STATUS_STUCK_LEGS_UNRESOLVED,
+        )
+        self._alert_stuck_legs(decision_id, stuck)
+        return PortfolioRuntimeResult(decision_id, None, None, (), (), "rebalance_complete")
+
+    def _close_blocked_by_stuck_legs(self, decision_id: str, orders: Sequence[Mapping[str, object]]) -> bool:
+        """Close a BLOCKED rebalance whose only open legs are aged out (P3-2-3).
+
+        A held, stopped or similar leg left open past ``STUCK_LEG_MAX_AGE`` would
+        otherwise keep the block forever, and an operator reset cannot clear it.
+        Ambiguous and ``submitting`` rows keep the block: reconciliation resolves them.
+        Returns True when the rebalance was closed.
+        """
+        working = [item for item in orders if not is_terminal_order_status(str(item["status"]))]
+        if any(
+            str(item["status"]) in _AMBIGUOUS_ORDER_STATUSES or str(item["status"]) == "submitting" for item in working
+        ):
+            return False
+        stuck = self._stuck_leg_ids(working)
+        if not stuck:
+            return False
+        self._close_on_stuck_legs(decision_id, REBALANCE_PHASE_BLOCKED, stuck)
+        return True
+
+    def _replan_family_rows(self, decision_id: str, planned_ids: Sequence[str]) -> tuple[dict[str, object], ...]:
+        """Non-terminal ``-replan{n}`` rows of the given planned ids."""
+        prefixes = tuple(f"{planned_id}{REPLAN_ORDER_SUFFIX}" for planned_id in planned_ids)
+        return tuple(
+            row
+            for row in self.repository.orders_for_decision(decision_id)
+            if str(row["client_order_id"]).startswith(prefixes) and not is_terminal_order_status(str(row["status"]))
+        )
+
+    def _decision_closed_by_digest_change(self, decision_id: str | None) -> bool:
+        """Whether a decision of another configuration digest was closed without a BUY sent (R3-2-1).
+
+        Such a rebalance was closed because its digest was superseded, not
+        because its session was decided, so the new digest may decide the session.
+        """
+        if decision_id is None:
+            return False
+        if self.repository.decision_configuration_digest(decision_id) == self.configuration_digest:
+            return False
+        current = self.repository.current_rebalance_execution(self.account_id, self.market)
+        if (
+            current is None
+            or current.decision_id != decision_id
+            or current.phase != REBALANCE_PHASE_COMPLETE
+            or current.status != REBALANCE_STATUS_CLOSED_UNRESOLVED
+        ):
+            return False
+        return not self.repository.orders_for_decision(decision_id, side=PortfolioOrderSide.BUY.value)
+
     def _close_superseded_rebalance(self, decision_id: str) -> None:
         """Discard the BUY side of a rebalance a newer session has superseded.
 
@@ -2745,7 +2855,7 @@ class PortfolioRuntime:
         # every restart re-halted.
         orders = self.repository.orders_for_decision(decision_id)
         if not all(is_terminal_order_status(str(item["status"])) for item in orders):
-            return False
+            return self._close_blocked_by_stuck_legs(decision_id, orders)
         self.repository.update_rebalance_execution(
             decision_id, REBALANCE_PHASE_COMPLETE, status=REBALANCE_STATUS_CLOSED_UNRESOLVED
         )
@@ -3176,17 +3286,38 @@ class PortfolioRuntime:
         in_flight_replans = self._replan_ids_in_flight(decision_id, planned)
         if in_flight_replans:
             # An earlier re-plan of the same order may already be at the broker
-            # (submitting or ambiguous): a fresh id now would send it twice. The
-            # whole plan waits, nothing is sent or closed, and a later advance
-            # re-plans once the earlier row has resolved.
+            # (submitting or ambiguous): a fresh id now would send it twice. Only
+            # that order waits; nothing is sent for it and a later advance
+            # re-plans once the earlier row has resolved. A leg left open past its
+            # age limit closes the rebalance instead, as the other stuck legs do.
+            in_flight_rows = self._replan_family_rows(decision_id, in_flight_replans)
+            stuck = self._stuck_leg_ids(in_flight_rows)
+            if stuck:
+                return self._close_on_stuck_legs(decision_id, REBALANCE_PHASE_BUY_READY, stuck)
+            in_flight_set = set(in_flight_replans)
             log.warning(
                 "Re-plan held: an earlier re-plan of the same order is unresolved: market=%s decision=%s ids=%s",
                 self._market_name(),
                 decision_id,
                 ",".join(in_flight_replans),
             )
-            self._alert_buy_side_held(decision_id, "replan_order_in_flight")
-            return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "replan_order_in_flight")
+            # Sells before buys: an in-flight SELL holds every BUY, while other SELLs still go out.
+            in_flight_sell = any(
+                order.side == PortfolioOrderSide.SELL and order.client_order_id in in_flight_set for order in planned
+            )
+            if in_flight_sell:
+                planned = tuple(
+                    order
+                    for order in planned
+                    if order.side == PortfolioOrderSide.SELL and order.client_order_id not in in_flight_set
+                )
+                self._alert_buy_side_held(decision_id, "replan_order_in_flight")
+            else:
+                planned = tuple(order for order in planned if order.client_order_id not in in_flight_set)
+            if not planned:
+                if not in_flight_sell:
+                    self._alert_buy_side_held(decision_id, "replan_order_in_flight")
+                return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "replan_order_in_flight")
         planned = self._replan_orders_with_fresh_ids(decision_id, planned)
         kept_sell_legs = {order.symbol for order in planned if order.side == PortfolioOrderSide.SELL}
         dropped_sell_legs: list[str] = []
@@ -3294,6 +3425,16 @@ class PortfolioRuntime:
             self._alert_buy_side_held(decision_id, "stale_decision_buy_held")
             return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "stale_decision_buy_held")
         submitted: tuple[str, ...] = ()
+        held_before_post: list[str] = []
+
+        def _reread_gate(candidate: PortfolioOrderRequest) -> str | None:
+            # The gate is read again right before this BUY's POST: the read above
+            # comes before the row is pre-recorded, and local I/O runs in between.
+            reason = submit_gate(candidate) if submit_gate is not None else None
+            if reason is not None:
+                held_before_post.append(candidate.client_order_id)
+            return reason
+
         for order in buy_orders:
             if submit_gate is not None:
                 reason = submit_gate(order)
@@ -3311,12 +3452,31 @@ class PortfolioRuntime:
                         # snapshot that may not show its fill would send it again,
                         # so the phase moves on: the held BUYs are not sent for
                         # this decision and the sent ones are tracked to terminal.
+                        self._alert_buy_side_held(decision_id, "submit_blocked")
                         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
                     self._alert_buy_side_held(decision_id, "submit_blocked")
                     return PortfolioRuntimeResult(decision_id, risk.target, risk, (), submitted, "submit_blocked")
             self.repository.record_order(order, "submitting")
             self._record_buy_admission_observation(decision_id, admission, buy_orders, linked=(order,))
-            submitted += self._submit_orders((order,), rules)
+            submitted += self._submit_orders(
+                (order,), rules, submit_gate=_reread_gate if submit_gate is not None else None
+            )
+            if held_before_post:
+                # The re-read gate held this BUY after its row was pre-recorded. No POST
+                # was made, so the row is resolved as not sent instead of left submitting.
+                # A later advance re-plans the BUY side, unless BUYs of this batch already went out.
+                self.repository.update_order(order.client_order_id, "canceled")
+                log.warning(
+                    "Deferred BUY held by the submit gate before its POST; row canceled as not sent: "
+                    "market=%s decision=%s client_order_id=%s",
+                    self._market_name(),
+                    decision_id,
+                    order.client_order_id,
+                )
+                self._alert_buy_side_held(decision_id, "submit_blocked")
+                if submitted:
+                    return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
+                return PortfolioRuntimeResult(decision_id, risk.target, risk, (), (), "submit_blocked")
         return self._enter_buy_pending(decision_id, risk, buy_orders, submitted)
 
     def _snapshot_ahead_of_owned(
@@ -4003,7 +4163,9 @@ class PortfolioRuntime:
             if submit_gate is not None:
                 reason = submit_gate(order)
                 if reason is not None:
-                    # Held before the row is written: nothing is booked as sent and the order stays pending.
+                    # Held before this call writes a row: nothing is booked as sent. A row the caller
+                    # already pre-recorded as ``submitting`` stays so; the next advance resolves it by
+                    # broker lookup (a canceled SELL is re-sent by the residual path).
                     log.warning(
                         "Submit held by the submit gate; order left pending: market=%s client_order_id=%s reason=%s",
                         self._market_name(),
@@ -4151,6 +4313,7 @@ class PortfolioRuntime:
                 continue
             if any(
                 str(other["symbol"]) == str(row["symbol"])
+                and not _sell_row_precedes(str(other["client_order_id"]), str(row["client_order_id"]))
                 and str(other["client_order_id"]) != str(row["client_order_id"])
                 for other in sell_rows
             ):

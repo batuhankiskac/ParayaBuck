@@ -687,13 +687,20 @@ def test_pending_buy_reserves_position_slot_across_new_decision_cycle(tmp_path) 
 
 
 def test_sells_only_decision_submits_immediately(tmp_path) -> None:
-    """A pure risk-reducing decision (no BUY leg) is not deferred either."""
+    """A pure risk-reducing decision (no BUY leg) is not deferred either.
+
+    Its SELLs are still tracked by a ``sell_pending`` rebalance row (no BUY side),
+    so a gate-held or unfilled exit is settled by the residual path (P3-5-2).
+    """
     broker = _SimBroker((_position("AAPL", 400),))
     runtime, repository = _runtime(tmp_path, broker, {"AAPL": 0.10})
     result = runtime.process_closed_bars(_bars(("AAPL",)))
     assert result.status == "submitted"
     assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
-    assert repository.current_rebalance_execution("acct", Market.EQUITY) is None
+    current = repository.current_rebalance_execution("acct", Market.EQUITY)
+    assert current is not None
+    assert current.phase == "sell_pending"
+    assert repository.rebalance_buy_orders(current.decision_id) == ()
 
 
 def test_pending_sell_reserves_position_slot_across_new_decision_cycle(tmp_path) -> None:

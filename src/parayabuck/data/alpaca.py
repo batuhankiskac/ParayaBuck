@@ -82,6 +82,9 @@ _SIP_REPROBE_INTERVAL = timedelta(hours=6)
 _PROVIDER_COOLDOWN_BASE = timedelta(seconds=30)
 _PROVIDER_COOLDOWN_CAP = timedelta(minutes=5)
 _PROVIDER_COOLDOWN_MAX_EXPONENT = 4
+# Warmup-cache retention for ``AlpacaHistoricalData.prune_cache``. Every warmup
+# window reads a few hundred sessions at most, so two years keeps all of them.
+_WARMUP_CACHE_RETENTION = timedelta(days=730)
 # Relative tolerance for "the same close": the cache and the provider agree
 # to float noise unless the provider rebased the session (split or dividend).
 _BASIS_CLOSE_REL_TOL = 1e-6
@@ -215,6 +218,10 @@ class AlpacaHistoricalData:
         bars_effective = "iex" if self._sip_fallback_active else self._configured_stock_feed
         fallback_since = getattr(self, "_sip_fallback_since", None)
         cooldown_until = getattr(self, "_provider_cooldown_until", None)
+        # Only a cool-down still in force is reported: a lapsed one is no
+        # longer a provider state, and the field must not keep showing it.
+        if cooldown_until is not None and datetime.now(UTC) >= cooldown_until:
+            cooldown_until = None
         return {
             "configured": self._configured_stock_feed,
             "effective": bars_effective,
@@ -239,6 +246,14 @@ class AlpacaHistoricalData:
                 else "SIP consolidates the national market system tape."
             ),
         }
+
+    def prune_cache(self, now: datetime) -> int:
+        """Drop warmup-cache bars older than the retention window; returns the count.
+
+        Called by the live warmup only. Retention is measured from ``now``, so a
+        historical (backtest) window must never be pruned through this path.
+        """
+        return int(self._cache.prune_before(now - _WARMUP_CACHE_RETENTION))
 
     def close(self) -> None:
         """Release HTTP session pools and the local cache connection."""
@@ -311,8 +326,14 @@ class AlpacaHistoricalData:
         if getattr(self, "_sip_fallback_active", False):
             outcome.degraded = True
 
-    def _note_provider_failure(self, now: datetime) -> None:
-        """Count one failed provider request and open its cool-down."""
+    def _note_provider_failure(self, now: datetime | None = None) -> None:
+        """Count one failed provider request and open its cool-down.
+
+        The clock is read when the failure is recorded, not when the request
+        started: a request that timed out has already spent its timeout, and
+        a cool-down counted from the start would be expired on arrival.
+        """
+        now = datetime.now(UTC) if now is None else now
         streak = int(getattr(self, "_provider_failure_streak", 0) or 0) + 1
         self._provider_failure_streak = streak
         exponent = min(streak - 1, _PROVIDER_COOLDOWN_MAX_EXPONENT)
@@ -362,16 +383,33 @@ class AlpacaHistoricalData:
         """
         if not symbols:
             return {}
-        response = self._stock_client.get_stock_bars(
-            StockBarsRequest(
-                symbol_or_symbols=list(symbols),
-                timeframe=_TIMEFRAMES["1d"],
-                start=start,
-                end=end,
-                feed=DataFeed(feed),
-                adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
+        # The same cool-down gate and failure accounting as get_bars_batch: an
+        # outage must not add one more provider timeout per caller, and a
+        # failure here still opens the shared cool-down for every other caller.
+        now = datetime.now(UTC)
+        cooldown_until = getattr(self, "_provider_cooldown_until", None)
+        if cooldown_until is not None and now < cooldown_until:
+            raise HistoricalProviderCooldown(
+                f"Historical API in failure cool-down until {cooldown_until.isoformat()}; no daily cross-check bar"
             )
-        )
+        try:
+            response = self._stock_client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=list(symbols),
+                    timeframe=_TIMEFRAMES["1d"],
+                    start=start,
+                    end=end,
+                    feed=DataFeed(feed),
+                    adjustment=Adjustment({"splits": "split"}.get(adjustment, adjustment)),
+                )
+            )
+        except Exception as exc:
+            if is_network_failure(exc):
+                self._note_provider_failure()
+            raise
+        # A provider answer, even an empty one, ends the outage streak.
+        self._provider_failure_streak = 0
+        self._provider_cooldown_until = None
         frame = response.df
         result: dict[str, Bar] = {}
         if frame.empty:
@@ -721,7 +759,7 @@ class AlpacaHistoricalData:
             if is_network_failure(exc):
                 # Only a transient, network-class failure is an outage. A 4xx
                 # or a bad answer is permanent and is not retried on a timer.
-                self._note_provider_failure(now)
+                self._note_provider_failure()
             served = _fallback(f"Historical API failed ({exc}); using feed-matched local warmup cache")
             if served is not None:
                 return served

@@ -490,9 +490,10 @@ def test_signal_watermark_monotonic_and_restored() -> None:
     dates = _days(20)
     provider_v1 = {"AAA": [_bar("AAA", d, 100 + i) for i, d in enumerate(dates)]}
     provider_v2 = {"AAA": [_bar("AAA", d, 100 + i) for i, d in enumerate(dates)]}
-    # Add later bar to v2
+    # Add later bar to v2. The close moves like its neighbours: a 119 -> 200
+    # one-session jump is a split-sized move the continuity check now refuses.
     later = _TS0 + timedelta(days=20)
-    provider_v2["AAA"].append(_bar("AAA", later, 200))
+    provider_v2["AAA"].append(_bar("AAA", later, 120))
     fake1 = FakeHistory(provider_by_symbol=provider_v1)
     engine._historical = fake1  # type: ignore[attr-defined]
     assert engine.verify_equity_signal_basis() is True

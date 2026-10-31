@@ -47,8 +47,12 @@ from parayabuck.markets.timeframes import NEW_YORK
 # moves. An ordinary overnight close-to-close move reads near 1, far from every
 # standard ratio, and would need a drop of about 40% or more to read as 2.0.
 SPLIT_CONTINUITY_RELATIVE_BAND = 0.15
-# Two closes are "the same basis" when they agree to this relative tolerance.
-SPLIT_CONTINUITY_PRICE_TOLERANCE = 1e-6
+# A consecutive provider jump at or beyond this ratio (old/new, either way) is
+# a split candidate even when it is not a standard ratio: a 3:2 split reads
+# 1.5, and a 2:1 split with a large split-day move reads 1.4 to 1.8. It sits
+# above the one-session drops a 2x index ETF takes on a bad day (about 25%),
+# so an ordinary crash day is not mistaken for a split.
+SPLIT_CONTINUITY_JUMP_RATIO = 1.4
 
 
 def signal_session_date(timestamp: datetime) -> date:
@@ -114,48 +118,62 @@ def adequate_coverage(
     return True
 
 
+def _rebased_by_known_ratio(provider_close: float, stored_close: float) -> bool:
+    """Whether a stored/provider close pair differs by a standard split ratio.
+
+    Only the ratio decides: a stream-built close that differs from the
+    provider by aggregation noise is not evidence of a rebase.
+    """
+    if not (math.isfinite(provider_close) and provider_close > 0 and math.isfinite(stored_close) and stored_close > 0):
+        return False
+    ratio = provider_close / stored_close
+    return any(abs(ratio - candidate) <= SPLIT_CONTINUITY_RELATIVE_BAND * candidate for candidate in KNOWN_SPLIT_RATIOS)
+
+
 def split_continuity_breach(provider: Sequence[Bar], stored: Sequence[Bar]) -> bool:
     """Whether a provider window looks like a split it has not rebased yet.
 
-    A split leaves the newest provider close on the post-split basis while the
-    prior sessions still carry the pre-split basis. Adopting that window pairs
+    A split leaves the post-split closes on the new basis while the prior
+    sessions still carry the pre-split basis. Adopting such a window pairs
     post-split closes with pre-split history, and a held position reads as a
-    crash (a spurious SELL). The signature is: the stored tail (the newest
-    stored session before the provider's newest) over the provider's newest
-    close sits at a standard split ratio, AND every stored prior session the
-    provider also lists still matches the provider's close (the provider has
-    not rebased the priors). A rebased window (priors changed) is consistent
-    and returns False, as does an empty or unrelated stored history.
+    crash (a spurious SELL). Every consecutive pair of provider closes is
+    scanned, not only the newest one: a stored post-split tail (a stream bar
+    for the split day) moves the split out of the newest position while the
+    jump stays inside the window.
+
+    A window whose stored sessions sit at a standard split ratio from the
+    provider close has been rebased (a consistent basis) and returns False.
+    Otherwise a consecutive provider jump at or beyond
+    ``SPLIT_CONTINUITY_JUMP_RATIO`` in either direction is a breach. This is
+    deliberately fail-closed: a non-standard ratio halts for an operator
+    rather than being guessed at. An empty window, an empty stored history, or
+    no stored session shared with the provider returns False.
     """
     if not provider or not stored:
         return False
-    newest = max(provider, key=lambda bar: bar.timestamp)
-    newest_session = signal_session_date(newest.timestamp)
     provider_close: dict[date, float] = {}
-    for bar in provider:
-        session = signal_session_date(bar.timestamp)
-        if session < newest_session:
-            provider_close[session] = bar.close
-    stored_prior: dict[date, Bar] = {}
+    for bar in sorted(provider, key=lambda item: item.timestamp):
+        provider_close[signal_session_date(bar.timestamp)] = bar.close
+    stored_close: dict[date, float] = {}
     for bar in sorted(stored, key=lambda item: item.timestamp):
-        session = signal_session_date(bar.timestamp)
-        if session < newest_session:
-            stored_prior[session] = bar
-    if not stored_prior:
+        stored_close[signal_session_date(bar.timestamp)] = bar.close
+    overlap = sorted(session for session in provider_close if session in stored_close)
+    if not overlap:
         return False
-    tail_session = max(stored_prior)
-    if tail_session not in provider_close:
-        return False
-    for session, stored_bar in stored_prior.items():
-        if session in provider_close and not math.isclose(
-            stored_bar.close, provider_close[session], rel_tol=SPLIT_CONTINUITY_PRICE_TOLERANCE
-        ):
-            return False  # the provider rebased a prior session: a consistent basis
-    tail_close = stored_prior[tail_session].close
-    if not (math.isfinite(tail_close) and tail_close > 0 and math.isfinite(newest.close) and newest.close > 0):
-        return False
-    ratio = tail_close / newest.close
-    return any(abs(ratio - candidate) <= SPLIT_CONTINUITY_RELATIVE_BAND * candidate for candidate in KNOWN_SPLIT_RATIOS)
+    for session in overlap:
+        if _rebased_by_known_ratio(provider_close[session], stored_close[session]):
+            return False  # the provider rebased its priors: a consistent basis
+    ordered = sorted(provider_close.items())
+    for (earlier, earlier_close), (_later, later_close) in zip(ordered, ordered[1:]):
+        if not (math.isfinite(earlier_close) and earlier_close > 0 and math.isfinite(later_close) and later_close > 0):
+            continue
+        ratio = earlier_close / later_close
+        jump = ratio >= SPLIT_CONTINUITY_JUMP_RATIO or ratio <= 1.0 / SPLIT_CONTINUITY_JUMP_RATIO
+        # The jump is a basis question only when the stored history shares a
+        # session on its unrebased pre-jump side.
+        if jump and any(session <= earlier for session in overlap):
+            return True
+    return False
 
 
 def merge_provider_authority(

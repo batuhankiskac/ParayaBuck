@@ -194,6 +194,25 @@ def _is_transient_network_error(exc: BaseException) -> bool:
     return is_network_failure(exc)
 
 
+# The split-basis verifier's one in-call retry. A failed provider request opens
+# the provider cool-down (X2), which is 30 s after the first failure, so the
+# retry waits for a cool-down that is at most this long rather than hitting the
+# gate and failing again.
+_SIGNAL_VERIFY_RETRY_BACKOFF_SECONDS = 0.5
+_SIGNAL_VERIFY_COOLDOWN_MAX_WAIT_SECONDS = 35.0
+
+
+def _signal_verify_retry_delay(client: object, attempt: int, now: datetime) -> float:
+    """Seconds the verifier waits before its retry after a transient failure."""
+    delay = _SIGNAL_VERIFY_RETRY_BACKOFF_SECONDS * (attempt + 1)
+    cooldown_until = getattr(client, "_provider_cooldown_until", None)
+    if isinstance(cooldown_until, datetime):
+        remaining = (cooldown_until - now).total_seconds()
+        if 0 < remaining <= _SIGNAL_VERIFY_COOLDOWN_MAX_WAIT_SECONDS:
+            delay = max(delay, remaining + 0.05)
+    return delay
+
+
 # No bare "locked": it substring-matches "blocked" (the broker's
 # account-blocked error). Every SQLite lock message contains "database".
 _DATABASE_ERROR_TOKENS = ("database", "integrity", "sqlite")
@@ -1502,6 +1521,42 @@ class EngineRuntime:
             }
         )
         return payload
+
+    def _check_provider_cooldown(self) -> None:
+        """Alert once when the historical provider enters its failure cool-down,
+        and once when it clears.
+
+        Without this the cool-down was visible only as raw status fields: a
+        provider outage that held or starved decisions raised no alert of its
+        own. A decision held by an unverified basis already alerts through the
+        verifier; this is the provider-side half of that signal.
+        """
+        status = self.market_data_status()
+        if not status.get("available"):
+            return
+        active = status.get("provider_cooldown_until") is not None
+        previous = getattr(self, "_provider_cooldown_active", None)
+        self._provider_cooldown_active = active
+        if previous == active or (previous is None and not active):
+            return
+        if active:
+            alerts.emit(
+                "data_provider_unavailable",
+                message=(
+                    "Historical data provider failed; requests are paused for a cool-down and "
+                    "decisions use the local cache or wait."
+                ),
+                state="cooldown",
+                provider_cooldown_until=status.get("provider_cooldown_until"),
+                provider_failure_streak=status.get("provider_failure_streak"),
+            )
+        else:
+            alerts.emit(
+                "data_provider_unavailable",
+                message="Historical data provider cool-down cleared; provider requests resumed.",
+                state="recovered",
+                provider_failure_streak=status.get("provider_failure_streak"),
+            )
 
     def _check_market_data_feed(self) -> None:
         """Alert once when the effective historical feed stops being the
@@ -5417,8 +5472,9 @@ class EngineRuntime:
                 if not _is_transient_network_error(exc) or attempt == 1:
                     self._record_signal_adjustment_failure(f"provider fetch failed: {exc}")
                     return False
-                # Transient: bounded retry with short backoff.
-                time.sleep(0.5 * (attempt + 1))
+                # Transient: one bounded retry, after the provider cool-down
+                # the failure just opened has ended (or a short backoff).
+                time.sleep(_signal_verify_retry_delay(history_client, attempt, datetime.now(UTC)))
                 continue
         # A provider outage is answered from the local warmup cache, and that
         # cache is the very history this call is supposed to verify against.
@@ -5770,6 +5826,7 @@ class EngineRuntime:
                 except Exception:
                     log.warning("Deferred equity BUY resume after basis verification failed", exc_info=True)
             self._check_market_data_feed()
+            self._check_provider_cooldown()
         except Exception as exc:  # defensive: never kill the monitor
             worker.last_error = str(exc)
             log.warning("Signal adjustment monitor pass failed: %s", exc)
@@ -6915,6 +6972,10 @@ class EngineRuntime:
             sip_embargo_minutes=self.app_config.signal_cross_check.sip_embargo_minutes,
         )
         self._historical = history
+        try:
+            history.prune_cache(datetime.now(UTC))
+        except Exception as exc:  # retention is hygiene: it never blocks warmup
+            log.warning("Warmup cache retention prune failed: %s", exc)
         log.info("Warmup starting for %d symbols", len(self.symbols))
         self._warmup_symbols(history, self.symbols, retry=False)
         self._refresh_readiness()

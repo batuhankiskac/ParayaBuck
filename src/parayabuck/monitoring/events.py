@@ -15,6 +15,9 @@ from __future__ import annotations
 
 ALERT_KINDS_ORDERED: tuple[str, ...] = (
     "runtime_started",
+    # The previous engine process ended without a clean stop (SIGKILL, OOM, a
+    # watchdog kill) and this start is the automatic restart that followed.
+    "runtime_unclean_restart",
     # A LIVE engine runtime started (manual start or standing-authorization
     # auto-start). Mailed: an unattended LIVE start must never be silent.
     "live_started",
@@ -58,6 +61,9 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # lease, transient broker fetch) was active at decision time. Emitted
     # once per deferred session, never per retry attempt.
     "decision_deferred",
+    # The retry window of a session-close decision ended with the session NOT
+    # decided: the session is lost, so this is mailed as critical.
+    "decision_window_expired",
     # Market data: the effective historical feed stopped being the configured
     # one (SIP entitlement downgrade to IEX) and later recovered.
     "market_data_degraded",
@@ -100,6 +106,8 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "intent_alarm",
         "signal_source_mismatch",
         "decision_deferred",
+        "decision_window_expired",
+        "runtime_unclean_restart",
         "market_data_degraded",
         "session_close_bar_incomplete",
         "exit_sell_rejected",
@@ -148,6 +156,14 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
         "risk_epoch_reset",
         "live_started",
         "signal_adjustment_failure",
+        # The recoveries that close the mailed failures above, so the owner learns
+        # the condition cleared (the latch clear of a reconcile is one of them).
+        "reconciliation_recovered",
+        "signal_adjustment_recovery",
+        # The engine restarted after an unclean exit (no clean stop was recorded).
+        "runtime_unclean_restart",
+        # A session-close decision whose retry window ended with the session not decided.
+        "decision_window_expired",
         # Market data fell back to a lower feed (and recovered), a provider
         # outage that did not halt the engine, and a backup that could not be
         # written, verified or copied off-host (the timer's unattended failure).
@@ -173,6 +189,7 @@ CRITICAL_EMAIL_KINDS: frozenset[str] = frozenset(
         "ambiguous_order",
         "exit_sell_rejected",
         "live_authorization_expired",
+        "decision_window_expired",
     }
 )
 

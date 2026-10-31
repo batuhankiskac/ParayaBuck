@@ -674,6 +674,17 @@ class ExecutionLedger:
             self.connection.commit()
         return session_id
 
+    def unended_runtime_sessions(self) -> list[dict[str, str]]:
+        """Engine starts that never recorded an end: the previous process exited uncleanly.
+
+        Read before this start records its own row. Oldest first.
+        """
+        with self._lock:
+            rows = self.connection.execute(
+                "SELECT session_id, mode, started_at FROM runtime_sessions WHERE ended_at IS NULL ORDER BY started_at"
+            ).fetchall()
+        return [{"session_id": str(r[0]), "mode": str(r[1]), "started_at": str(r[2])} for r in rows]
+
     def end_runtime_session(self, session_id: str, state: str = "stopped") -> None:
         """Mark a recorded engine session ended (idempotent)."""
         with self._lock:

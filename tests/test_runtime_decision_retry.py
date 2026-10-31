@@ -217,7 +217,7 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
     monkeypatch: pytest.MonkeyPatch, _capture_alerts: list[tuple[str, dict[str, object]]]
 ) -> None:
     """The bound sits inside the intent watchdog grace, so an unrecoverable
-    gate yields a decision_deferred expiry, not a silent loss."""
+    gate yields a decision_window_expired alert, not a silent loss."""
     engine = _engine((_portfolio_runtime(),))
     engine._circuit_breaker_reason = "reconciliation_failed"
     clock = _Clock(SESSION_CLOSE + timedelta(minutes=41))
@@ -228,7 +228,7 @@ def test_retry_stops_at_the_bounded_deadline_and_alerts_once(
     assert engine._process_portfolio_timestamp(_bars()) is True
 
     assert engine._deferred_portfolio_batches == {}
-    assert [kind for kind, _ in _capture_alerts] == ["decision_deferred"]
+    assert [kind for kind, _ in _capture_alerts] == ["decision_window_expired"]
     # The NYSE calendar hands back the close in UTC; the deadline is the
     # close + the retry window, compared as instants.
     assert _capture_alerts[0][1]["retry_window_ended"] == (SESSION_CLOSE + timedelta(minutes=40)).isoformat()

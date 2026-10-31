@@ -666,6 +666,10 @@ def _no_order_reason(
     return "REBALANCE_BAND" if largest_gap < rebalance_band else "MIN_NOTIONAL"
 
 
+# Upper bound on the once-per-decision operator alert keys kept in memory (C3-5-4).
+_OPERATOR_ALERT_KEYS_MAX = 512
+
+
 class PortfolioRuntime:
     def __init__(
         self,
@@ -2993,6 +2997,10 @@ class PortfolioRuntime:
             # Not recorded as raised: the next occurrence retries the alert.
             log.warning("Operator alert emit failed: key=%s", key, exc_info=True)
             return
+        if len(keys) >= _OPERATOR_ALERT_KEYS_MAX:
+            # Keys are per decision: the set is bounded by dropping the old ones. A
+            # decision old enough to be dropped has long since decided or expired.
+            keys.clear()
         keys.add(key)
 
     def _resolve_stuck_submission_rows(

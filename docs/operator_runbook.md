@@ -176,7 +176,7 @@ early close, so an early-close day gives up at 13:40 ET instead of retrying
 three hours past the close. One alert is emitted per deferred session, never
 one per retry; the log line is `Decision deferred for retry`.
 
-- A later `decision_deferred` with `retry_window_ended` means the window
+- A `decision_window_expired` alert (e-mailed, critical; `retry_window_ended` field) means the window
   expired and the session was **not** decided. `equity_decision_missing` at the
   session close + 45 min (16:45 ET; 13:45 ET on an early close) is the
   authoritative alarm; treat it as a real missed session.
@@ -185,7 +185,7 @@ one per retry; the log line is `Decision deferred for retry`.
   crashed decision worker, the `account_fetch_failures` halt, an operator
   halt) re-queues the session-close batch for the same retry window, so a
   reset inside the window still decides the session. Once the window has
-  expired the session is not decided and `decision_deferred` says so. Nothing
+  expired the session is not decided and `decision_window_expired` says so. Nothing
   trades while halted — **not even sells** (a halt is a state where the
   account is not trusted).
 - `engine.reconcile_failure_threshold` (default 3) consecutive *transient*
@@ -598,12 +598,12 @@ values in the second table; the taxonomy does not define them. Start with
 | `PROVIDER_UNAVAILABLE` | `ops events --kind data_provider_unavailable`, Alpaca status, `parayabuck doctor` without `--offline` | Retries are automatic. Persistent: fix connectivity or the data plan. |
 | `BROKER_ACCOUNT_STALE` | `/readyz`, account age in `ops status` | Self-clearing. Check broker reachability and the clock; no reset needed. |
 | `POSITION_DRIFT` | `ops bundle` against the Alpaca positions | Halt. Follow "Ownership drift after a split or a foreign sell", then a verified reset. |
-| `ORDER_DRIFT` | open orders at Alpaca against `ops timeline` | Reconciliation retries on its own. If halted, settle the unknown order by hand, then a verified reset. |
+| `ORDER_DRIFT` | (no emitter in this build) open orders at Alpaca against `ops timeline` | Not raised today; order drift is reported through the reconciliation alerts. If halted, settle the unknown order by hand, then a verified reset. |
 | `PENDING_ORDER_UNKNOWN` | `ops timeline --order <client_order_id>` | Wait for broker finality; the next reconcile settles it. Never resubmit. |
 | `DATABASE_ERROR` | disk space, file permissions, `parayabuck backup --verify-only` on the newest backup | Fix the disk or the permissions. Restore only as in "State, backup and restore". A critical one is logged at ERROR and e-mailed. |
 
-Six categories in the taxonomy have **no emitter in this build** and never appear in an
-alert: `SIGNAL_HISTORY_UNVERIFIED`, `STATE_RESTORE_FAILED`, `DUPLICATE_DECISION`,
+Seven categories in the taxonomy have **no emitter in this build** and never appear in an
+alert: `ORDER_DRIFT`, `SIGNAL_HISTORY_UNVERIFIED`, `STATE_RESTORE_FAILED`, `DUPLICATE_DECISION`,
 `DUPLICATE_ORDER_RISK`, `CLOCK_OR_SESSION_MISMATCH` and `RESTART_RECOVERY_FAILED`. Their
 rows in `docs/paper_incident_taxonomy.md` describe the intended behaviour. Do not wait
 for one of them in the journal: read the halt reason in `ops status` and the log instead.

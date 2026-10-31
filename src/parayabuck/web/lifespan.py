@@ -169,11 +169,11 @@ def create_lifespan(state_provider: Any) -> Any:
         if manager is not None and should_auto_start():
             log.info("Starting configured paper engine automatically")
             auto_start_task = asyncio.create_task(_auto_start_paper_engine(manager))
-        # systemd Type=notify: the app is serving (no-op outside systemd).
+        # systemd Type=notify: READY=1 is sent by the server after the socket is
+        # bound (web/app.py), not here: lifespan startup runs before the bind (R3-4-5).
         # Independent of the engine: a stopped or halted engine must not
         # time the unit out. The pinger keeps WATCHDOG=1 flowing only while
         # the engine gate allows it.
-        sd_notify.ready()
         watchdog = sd_notify.WatchdogPinger(_watchdog_gate(manager))
         watchdog.start()
         try:

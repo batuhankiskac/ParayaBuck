@@ -244,6 +244,7 @@ def test_control_token_and_mutations_refused_to_remote_peers(monkeypatch: pytest
 
 
 def test_container_bridge_peer_trusted_only_off_the_trading_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    from parayabuck.web import security
     from parayabuck.web.security import is_trusted_client
 
     monkeypatch.delenv("PARAYABUCK_TRADING_HOST", raising=False)
@@ -251,8 +252,14 @@ def test_container_bridge_peer_trusted_only_off_the_trading_host(monkeypatch: py
     assert is_trusted_client("::1") and is_trusted_client("127.0.0.1")
     assert not is_trusted_client("172.17.0.1")
     monkeypatch.setenv("PARAYABUCK_CONTAINER", "YES")
+    # Only the bridge gateway is the proxied peer; another container on the bridge is not (S3-1-1).
+    monkeypatch.setattr(security, "_container_gateway_address", lambda: "172.17.0.1")
     assert is_trusted_client("172.17.0.1")
+    assert not is_trusted_client("172.17.0.5")
     assert not is_trusted_client("8.8.8.8")
+    monkeypatch.setattr(security, "_container_gateway_address", lambda: None)
+    assert not is_trusted_client("172.17.0.1")
+    monkeypatch.setattr(security, "_container_gateway_address", lambda: "172.17.0.1")
     monkeypatch.setenv("PARAYABUCK_TRADING_HOST", "1")
     assert not is_trusted_client("172.17.0.1")
     assert not is_trusted_client(None)

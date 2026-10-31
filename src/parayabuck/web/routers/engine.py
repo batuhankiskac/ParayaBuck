@@ -13,6 +13,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
 
+from parayabuck.live_safety import LiveApprovalError
 from parayabuck.logger import get_logger
 from parayabuck.web.deps import get_engine_manager
 
@@ -38,8 +39,9 @@ async def start_engine(request: Request) -> dict[str, str]:
     try:
         await asyncio.to_thread(manager.start_engine)
         return {"status": "started", "message": "Bot engine started successfully."}
-    except ValueError as e:
-        # Refusals (already running, halt, guards) are operator-readable text.
+    except (ValueError, LiveApprovalError) as e:
+        # Refusals (already running, halt, guards, LIVE approval) are operator-readable
+        # text (D3-5-5: a LiveApprovalError is a RuntimeError, so it needs its own name).
         # Startup retries are auto_start-only.
         raise _http(400, _redacted(manager, str(e))) from e
     except Exception:

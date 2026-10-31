@@ -64,7 +64,9 @@ def is_trusted_client(client_host: str | None) -> bool:
     loopback peer is trusted. The single exception is the documented
     container mode (``PARAYABUCK_CONTAINER=YES`` on a machine that is NOT the
     trading host): Docker publishes the port on the host's loopback only and
-    proxies it through the bridge network, so the peer is a private address.
+    proxies it through the bridge network, so the peer is the bridge gateway.
+    Only that gateway address is trusted, not every private address: another
+    container on the same bridge must not reach the control token (S3-1-1).
     """
     if not client_host:
         return False
@@ -78,7 +80,32 @@ def is_trusted_client(client_host: str | None) -> bool:
         return True
     from parayabuck.trading_host import trading_host_authorized
 
-    return os.getenv("PARAYABUCK_CONTAINER") == "YES" and not trading_host_authorized() and address.is_private
+    if os.getenv("PARAYABUCK_CONTAINER") != "YES" or trading_host_authorized():
+        return False
+    gateway = _container_gateway_address()
+    return gateway is not None and str(address) == gateway
+
+
+def _container_gateway_address(route_table: str | os.PathLike[str] = "/proc/net/route") -> str | None:
+    """IPv4 default gateway of this container's network (the bridge gateway), or None.
+
+    Read from ``/proc/net/route``, whose gateway field is the little-endian hex of
+    the address. Unreadable routing data yields None, which trusts no peer.
+    """
+    try:
+        with open(route_table, encoding="ascii") as routes:
+            rows = routes.read().splitlines()[1:]
+    except (OSError, UnicodeDecodeError):
+        return None
+    for row in rows:
+        fields = row.split()
+        if len(fields) < 3 or fields[1] != "00000000" or fields[2] == "00000000":
+            continue
+        try:
+            return str(ipaddress.IPv4Address(bytes.fromhex(fields[2])[::-1]))
+        except ValueError:
+            return None
+    return None
 
 
 _TICKET_QUERY = re.compile(r"(ticket=)[^&\s\"']+")

@@ -30,6 +30,7 @@ from parayabuck.config import (
     load_config,
     read_credential,
     same_ledger_path,
+    strict_bool,
 )
 from parayabuck.live_safety import (
     LIVE_API_KEY_ENV,
@@ -37,13 +38,14 @@ from parayabuck.live_safety import (
     LiveOperatorApproval,
     LiveStartupProof,
     credential_env_names,
+    marker_present,
     operator_halt_active,
     operator_halt_marker_path,
     read_operator_halt,
 )
 from parayabuck.logger import get_logger
 from parayabuck.trading_host import TRADING_HOST_REFUSAL, trading_host_authorized
-from parayabuck.utils.io import atomic_write
+from parayabuck.utils.io import _fsync_directory, atomic_write
 from parayabuck.web.schemas.settings import SettingsPayload, ValidatedSettings
 
 log = get_logger("parayabuck.web.engine")
@@ -161,6 +163,41 @@ def _yaml_block(raw: dict[str, Any], name: str) -> dict[str, Any]:
     return value
 
 
+async def _run_on_daemon_thread(func: Callable[..., Any], /, **kwargs: Any) -> Any:
+    """Await ``func(**kwargs)`` run on a daemon thread (R3-4-3).
+
+    ``asyncio.to_thread`` uses the loop's default executor, whose workers the
+    interpreter joins at exit with no timeout: a start attempt blocked in a
+    broker call would hold the process past systemd's stop timeout. A daemon
+    thread does not hold the exit.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[Any] = loop.create_future()
+
+    def _settle(result: Any, error: BaseException | None) -> None:
+        if future.done():
+            return
+        if error is not None:
+            future.set_exception(error)
+        else:
+            future.set_result(result)
+
+    def _runner() -> None:
+        outcome: tuple[Any, BaseException | None]
+        try:
+            outcome = (func(**kwargs), None)
+        except BaseException as exc:
+            outcome = (None, exc)
+        try:
+            loop.call_soon_threadsafe(_settle, *outcome)
+        except RuntimeError:
+            # The loop closed while the attempt ran: nobody awaits the result.
+            pass
+
+    threading.Thread(target=_runner, name="pb-auto-start", daemon=True).start()
+    return await future
+
+
 @dataclass(frozen=True)
 class LiveArmToken:
     account_id: str
@@ -237,6 +274,8 @@ class EngineManager:
         self._settings_stop_requested = False
         # time.monotonic() when the current start attempt began (None between attempts).
         self._start_attempt_monotonic: float | None = None
+        # When the running stop began; None until a stop holds the ops lock (C3-3-5).
+        self._stop_started_monotonic: float | None = None
         self.security_warning = _tracked_secret_warning(Path.cwd())
         if self.security_warning:
             log.critical("%s", self.security_warning)
@@ -395,9 +434,12 @@ class EngineManager:
         has not begun is refused and a running one stops before its order-producing
         steps (resume, catch-up) instead of submitting during shutdown.
         """
-        self._shutdown_requested.set()
-        self._start_cancel.set()
-        self._cancel_pending_retry()
+        # Under the state lock (C3-3-4): a start that clears the cancel event
+        # takes the same lock, so it cannot run between the set and the check.
+        with self._state_lock:
+            self._shutdown_requested.set()
+            self._start_cancel.set()
+            self._cancel_pending_retry()
 
     def begin_settings_write(self) -> None:
         """Hold starts out while a settings save stops, writes and restarts the engine."""
@@ -487,12 +529,21 @@ class EngineManager:
 
     def _clear_operator_stop_marker(self) -> None:
         """Remove the marker on an explicit start. Raises ValueError if it cannot be removed."""
+        marker = self._operator_stop_marker()
+        existed = marker_present(marker)
         try:
-            self._operator_stop_marker().unlink(missing_ok=True)
+            marker.unlink(missing_ok=True)
         except OSError as exc:
             raise ValueError(
                 "Motor başlatılamadı: operatör durdurma kaydı silinemedi; dosya izinlerini kontrol edin."
             ) from exc
+        if not existed:
+            return
+        try:
+            _fsync_directory(marker.parent)
+        except OSError as exc:
+            # The marker is already gone; a failed directory fsync only weakens durability (S3-3-6).
+            log.warning("Operator stop marker removed but its directory fsync failed: %s", exc)
 
     def should_auto_start(self) -> bool:
         """Auto-start configured paper engines without weakening live safeguards.
@@ -510,7 +561,7 @@ class EngineManager:
             log.error("%s", halt_refusal)
             _alert_start_failure(reason="operator_halt", message=halt_refusal, auto_start=True)
             return False
-        if os.path.lexists(os.fspath(self._operator_stop_marker())):
+        if marker_present(self._operator_stop_marker()):
             # A deliberate Stop is not a failure: no alert, just the log line.
             log.info("Auto-start skipped: the engine was stopped by the operator; press Başlat to start it")
             return False
@@ -522,15 +573,13 @@ class EngineManager:
             app_config = (raw or {}).get("app") or {}
             runtime_config = (raw or {}).get("runtime") or {}
             legacy_live = "mode" not in runtime_config and ((raw or {}).get("alpaca") or {}).get("paper") is False
-            if (
-                str(runtime_config.get("mode", "paper")).lower() == "live"
-                and not legacy_live
-                and app_config.get("auto_start_engine", True)
-            ):
+            # A quoted "false" is truthy: only a real boolean may enable auto-start (R3-2-2).
+            auto_start_engine = strict_bool(app_config.get("auto_start_engine", True), "app.auto_start_engine")
+            if str(runtime_config.get("mode", "paper")).lower() == "live" and not legacy_live and auto_start_engine:
                 return self._live_auto_start_allowed()
             key, secret = self.get_credentials()
             return bool(
-                app_config.get("auto_start_engine", True)
+                auto_start_engine
                 and str(runtime_config.get("mode", "paper")).lower() == "paper"
                 and not legacy_live
                 and key
@@ -944,7 +993,17 @@ class EngineManager:
 
     def _run_start_attempt(self, *, auto_start: bool) -> None:
         """One start attempt after the state change; see start_engine."""
-        key, secret = self.get_credentials()
+        try:
+            key, secret = self.get_credentials()
+        except Exception as exc:
+            # An unreadable or non-UTF-8 .env must settle the state: left at
+            # 'starting' it wedges every start and ends in a watchdog kill (C3-3-2).
+            message = f"Alpaca anahtarları okunamadı ({type(exc).__name__}); .env dosyasını kontrol edin."
+            with self._state_lock:
+                self.engine_state = "error"
+                self.last_engine_error = message
+            _alert_start_failure(reason="credentials_unreadable", message=message, auto_start=auto_start)
+            raise ValueError(message) from exc
         if not key or not secret:
             message = "Alpaca API anahtarı/secret eksik. Önce Ayarlar'dan girin."
             with self._state_lock:
@@ -1219,22 +1278,33 @@ class EngineManager:
         A start attempt in flight aborts before its first order and ends on its own
         worker thread, so the engine is not "stopped" until it has ended (C2-9-1).
         """
-        # Only an explicit operator Stop is durable. Shutdown, restarts and
-        # settings saves stop the engine without it, so they can still auto-start.
-        # A record that cannot be saved never keeps the engine running: the
-        # stop still happens, and the operator is told it will not survive a
-        # restart.
-        if operator_request:
-            try:
-                self._write_operator_stop_marker()
-            except OSError as exc:
+        marker_errors: list[OSError] = []
+        try:
+            return EngineManager._stop_engine(self, operator_request=operator_request, marker_errors=marker_errors)
+        finally:
+            if marker_errors:
+                exc = marker_errors[0]
                 message = (
                     "Durdurma kaydı yazılamadı; motor durduruluyor ama bir yeniden "
                     f"başlatmada otomatik olarak tekrar başlayabilir ({exc})"
                 )
                 log.error("%s", message)
                 _alert_start_failure(reason="operator_stop_unrecorded", message=message, auto_start=False)
+
+    def _stop_engine(self, *, operator_request: bool, marker_errors: list[OSError]) -> str:
+        # Only an explicit operator Stop is durable. Shutdown, restarts and
+        # settings saves stop the engine without it, so they can still auto-start.
+        # A record that cannot be saved never keeps the engine running: the
+        # stop still happens, and the operator is told it will not survive a
+        # restart (the alert is raised by stop_engine).
         with self._state_lock:
+            # The marker is written under the state lock (C3-3-3): a Start cannot
+            # clear it between this write and the stop request below.
+            if operator_request:
+                try:
+                    self._write_operator_stop_marker()
+                except OSError as exc:
+                    marker_errors.append(exc)
             # A start attempt still in flight must abort before its
             # resume/catch-up steps submit orders (see StartupCancelled).
             self._start_cancel.set()
@@ -1258,12 +1328,17 @@ class EngineManager:
                 attempt_in_flight = getattr(self, "_start_attempt_monotonic", None) is not None
                 return "stopping" if attempt_in_flight and self.engine_state == "stopping" else "stopped"
             self.engine_state = "stopping"
-            self._stop_started_monotonic = time.monotonic()
+            # The stop clock starts once this stop holds the ops lock (C3-3-5): a
+            # stop queued behind a slow reset must not trip the watchdog while the
+            # runtime still trades. None keeps the clock off until then.
+            self._stop_started_monotonic = None
             runtime = self.runtime
         # Shutdown holds the ops and refresh locks, but never the account-cache
         # lock across runtime.stop(): a poll then gets the last snapshot instead of
         # waiting for the joins, and no refresh reads the ledger while it closes.
         with self._runtime_ops_lock, self._account_refresh_lock:
+            with self._state_lock:
+                self._stop_started_monotonic = time.monotonic()
             if runtime is not None:
                 try:
                     stopped = runtime.stop()
@@ -1355,10 +1430,18 @@ class EngineManager:
         try:
             while True:
                 try:
-                    await asyncio.to_thread(self.start_engine, auto_start=True)
+                    await _run_on_daemon_thread(self.start_engine, auto_start=True)
                     return
                 except TransientStartupError as exc:
                     with self._state_lock:
+                        if self.engine_state == "stopping" and self.runtime is None:
+                            # A Stop landed after this attempt had already ended and
+                            # before this handler ran: nothing is in flight, so settle
+                            # the state here or it stays 'stopping' forever (C3-3-1).
+                            self._reset_retry_state()
+                            self.engine_state = "stopped"
+                            self.last_engine_error = None
+                            return
                         if self.engine_state != "starting":
                             return
                         attempt = self._retry_attempt + 1
@@ -2065,7 +2148,10 @@ class EngineManager:
         )
         if not valid:
             self.invalidate_live_arming()
-            raise ValueError("Live trading requires a fresh confirmation for these credentials and settings.")
+            raise ValueError(
+                "Live trading requires a fresh confirmation for these credentials and settings."
+                " Next: re-arm LIVE in the console, then start the engine."
+            )
         assert token is not None
         if consume:
             self.invalidate_live_arming()

@@ -1119,6 +1119,14 @@ class EngineRuntime:
         path that runs on every poll, so it re-plans the side on the snapshot it
         just published. Rate limited. The advance keeps its submit gates and the
         cached signal-basis check (no provider call on this thread). Never raises.
+
+        Only an ACTIVE market is re-advanced (P3-1-5): a halted or latched market
+        would only log the withheld BUY again. The portfolio lock is taken without
+        blocking (C3-2-2): a decision holding it across broker I/O makes this pass
+        skip, and the next poll retries (the rate limit is set only when the
+        advance runs). The account snapshot must still be the one this pass
+        published, so an execution in this pass that invalidated it skips too
+        (C3-2-3); the next poll re-reads it.
         """
         try:
             if not self._running or self._warming_up or not getattr(self, "_startup_committed", False):
@@ -1131,13 +1139,40 @@ class EngineRuntime:
                 repository = getattr(portfolio_runtime, "repository", None)
                 if repository is None:
                     continue
-                state = repository.current_rebalance_execution(portfolio_runtime.account_id, portfolio_runtime.market)
+                market = portfolio_runtime.market
+                state = repository.current_rebalance_execution(portfolio_runtime.account_id, market)
                 if state is None or state.phase != REBALANCE_PHASE_BUY_READY:
                     continue
-                self._held_buy_readvance_last_mono = now_mono
-                self._advance_portfolio_rebalance(portfolio_runtime.market, account=account, cached_basis_only=True)
+                if self.trading_state(market) is not TradingState.ACTIVE:
+                    continue
+                lock = getattr(self, "_portfolio_lock", threading.RLock())
+                if not lock.acquire(blocking=False):
+                    continue
+                try:
+                    if not self._account_snapshot_still_published(account):
+                        continue
+                    self._held_buy_readvance_last_mono = now_mono
+                    self._advance_portfolio_rebalance(market, account=account, cached_basis_only=True)
+                finally:
+                    lock.release()
         except Exception:
             log.warning("Held BUY side re-advance failed", exc_info=True)
+
+    def _account_snapshot_still_published(self, account: AccountSnapshot) -> bool:
+        """True while ``account`` is the cached snapshot and no execution invalidated it.
+
+        A cache with no metadata at all (a test double) is taken as published.
+        """
+        with self._account_snapshot_guard():
+            snapshot = getattr(self, "_last_account_snapshot", None)
+            snapshot_at = getattr(self, "_last_account_snapshot_at", None)
+            if snapshot is None and snapshot_at is None:
+                return True
+            return (
+                snapshot is account
+                and snapshot_at is not None
+                and not getattr(self, "_account_snapshot_invalidation_pending", False)
+            )
 
     def _maybe_retry_rejected_exit_sells(self, account: AccountSnapshot) -> None:
         """R3: retry a broker-rejected SELL once at the next safe opportunity.
@@ -1162,7 +1197,12 @@ class EngineRuntime:
             if not self._exit_sell_retry_candidate(portfolio_runtime):
                 continue
             try:
-                with self._portfolio_lock:
+                # Non-blocking (C3-2-2): a decision holding the lock across broker
+                # I/O makes this pass skip, and the next poll retries the SELL.
+                lock = getattr(self, "_portfolio_lock", threading.RLock())
+                if not lock.acquire(blocking=False):
+                    continue
+                try:
                     # The gates above were read before the lock. A halt raised
                     # while this thread waited must still stop the SELL.
                     if self._exit_sell_retry_blocked(portfolio_runtime.market):
@@ -1173,6 +1213,8 @@ class EngineRuntime:
                             "exit_sell_retry_blocked" if self._exit_sell_retry_blocked(market) else None
                         ),
                     )
+                finally:
+                    lock.release()
                 if submitted:
                     self._invalidate_account_snapshot_after_execution()
             except Exception as exc:
@@ -1192,14 +1234,17 @@ class EngineRuntime:
                 except Exception:
                     log.warning("Reconcile after a failed SELL retry could not be scheduled", exc_info=True)
 
-    def _advance_submit_block_reason(self, market: Market, order: Any) -> str | None:
+    def _advance_submit_block_reason(self, market: Market, order: Any, *, advance_path: bool = False) -> str | None:
         """Why a rebalance advance must not submit ``order`` now, else None.
 
         Flags only, like ``_exit_sell_retry_blocked``. Stopping and the circuit
         breaker hold every order; a BUY also needs the market to be ACTIVE (no
         halt, entry latch or pending reconcile raised since the advance began)
         and an unverified equity signal basis must not hold it. SELLs keep
-        flowing under latches, as on the decision path.
+        flowing under latches on the decision path, as before. On the advance
+        path (``advance_path``) an equity SELL is held under the cached basis
+        latch too (P3-3-2): an unverified basis freezes the whole equity book,
+        and a residual sized from pre-split rows could oversell.
         """
         if not getattr(self, "_running", False):
             return "engine_not_running"
@@ -1216,6 +1261,11 @@ class EngineRuntime:
             self.trading_state(market) is not TradingState.ACTIVE or self._buy_held_by_signal_basis(market)
         ):
             return "buy_not_permitted"
+        # The cached basis hold is the same one the BUY check uses (its name is
+        # BUY-specific; the predicate itself is the equity basis latch).
+        if advance_path and getattr(order, "side", None) == PortfolioOrderSide.SELL:
+            if self._buy_held_by_signal_basis(market):
+                return "sell_basis_unverified"
         return None
 
     def _buy_held_by_signal_basis(self, market: Market) -> bool:
@@ -1242,15 +1292,23 @@ class EngineRuntime:
         """True when a rejected-SELL retry must not be submitted now.
 
         Reads flags only (no lock, no broker I/O), so it is safe both before
-        and under ``_portfolio_lock``. ``market`` adds that market's entry halt.
+        and under ``_portfolio_lock``. ``market`` adds that market's entry halt
+        and, for equity, the cached signal-basis hold (P3-3-2: an unverified
+        basis freezes the equity book, exits included). The startup cancel
+        holds it too (R3-4-4), as on the advance path.
         """
         if not getattr(self, "_running", False) or not getattr(self, "_startup_committed", False):
+            return True
+        start_cancel = getattr(self, "_startup_cancel", None)
+        if start_cancel is not None and start_cancel.is_set():
             return True
         if getattr(self, "_warming_up", False) or getattr(self, "_circuit_breaker_reason", None) is not None:
             return True
         if self._operator_halt_held():
             return True
         if getattr(self, "_reconcile_failed", False) or self._reconcile_pending():
+            return True
+        if market is not None and self._buy_held_by_signal_basis(market):
             return True
         return market is not None and getattr(self, "_market_entry_halts", {}).get(market) is not None
 
@@ -3277,10 +3335,15 @@ class EngineRuntime:
             # The fill path deferred a BUY on the basis: the signal monitor
             # resumes it once the basis verifies (see _signal_adjustment_monitor_pass).
             self._basis_buy_deferred = True
-        submit_buys = active and not basis_held
+        # A trade-update advance (cached, not the startup resume) submits BUYs
+        # only once the runtime is committed (C3-2-4). The startup resume runs
+        # before the commit by design and the account loop re-advances after it.
+        startup_ok = not cached_basis_only or bool(getattr(self, "_startup_committed", False))
+        submit_buys = active and not basis_held and startup_ok
         for portfolio_runtime in getattr(self, "_portfolio_runtimes", ()):
             if portfolio_runtime.market != market:
                 continue
+            advanced = False
             try:
                 with self._portfolio_lock:
                     # The halt, entry-latch and reconcile gates are raised
@@ -3300,11 +3363,14 @@ class EngineRuntime:
                         # Re-read again at each broker submit: a halt raised by a
                         # thread that does not take this lock must still stop the
                         # next order of the batch (CC-6).
-                        "submit_gate": lambda order, market=market: self._advance_submit_block_reason(market, order),
+                        "submit_gate": lambda order, market=market: self._advance_submit_block_reason(
+                            market, order, advance_path=True
+                        ),
                     }
                     if account is not None:
                         advance_kwargs["account"] = account
                     result = portfolio_runtime.advance_rebalance(**advance_kwargs)
+                    advanced = submit_now
             except Exception as exc:
                 # The persisted two-phase state stays pending and every later
                 # trade update retries — so the traceback is the only forensic
@@ -3318,7 +3384,10 @@ class EngineRuntime:
                 self._note_rebalance_advance_failure(market, exc)
                 continue
             failures = getattr(self, "_rebalance_advance_failures", None)
-            if failures and failures.pop(market, None) is not None:
+            # Only an advance that ran with BUY submission permitted proves the
+            # broker path works again (C3-2-1, P3-1-4). A held or no-op advance
+            # (submit_now False) leaves the failure record and the latch in place.
+            if advanced and failures and failures.pop(market, None) is not None:
                 # The advance works again: lift the latch this failure path set
                 # (not one an ambiguous outcome or a reconcile set), so a
                 # transient broker error does not need an operator reset.
@@ -4679,7 +4748,8 @@ class EngineRuntime:
                         strategy=portfolio_runtime.strategy.name,
                         error=str(exc),
                         current_state={"market": portfolio_runtime.market.value},
-                        reconcile_action=lambda: self.broker.reconcile() if hasattr(self.broker, "reconcile") else None,
+                        # The locked helper, as the drift path above (C3-1-1).
+                        reconcile_action=self._reconcile_for_incident_recovery,
                     )
                 log.exception("Portfolio runtime failed closed: %s", exc)
                 runtime_metrics_store.record_event("circuit_breaker")
@@ -5760,7 +5830,13 @@ class EngineRuntime:
             # history until it completes (startup-race guard).
             return
         try:
-            if self.verify_equity_signal_basis() and getattr(self, "_basis_buy_deferred", False):
+            if (
+                self.verify_equity_signal_basis()
+                and getattr(self, "_basis_buy_deferred", False)
+                # Uncommitted startup: the deferred BUY waits for the commit
+                # (C3-2-4); the flag stays set and this pass retries it.
+                and getattr(self, "_startup_committed", False)
+            ):
                 # The trade-update path only reads the cache (T2-7-1), so a BUY
                 # it deferred on the basis resumes here, off the fill path. Its
                 # own failure must not stop the monitor; the flag then stays set.

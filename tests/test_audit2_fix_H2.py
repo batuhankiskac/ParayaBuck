@@ -283,6 +283,7 @@ def test_trade_update_advance_withholds_buys_without_a_provider_call() -> None:
 
 def test_monitor_resumes_only_buys_the_fill_path_deferred(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _engine()
+    engine._startup_committed = True  # the deferred BUY resumes only after the startup commit (C3-2-4)
     engine._symbols_by_market = {Market.EQUITY: {"QLD"}}
     resumed: list[Market] = []
     monkeypatch.setattr(engine, "verify_equity_signal_basis", lambda *a, **k: True)

@@ -59,6 +59,7 @@ from parayabuck.portfolio.runtime_models import (
     OpenPortfolioOrder,
     RebalanceExecutionState,
     _decision_id,
+    is_terminal_order_status,
 )
 from parayabuck.portfolio.runtime_ownership import net_owned_quantities
 from parayabuck.storage import SQLiteStore, check_runtime_schema_version, stamp_runtime_schema_version
@@ -1159,7 +1160,8 @@ class PortfolioStateRepository:
         """Order rows attributed to one decision (used by rebalance recovery)."""
         query = """SELECT client_order_id, symbol, market, side, quantity,
                           status, cumulative_filled_quantity, broker_order_id,
-                          reference_price, average_fill_price
+                          reference_price, average_fill_price,
+                          submit_call_started_at, submit_call_returned_at
                    FROM portfolio_orders WHERE decision_id = ?"""
         params: tuple[object, ...] = (decision_id,)
         if side is not None:
@@ -1180,6 +1182,7 @@ class PortfolioStateRepository:
                 "broker_order_id": str(row[7] or ""),
                 "reference_price": float(row[8] or 0.0),
                 "average_fill_price": float(row[9]) if row[9] is not None else None,
+                "submit_call_in_flight": bool(row[10]) and not row[11],
             }
             for row in rows
         )
@@ -1192,7 +1195,8 @@ class PortfolioStateRepository:
         """
         with self.store.lock:
             rows = self.store.connection.execute(
-                """SELECT o.client_order_id, o.decision_id, o.status, o.broker_order_id
+                """SELECT o.client_order_id, o.decision_id, o.status, o.broker_order_id,
+                          o.submit_call_started_at, o.submit_call_returned_at, o.side
                    FROM portfolio_orders o
                    JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                    JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
@@ -1206,6 +1210,9 @@ class PortfolioStateRepository:
                 "decision_id": str(row[1]),
                 "status": str(row[2]),
                 "broker_order_id": str(row[3] or ""),
+                # The broker POST started and never returned (same test as open_orders).
+                "submit_call_in_flight": bool(row[4]) and not row[5],
+                "side": str(row[6]),
             }
             for row in rows
         )
@@ -1316,8 +1323,8 @@ class PortfolioStateRepository:
                 return 0.0
             if owned <= STALE_CLEAR_DUST_QUANTITY:
                 note = "broker position absent; residue at or below the dust threshold"
-            elif self._local_exit_follows_last_buy(account_id, symbol, market):
-                note = "broker position absent; local SELL order after the last BUY, no broker fill recovered"
+            elif self._local_exit_quantity_after_last_buy(account_id, symbol, market) + 1e-9 >= owned:
+                note = "broker position absent; live local SELL orders after the last BUY cover the residue"
             else:
                 refused_quantity = owned
                 note = ""
@@ -1347,25 +1354,38 @@ class PortfolioStateRepository:
         )
         return owned
 
-    def _local_exit_follows_last_buy(self, account_id: str, symbol: str, market: Market) -> bool:
-        """Whether a local SELL order of this account was submitted at or after
-        the latest local BUY of the symbol. Only then does our own exit explain
-        a flat broker; an older exit cannot explain a lot bought later."""
+    def _local_exit_quantity_after_last_buy(self, account_id: str, symbol: str, market: Market) -> float:
+        """Quantity of local SELL orders submitted at or after the latest local
+        BUY of the symbol that could still fill (F3-3-1, F3-3-2).
+
+        Only the unbooked part of a live SELL (quantity minus the fills already
+        booked) counts: booked fills are already out of ownership, and a
+        terminal order (canceled, rejected, expired, or a 404 that resolved to
+        canceled) can never fill its remainder. A SELL still ``submitting`` was
+        never confirmed at the broker and is not proof either. An older exit
+        cannot explain a lot bought later."""
         rows = self.store.connection.execute(
-            """SELECT LOWER(o.side), MAX(o.created_at)
+            """SELECT LOWER(o.side), o.created_at, o.quantity, o.cumulative_filled_quantity, LOWER(o.status)
                FROM portfolio_orders o
                JOIN portfolio_decisions d ON d.decision_id = o.decision_id
                JOIN portfolio_runtime_sessions s ON s.session_id = d.session_id
-               WHERE s.account_id = ? AND o.symbol = ? AND o.market = ?
-               GROUP BY LOWER(o.side)""",
+               WHERE s.account_id = ? AND o.symbol = ? AND o.market = ?""",
             (account_id, symbol, market.value),
         ).fetchall()
-        latest = {str(side): created_at for side, created_at in rows}
-        sell_at = latest.get("sell")
-        if sell_at is None:
-            return False
-        buy_at = latest.get("buy")
-        return buy_at is None or _at_or_before(buy_at, sell_at)
+        buy_at: object = None
+        for side, created_at, *_ in rows:
+            if side == "buy" and (buy_at is None or not _at_or_before(created_at, buy_at)):
+                buy_at = created_at
+        explained = 0.0
+        for side, created_at, quantity, filled, status in rows:
+            if side != "sell":
+                continue
+            if buy_at is not None and not _at_or_before(buy_at, created_at):
+                continue
+            if is_terminal_order_status(str(status)) or status == "submitting":
+                continue
+            explained += max(float(quantity or 0.0) - float(filled or 0.0), 0.0)
+        return explained
 
     def _alert_uncorroborated_stale_clear(
         self,
@@ -1765,6 +1785,25 @@ class PortfolioStateRepository:
                     if side == "sell"
                     else realized_pnl
                 )
+                # A recovered remainder is dated at the order's submission
+                # (no fill time is known), so it can precede a fill the stream
+                # already booked for this order; it is clamped to that fill so
+                # the FIFO replay keeps the booking order (F3-4-3).
+                fill_occurred_at = occurred_at
+                if ":recovered:" in activity_id:
+                    booked_times = [
+                        _parse_instant(value)
+                        for (value,) in self.store.connection.execute(
+                            "SELECT occurred_at FROM portfolio_fills WHERE client_order_id = ?",
+                            (client_order_id,),
+                        ).fetchall()
+                        if value
+                    ]
+                    if booked_times:
+                        fill_occurred_at = max(
+                            occurred_at if occurred_at.tzinfo is not None else occurred_at.replace(tzinfo=UTC),
+                            max(booked_times),
+                        )
                 fill_insert = self.store.connection.execute(
                     """INSERT OR IGNORE INTO portfolio_fills(
                         activity_id, client_order_id, occurred_at, quantity, price,
@@ -1774,7 +1813,7 @@ class PortfolioStateRepository:
                     (
                         activity_id,
                         client_order_id,
-                        occurred_at.isoformat(),
+                        fill_occurred_at.isoformat(),
                         fill_delta,
                         fill_price,
                         float(fee or 0.0),
@@ -2257,7 +2296,14 @@ class PortfolioStateRepository:
             if change.kind == MATCH:
                 self._resolve_surplus_alerts(account_id, symbol, market)
                 return None
-            if not change.rebasable and broker_quantity > owned:
+            # The episode is claimed here, under the store lock that
+            # ``_resolve_surplus_alerts`` also takes; only the emission runs
+            # after the release (C3-1-3).
+            if (
+                not change.rebasable
+                and broker_quantity > owned
+                and self._reserve_surplus_alert(account_id, symbol, market, owned, broker_quantity)
+            ):
                 after_release.append(
                     partial(
                         self._alert_unconfirmed_surplus,
@@ -2362,6 +2408,32 @@ class PortfolioStateRepository:
                 return candidate, instant
         return change, None
 
+    @staticmethod
+    def _surplus_alert_key(
+        account_id: str, symbol: str, market: Market, owned: float, broker_quantity: float
+    ) -> tuple[str, str, str, float, float]:
+        return (account_id, market.value, symbol, round(owned, 6), round(broker_quantity, 6))
+
+    def _reserve_surplus_alert(
+        self,
+        account_id: str,
+        symbol: str,
+        market: Market,
+        owned: float,
+        broker_quantity: float,
+    ) -> bool:
+        """Claim the once-per-episode surplus alert; False when already claimed.
+
+        Called under the store lock, so the claim and ``_resolve_surplus_alerts``
+        (which forgets the episode) cannot interleave (C3-1-3).
+        """
+        key = self._surplus_alert_key(account_id, symbol, market, owned, broker_quantity)
+        alerted = self.__dict__.setdefault("_surplus_alerts", set())
+        if key in alerted:
+            return False
+        alerted.add(key)
+        return True
+
     def _alert_unconfirmed_surplus(
         self,
         account_id: str,
@@ -2371,23 +2443,24 @@ class PortfolioStateRepository:
         broker_quantity: float,
         reason: str,
     ) -> None:
-        """Raise an operator incident (once per episode) for broker shares on a
-        bot-owned symbol that no fill or provable split explains.
+        """Raise an operator incident for broker shares on a bot-owned symbol
+        that no fill or provable split explains. The episode was already
+        claimed by ``_reserve_surplus_alert``; a failed emission releases it so
+        the next pass retries.
 
         The surplus is left external, so the bot never trades it; but an
         unconfirmed forward split would otherwise silently halve what the
         strategy believes it holds, so it must not pass unnoticed.
         """
-        key = (account_id, market.value, symbol, round(owned, 6), round(broker_quantity, 6))
+        key = self._surplus_alert_key(account_id, symbol, market, owned, broker_quantity)
         alerted = self.__dict__.setdefault("_surplus_alerts", set())
-        if key in alerted:
-            return
         message = (
             f"Broker holds {format_quantity(broker_quantity)} {symbol} but the bot owns {format_quantity(owned)} "
             f"and no fill or confirmed split explains the surplus ({reason}). The surplus is treated as external. "
             "If a forward split happened, adopt it with the broker's average entry price: "
             f"`parayabuck ops rebase-ownership {symbol} --broker-qty {format_quantity(broker_quantity)} "
-            f"--broker-average-cost <price> --confirm {format_quantity(owned)}`. "
+            "--broker-average-cost <price>` (dry run: it prints the plan and a 'Plan digest'); then run the same "
+            f"command with `--confirm {format_quantity(owned)} --plan-digest <digest>`. "
             "If the bot did not buy these shares, book them as an acquisition with "
             "--acquisition-unit-cost <price> instead."
         )
@@ -2409,8 +2482,9 @@ class PortfolioStateRepository:
             )
         except Exception:
             log.warning("Alert emission failed for the ownership surplus of %s", symbol, exc_info=True)
-            return
-        alerted.add(key)
+            # Release the claimed episode so the next pass retries the alert.
+            with self.store.lock:
+                alerted.discard(key)
 
     def plan_ownership_rebase(
         self,

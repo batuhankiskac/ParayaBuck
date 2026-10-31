@@ -587,7 +587,8 @@ class ReconciliationService:
             # sends the operator to SQLite, which the runbook forbids.
             log.warning(
                 "Ownership quantity mismatch needs an operator rebase: %s. Confirm the broker "
-                "position, then `parayabuck ops rebase-ownership SYMBOL --broker-qty QTY --confirm`.",
+                "position, then run `parayabuck ops rebase-ownership SYMBOL --broker-qty QTY` (dry run), "
+                "then the same command with `--confirm OWNED --plan-digest DIGEST` as the dry run prints.",
                 ", ".join(categories["QUANTITY_MISMATCH"]),
             )
         if local_quantities and (flat_reconciler := getattr(broker, "portfolio_flat_reconciled", None)):

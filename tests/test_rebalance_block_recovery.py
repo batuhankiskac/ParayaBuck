@@ -463,19 +463,19 @@ def test_buy_ready_resolves_a_crashed_submitting_buy_before_replanning(tmp_path)
     assert runtime.advance_rebalance() is None
     assert _phase(repository, first.decision_id)[0] == "buy_ready"
 
-    # The broker proves the order never arrived: the row becomes terminal. The
-    # re-plan then sends the BUY again under a fresh ``-replan1`` id (R-4): the
-    # canceled row keeps its planned id, so the insert cannot be ignored.
+    # P3-4-1: the POST started and never returned, so a 404 does not prove the
+    # order never reached Alpaca. The row is held for reconciliation rather than
+    # canceled, and no replan BUY is sent while that ambiguous order stands.
     broker.resolve_portfolio_submission = lambda client_order_id, broker_order_id="": "canceled"  # type: ignore[attr-defined]
     runtime.advance_rebalance()
     runtime.advance_rebalance()
 
     assert lookups == [row["client_order_id"]]
     buy_rows = repository.orders_for_decision(first.decision_id, side="buy")
-    assert [item["status"] for item in buy_rows] == ["canceled", "submitted"]
-    assert buy_rows[1]["client_order_id"] == f"{row['client_order_id']}-replan1"
-    assert _phase(repository, first.decision_id)[0] == "buy_pending"
-    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL, PortfolioOrderSide.BUY]
+    assert [item["status"] for item in buy_rows] == ["reconciliation_required"]
+    # The existing guard completes the phase with the ambiguous BUY and alerts
+    # (rebalance_completed_with_ambiguous_buy); the replan BUY is not sent.
+    assert [order.side for order in broker.submitted] == [PortfolioOrderSide.SELL]
 
 
 def _stranded_direct_buy(tmp_path):
@@ -518,7 +518,7 @@ def _all_orders(repository: PortfolioStateRepository) -> list[dict[str, object]]
     return [{"client_order_id": r[0], "symbol": r[1], "status": r[2], "decision_id": r[3]} for r in rows]
 
 
-def test_next_decision_cancels_an_untried_direct_order_unknown_to_the_broker(tmp_path) -> None:
+def test_next_decision_holds_an_in_flight_direct_order_unknown_to_the_broker(tmp_path) -> None:
     runtime, repository, broker = _stranded_direct_buy(tmp_path)
     [stranded] = [row for row in _all_orders(repository) if row["status"] == "submitting"]
     lookups: list[str] = []
@@ -528,17 +528,15 @@ def test_next_decision_cancels_an_untried_direct_order_unknown_to_the_broker(tmp
         return "canceled"
 
     broker.resolve_portfolio_submission = unknown  # type: ignore[attr-defined]
-    result = runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
+    runtime.process_closed_bars(_bars(_DAY + timedelta(days=1)), force_scheduled=True)
 
     assert lookups == [stranded["client_order_id"]]
+    # P3-4-1: the POST started and never returned, so the 404 is not proof that
+    # it never reached Alpaca. The row is held for reconciliation, not canceled.
     rows = {row["client_order_id"]: row for row in _all_orders(repository)}
-    assert rows[stranded["client_order_id"]]["status"] == "canceled"
-    # The freed MSFT slot is planned again by the new decision; the working
-    # AAPL order is not a submitting row and keeps suppressing its symbol.
-    assert [(order.symbol, order.decision_id) for order in broker.submitted] == [("MSFT", result.decision_id)]
-    assert stranded["decision_id"] != result.decision_id
+    assert rows[stranded["client_order_id"]]["status"] == "reconciliation_required"
     open_ids = {order.client_order_id for order in repository.open_orders("acct")}
-    assert stranded["client_order_id"] not in open_ids
+    assert stranded["client_order_id"] in open_ids
 
 
 def test_unreachable_broker_keeps_an_untried_direct_order_open(tmp_path) -> None:

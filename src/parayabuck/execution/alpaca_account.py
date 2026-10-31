@@ -302,16 +302,18 @@ class AccountService:
         shortfall = max(0.0, owned_qty - abs(raw_qty))
         if shortfall <= 1e-12:
             return False
+        # Several open exits may together cover the shortfall (F3-3-3): their
+        # remaining quantities are summed, so the gap is not booked as a
+        # foreign sale that the exits' own fills would then subtract again.
+        remaining_total = 0.0
         for order in orders_by_symbol.get(canonical, ()):
             order_market = getattr(order, "market", None)
             if order_market is not None and order_market != market:
                 continue
             quantity = float(getattr(order, "quantity", 0.0) or 0.0)
             filled = float(getattr(order, "cumulative_filled_quantity", 0.0) or 0.0)
-            remaining = max(0.0, quantity - filled)
-            if remaining >= shortfall - max(1e-9, shortfall * 1e-8):
-                return True
-        return False
+            remaining_total += max(0.0, quantity - filled)
+        return remaining_total >= shortfall - max(1e-9, shortfall * 1e-8)
 
     def _resolve_broker_quantity(
         self,
@@ -402,6 +404,9 @@ class AccountService:
 
     def account(self) -> AccountSnapshot:
         broker = self._broker
+        # The cache is stamped with the read's start (C3-1-4): a slower fetch
+        # cannot look fresher than the data it returns.
+        read_started_at = time.monotonic()
         # Access via property so fake injection is observed
         client = broker._client
         # Account-scoped peak reconciliation is serialized with the peak
@@ -687,8 +692,10 @@ class AccountService:
                 raise OwnershipDriftError(
                     f"Ownership drift for {canonical}: repository managed "
                     f"qty={owned_qty} exceeds broker position qty={raw_qty}. "
-                    "Confirm the broker position, then adopt it explicitly with "
-                    "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty> --confirm`",
+                    "Confirm the broker position, then adopt it explicitly in two steps: run "
+                    "`parayabuck ops rebase-ownership " + canonical + " --broker-qty <qty>` (dry run; it prints the "
+                    "owned quantity and a 'Plan digest'), then run the same command with "
+                    "`--confirm <owned> --plan-digest <digest>`",
                     symbols=(canonical,),
                 )
         if per_symbol_lock:
@@ -696,6 +703,7 @@ class AccountService:
         # Account-scoped peak merge (serialized: the peak is shared mutable
         # state across the account, trade-update and decision threads).
         sidecar_failed = False
+        bootstrap_announcement: tuple[str, float] | None = None
         with peak_lock:
             if peak_epoch_read is not None and getattr(broker, "_peak_epoch", None) != peak_epoch_read:
                 # A risk-epoch reset committed while this snapshot's broker reads
@@ -713,7 +721,9 @@ class AccountService:
             peak_equity = broker._peak_equity
             if peak_equity != old_peak or self._peak_save_pending:
                 try:
-                    broker._save_peak_equity()
+                    announced = broker._save_peak_equity()
+                    if isinstance(announced, tuple):
+                        bootstrap_announcement = announced
                     self._peak_save_pending = False
                 except (KeyboardInterrupt, SystemExit):
                     raise
@@ -725,7 +735,17 @@ class AccountService:
                     log.warning("Peak sidecar write failed; keeping the fetched snapshot: %s", exc)
                     sidecar_failed = True
         # Alert after the peak lock is released: the journal write must not hold
-        # the lock that every peak read and reset waits on.
+        # the lock that every peak read and reset waits on. The bootstrap
+        # announcement is emitted here too (C3-1-2), not inside the lock.
+        if bootstrap_announcement is not None:
+            bootstrap_account_id, baseline_equity = bootstrap_announcement
+            emit_execution_alert(
+                "paper_incident",
+                message=f"Drawdown baseline bootstrapped at {baseline_equity:.2f}: no peak sidecar or persisted high-water existed",
+                category="peak_bootstrap",
+                account_id=bootstrap_account_id,
+                baseline_equity=baseline_equity,
+            )
         if sidecar_failed:
             emit_execution_alert(
                 "paper_incident",
@@ -753,6 +773,9 @@ class AccountService:
         )
         # One assignment publishes snapshot and timestamp together, so a
         # concurrent snapshot_if_fresh never pairs a new snapshot with an old
-        # timestamp (or the reverse).
-        broker._snapshot_cache = (snapshot, time.monotonic())
+        # timestamp (or the reverse). A newer snapshot already published by a
+        # concurrent read that started later is kept (C3-1-4).
+        current_cache = getattr(broker, "_snapshot_cache", None)
+        if not isinstance(current_cache, tuple) or current_cache[1] <= read_started_at:
+            broker._snapshot_cache = (snapshot, read_started_at)
         return snapshot

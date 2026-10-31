@@ -228,27 +228,18 @@ def test_bootstrap_without_sidecar_or_history_alerts_and_records_the_first_equit
 ) -> None:
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     sidecar = tmp_path / "peak.json"
-    alerts: list[dict[str, Any]] = []
-    monkeypatch.setattr(
-        risk_peak,
-        "emit_execution_alert",
-        lambda kind, *, message, **fields: alerts.append(dict(fields, kind=kind, message=message)),
-    )
     service = RiskPeakService(paper=True, ledger=ledger, peak_state_path=sidecar)
     service.ensure_reconciled("acct")
     assert service.peak_equity == 0.0  # nothing to bootstrap from
 
     service.peak_equity = 97_000.0  # what account() does with the first observed equity
-    service.save_peak_equity("acct")
+    # The save returns the announcement; the caller emits it after the peak lock (C3-1-2).
+    announcement = service.save_peak_equity("acct")
 
-    assert len(alerts) == 1
-    assert alerts[0]["kind"] == "paper_incident"
-    assert alerts[0]["category"] == "peak_bootstrap"
-    assert alerts[0]["baseline_equity"] == pytest.approx(97_000.0)
+    assert announcement == ("acct", pytest.approx(97_000.0))
     assert _sidecar(sidecar) == {"account_id": "acct", "peak_equity": 97_000.0, "epoch": 0}
 
-    service.save_peak_equity("acct")
-    assert len(alerts) == 1  # announced once
+    assert service.save_peak_equity("acct") is None  # announced once
     ledger.close()
 
 
@@ -256,13 +247,10 @@ def test_restart_with_a_sidecar_does_not_announce_a_bootstrap(tmp_path: Path, mo
     ledger = ExecutionLedger(str(tmp_path / "ledger.sqlite3"))
     sidecar = tmp_path / "peak.json"
     sidecar.write_text(json.dumps({"account_id": "acct", "peak_equity": 100_000.0, "epoch": 0}), encoding="utf-8")
-    alerts: list[str] = []
-    monkeypatch.setattr(risk_peak, "emit_execution_alert", lambda kind, **fields: alerts.append(kind))
     service = RiskPeakService(paper=True, ledger=ledger, peak_state_path=sidecar)
     service.ensure_reconciled("acct")
     service.peak_equity = 101_000.0
-    service.save_peak_equity("acct")
-    assert alerts == []
+    assert service.save_peak_equity("acct") is None
     ledger.close()
 
 

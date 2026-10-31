@@ -2936,6 +2936,25 @@ class PortfolioRuntime:
                 status, broker_order_id = outcome
             else:
                 status, broker_order_id = outcome, str(item.get("broker_order_id") or "")
+            if status == "canceled" and item.get("submit_call_in_flight") is True:
+                # P3-4-1: the broker POST started and never returned, so a 404 proves
+                # only that Alpaca had no order yet. Alpaca may still accept it late,
+                # and a canceled row would then book its fill unseen while a residual
+                # SELL or a replan BUY is sent for the same intent. Hold the row for
+                # reconciliation, which owns the age and in-flight guards.
+                self.repository.update_order(client_order_id, "reconciliation_required", broker_order_id)
+                self._raise_operator_alert_once(
+                    (client_order_id, "submission_in_flight_unresolved"),
+                    message=(
+                        "Submitting order has no broker record after a POST that started and never returned; "
+                        "it is held as reconciliation_required and is not canceled until reconciliation confirms it"
+                    ),
+                    category="submission_in_flight_unresolved",
+                    client_order_id=client_order_id,
+                    side=str(item.get("side") or ""),
+                )
+                changed = True
+                continue
             self.repository.update_order(client_order_id, status, broker_order_id)
             if status == "canceled":
                 # The broker has no such order, so it never reached the broker under this id. It is

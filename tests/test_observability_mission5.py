@@ -1166,7 +1166,20 @@ def test_ops_explain_json_without_decisions_prints_one_json_object(tmp_path: Pat
     payload = json.loads(out)
     assert payload["decision"] is None
     assert payload["message"] == message
-    assert {"decision_id", "orders", "fills", "no_trade_reason", "summary_events"} <= set(payload)
+    # Exact shape: a script reads these keys, so an added or dropped key is a contract change.
+    assert set(payload) == {
+        "decision_id",
+        "decision",
+        "orders",
+        "fills",
+        "rebalance",
+        "no_trade_reason",
+        "detail",
+        "reconstruction",
+        "summary_events",
+        "message",
+    }
+    assert payload["orders"] == [] and payload["fills"] == [] and payload["summary_events"] == []
 
     code, out, _ = _run_cli("--config", str(tmp_path / "missing.yaml"), "ops", "explain", "--db", str(db))
     assert code == 0

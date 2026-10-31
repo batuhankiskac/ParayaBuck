@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import threading
@@ -15,6 +14,8 @@ from parayabuck.web.managers.backtest import BacktestManager
 from parayabuck.web.managers.engine import EngineManager
 from parayabuck.web.services import dashboard as svc
 from parayabuck.web.state import WebState
+
+from .conftest import child_process_env
 
 
 def _repo_config(root: Path, *, mode: str = "paper", live_enabled: bool = False) -> Path:
@@ -515,7 +516,7 @@ def test_serving_module_builds_exactly_one_engine_manager_and_app(tmp_path: Path
     result = subprocess.run(
         [sys.executable, "-c", _ONE_PROCESS_WIDE_STATE, str(repo / "src")],
         cwd=str(tmp_path),
-        env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
+        env=child_process_env(repo / "src", tmp_path),
         capture_output=True,
         text=True,
         timeout=300,
@@ -535,7 +536,7 @@ def test_dashboard_import_and_build_construct_no_extra_singletons(tmp_path: Path
     result = subprocess.run(
         [sys.executable, "-c", _NO_DUPLICATE_SINGLETONS, str(repo / "src")],
         cwd=str(tmp_path),
-        env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
+        env=child_process_env(repo / "src", tmp_path),
         capture_output=True,
         text=True,
         timeout=300,

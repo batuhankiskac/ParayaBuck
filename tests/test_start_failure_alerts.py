@@ -70,12 +70,15 @@ class _FailingRuntime:
         return SimpleNamespace(state="running", healthy=True)
 
 
-def _manager(monkeypatch: pytest.MonkeyPatch, flaky: _FailingRuntime) -> engine_module.EngineManager:
+def _manager(monkeypatch: pytest.MonkeyPatch, flaky: _FailingRuntime, tmp_path: Path) -> engine_module.EngineManager:
     monkeypatch.setattr("parayabuck.runtime.EngineRuntime", lambda **kwargs: flaky)
     monkeypatch.setattr(engine_module, "_scan_tracked_secrets", lambda root: None)
     manager = engine_module.EngineManager()
     manager.config_path = Path(__file__).resolve().parents[1] / "config/settings.yaml"
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+    # A start clears the operator Stop record: keep it out of the checkout's data/runtime.
+    stop_marker = tmp_path / "runtime" / engine_module.OPERATOR_STOP_MARKER_FILENAME
+    monkeypatch.setattr(manager, "_operator_stop_marker", lambda: stop_marker)
     return manager
 
 
@@ -86,9 +89,9 @@ def _no_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(asyncio, "sleep", _sleep)
 
 
-def test_successful_start_emits_no_alert(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_successful_start_emits_no_alert(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     flaky = _FailingRuntime(failures=0)
-    manager = _manager(monkeypatch, flaky)
+    manager = _manager(monkeypatch, flaky, tmp_path)
 
     manager.start_engine()
 
@@ -96,11 +99,11 @@ def test_successful_start_emits_no_alert(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _delivered("runtime_start_failed") == 0
 
 
-def test_permanent_start_failure_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_permanent_start_failure_alerts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A non-transient start error (rotated key, sqlite error, catch-up
     exception) leaves the engine in 'error'; the operator must be told."""
     flaky = _FailingRuntime(failures=1, transient=False)
-    manager = _manager(monkeypatch, flaky)
+    manager = _manager(monkeypatch, flaky, tmp_path)
 
     with pytest.raises(RuntimeError, match="401"):
         manager.start_engine(auto_start=True)
@@ -109,10 +112,10 @@ def test_permanent_start_failure_alerts(monkeypatch: pytest.MonkeyPatch) -> None
     assert _delivered("runtime_start_failed") == 1
 
 
-def test_auto_start_blocked_by_startup_guard_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auto_start_blocked_by_startup_guard_alerts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The tracked-secret scan refuses the start before any runtime exists;
     that refusal is a start failure the operator must see."""
-    manager = _manager(monkeypatch, _FailingRuntime(failures=0))
+    manager = _manager(monkeypatch, _FailingRuntime(failures=0), tmp_path)
     monkeypatch.setattr(
         engine_module,
         "_scan_tracked_secrets",
@@ -126,8 +129,8 @@ def test_auto_start_blocked_by_startup_guard_alerts(monkeypatch: pytest.MonkeyPa
     assert _delivered("runtime_start_failed") == 1
 
 
-def test_missing_credentials_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
-    manager = _manager(monkeypatch, _FailingRuntime(failures=0))
+def test_missing_credentials_alerts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    manager = _manager(monkeypatch, _FailingRuntime(failures=0), tmp_path)
     monkeypatch.setattr(manager, "get_credentials", lambda: ("", ""))
 
     with pytest.raises(ValueError, match="anahtarı/secret eksik"):
@@ -137,10 +140,10 @@ def test_missing_credentials_alerts(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _delivered("runtime_start_failed") == 1
 
 
-def test_manual_transient_failure_alerts_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_manual_transient_failure_alerts_without_retry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A manual start has no retry behind it, so a transient failure is
     terminal and must alert immediately."""
-    manager = _manager(monkeypatch, _FailingRuntime(failures=1))
+    manager = _manager(monkeypatch, _FailingRuntime(failures=1), tmp_path)
 
     with pytest.raises(TransientStartupError):
         manager.start_engine()
@@ -149,12 +152,12 @@ def test_manual_transient_failure_alerts_without_retry(monkeypatch: pytest.Monke
     assert _delivered("runtime_start_failed") == 1
 
 
-def test_retrying_auto_start_alerts_only_past_the_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retrying_auto_start_alerts_only_past_the_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Retries are expected to clear a network blip: the alert waits until
     the retries stop looking transient, then repeats periodically with the
     attempt count instead of firing on every attempt."""
     flaky = _FailingRuntime(failures=5)
-    manager = _manager(monkeypatch, flaky)
+    manager = _manager(monkeypatch, flaky, tmp_path)
     _no_wait(monkeypatch)
 
     asyncio.run(manager.auto_start_engine())
@@ -164,9 +167,9 @@ def test_retrying_auto_start_alerts_only_past_the_threshold(monkeypatch: pytest.
     assert _delivered("runtime_start_failed") == 1
 
 
-def test_long_retry_loop_repeats_the_alert_with_a_count(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_long_retry_loop_repeats_the_alert_with_a_count(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     flaky = _FailingRuntime(failures=13)
-    manager = _manager(monkeypatch, flaky)
+    manager = _manager(monkeypatch, flaky, tmp_path)
     _no_wait(monkeypatch)
 
     asyncio.run(manager.auto_start_engine())

@@ -8,6 +8,7 @@ account — the suite passed on a fresh checkout and failed on the trading host.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -106,3 +107,61 @@ def test_the_ops_health_read_never_targets_the_operator_snapshot() -> None:
 
     assert "error" not in payload, payload
     assert protected_state_path(payload["snapshot_path"]) is None, payload["snapshot_path"]
+
+
+# --- Writes that do not go through open(): refused before they happen --------
+#
+# Each probe names a production path and must raise the guard's error. The
+# refusal is the expected outcome, so the recorded access is consumed afterwards.
+
+
+def test_deletes_renames_and_directory_creation_under_production_state_are_refused() -> None:
+    from .conftest import _STATE_ACCESSES, ProductionStateAccessError
+
+    runtime_dir = REPO_ROOT / "data" / "runtime"
+    with pytest.raises(ProductionStateAccessError):
+        (runtime_dir / "guard-probe.json").unlink(missing_ok=True)
+    with pytest.raises(ProductionStateAccessError):
+        os.rename(str(runtime_dir / "guard-probe.json"), str(runtime_dir / "guard-probe.moved"))
+    with pytest.raises(ProductionStateAccessError):
+        (runtime_dir / "guard-probe-dir").mkdir()
+    _STATE_ACCESSES.clear()
+
+
+def test_a_symlink_into_production_state_is_refused(tmp_path: Path) -> None:
+    """The name carries no marker and the target sits under the state dir: resolution decides."""
+    from .conftest import _STATE_ACCESSES, ProductionStateAccessError
+
+    link = tmp_path / "harmless-name.json"
+    link.symlink_to(REPO_ROOT / "data" / "runtime" / "parayabuck.sqlite3")
+    with pytest.raises(ProductionStateAccessError):
+        open(link, "rb")
+    _STATE_ACCESSES.clear()
+
+
+def test_name_resolution_and_remote_udp_sends_are_refused_before_any_packet() -> None:
+    """The network guard covers DNS and connectionless sends, not only connect()."""
+    import socket
+
+    from .conftest import OutboundNetworkBlocked
+
+    with pytest.raises(OutboundNetworkBlocked):
+        socket.getaddrinfo("example.invalid", 443)
+    with pytest.raises(OutboundNetworkBlocked):
+        socket.gethostbyname("example.invalid")
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with pytest.raises(OutboundNetworkBlocked):
+            udp.sendto(b"probe", ("8.8.8.8", 53))
+    finally:
+        udp.close()
+
+
+def test_the_reports_tree_is_write_protected_but_readable() -> None:
+    from .conftest import _STATE_ACCESSES, ProductionStateAccessError, _protected_write_path
+
+    probe = REPO_ROOT / "reports" / "guard-probe.txt"
+    assert _protected_write_path(probe) == probe.resolve()
+    with pytest.raises(ProductionStateAccessError):
+        open(probe, "w")
+    _STATE_ACCESSES.clear()

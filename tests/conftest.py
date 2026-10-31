@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import contextlib
+import functools
 import io
 import ipaddress
 import os
@@ -50,11 +51,13 @@ _PROTECTED_STATE_DIRS = (
 
 # The shipped config is read by many tests, so it is protected against writes
 # only: a test that reads config/settings.yaml is fine, one that rewrites it is not.
-_PROTECTED_WRITE_DIRS = (_REPO_ROOT / "config",)
+# reports/ is the backtest output tree (hundreds of MB on the operator's checkout,
+# so it is not walked by the signature): an unisolated backtest must not write it.
+_SHIPPED_CONFIG_DIRS = (_REPO_ROOT / "config",)
+_PROTECTED_WRITE_DIRS = _SHIPPED_CONFIG_DIRS + (_REPO_ROOT / "reports",)
 
-# Cheap prefilter: only paths mentioning these fragments are resolved and
-# classified, so the guard costs a substring test per open().
-_STATE_MARKERS = ("data/", "logs/", "config/")
+# Trees whose mtime/size signature is compared before and after every test.
+_SIGNATURE_DIRS = _PROTECTED_STATE_DIRS + _SHIPPED_CONFIG_DIRS
 
 # --- Session-wide credential and network isolation -------------------------
 #
@@ -68,8 +71,10 @@ _STATE_MARKERS = ("data/", "logs/", "config/")
 
 _CREDENTIAL_ENV_PREFIXES = ("ALPACA_", "PARAYABUCK_")
 # systemd points CREDENTIALS_DIRECTORY at the operator's secret files, which
-# config.read_credential reads before the environment: strip it too.
-_CREDENTIAL_ENV_NAMES = ("CREDENTIALS_DIRECTORY",)
+# config.read_credential reads before the environment: strip it too. CONFIG_PATH
+# (exported by a developer shell or the operator's service) would make every
+# default load_config() read the real settings file: strip it for the session.
+_CREDENTIAL_ENV_NAMES = ("CREDENTIALS_DIRECTORY", "CONFIG_PATH")
 _LOOPBACK_HOSTS = frozenset({"", "localhost", "::1", "0:0:0:0:0:0:0:1"})
 _MISSING = object()
 
@@ -116,15 +121,54 @@ def _block_outbound_network():
             return real_create_connection(address, *args, **kwargs)
         raise OutboundNetworkBlocked(f"outbound network blocked in tests: create_connection({address!r})")
 
+    # Name resolution and connectionless sends reach the network without a
+    # connect(): a DNS lookup or a UDP datagram to a remote address is refused too.
+    real_getaddrinfo = socket.getaddrinfo
+    real_gethostbyname = socket.gethostbyname
+    real_sendto = socket.socket.sendto
+    real_sendmsg = socket.socket.sendmsg
+
+    def _guard_getaddrinfo(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # host=None names the local interfaces (a server bind), never a remote peer.
+        if host is None or _is_loopback(host):
+            return real_getaddrinfo(host, *args, **kwargs)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: getaddrinfo({host!r})")
+
+    def _guard_gethostbyname(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if _is_loopback(host):
+            return real_gethostbyname(host, *args, **kwargs)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: gethostbyname({host!r})")
+
+    def _guard_sendto(self, data, *args):  # type: ignore[no-untyped-def]
+        # sendto(data, [flags,] address): the address is always the last argument.
+        if getattr(self, "family", None) == socket.AF_UNIX or not args or _is_loopback(args[-1]):
+            return real_sendto(self, data, *args)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: sendto({args[-1]!r})")
+
+    def _guard_sendmsg(self, buffers, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # sendmsg(buffers, ancdata, flags, address): an unconnected send names its address.
+        address = kwargs["address"] if "address" in kwargs else (args[2] if len(args) > 2 else None)
+        if getattr(self, "family", None) == socket.AF_UNIX or address is None or _is_loopback(address):
+            return real_sendmsg(self, buffers, *args, **kwargs)
+        raise OutboundNetworkBlocked(f"outbound network blocked in tests: sendmsg({address!r})")
+
     socket.socket.connect = _guard_connect  # type: ignore[method-assign]
     socket.socket.connect_ex = _guard_connect_ex  # type: ignore[method-assign]
     socket.create_connection = _guard_create_connection  # type: ignore[assignment]
+    socket.getaddrinfo = _guard_getaddrinfo  # type: ignore[assignment]
+    socket.gethostbyname = _guard_gethostbyname  # type: ignore[assignment]
+    socket.socket.sendto = _guard_sendto  # type: ignore[method-assign]
+    socket.socket.sendmsg = _guard_sendmsg  # type: ignore[method-assign]
     try:
         yield
     finally:
         socket.socket.connect = real_connect  # type: ignore[method-assign]
         socket.socket.connect_ex = real_connect_ex  # type: ignore[method-assign]
         socket.create_connection = real_create_connection  # type: ignore[assignment]
+        socket.getaddrinfo = real_getaddrinfo  # type: ignore[assignment]
+        socket.gethostbyname = real_gethostbyname  # type: ignore[assignment]
+        socket.socket.sendto = real_sendto  # type: ignore[method-assign]
+        socket.socket.sendmsg = real_sendmsg  # type: ignore[method-assign]
 
 
 _saved_credential_env: dict[str, str] = {}
@@ -257,21 +301,28 @@ def _path_text(path: object) -> str | None:
     return raw
 
 
-def protected_state_path(path: object) -> Path | None:
-    """Return ``path`` resolved when it names a file under a production state dir."""
+def _resolved_under(path: object, roots: tuple[Path, ...]) -> Path | None:
+    """``path`` resolved (symlinks followed) when it lands under one of ``roots``.
+
+    The resolution happens before the comparison: a symlink from anywhere in the
+    temp dir into the operator's state names the state, whatever its spelling.
+    """
     raw = _path_text(path)
     if raw is None:
         return None
-    if not any(marker in raw for marker in _STATE_MARKERS):
-        return None
     try:
         resolved = Path(raw).resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
         return None
-    for root in _PROTECTED_STATE_DIRS:
+    for root in roots:
         if resolved == root or root in resolved.parents:
             return resolved
     return None
+
+
+def protected_state_path(path: object) -> Path | None:
+    """Return ``path`` resolved when it names a file under a production state dir."""
+    return _resolved_under(path, _PROTECTED_STATE_DIRS)
 
 
 def _display(path: str) -> str:
@@ -283,28 +334,23 @@ def _display(path: str) -> str:
 
 def _protected_config_path(path: object) -> Path | None:
     """Return ``path`` resolved when it names a file under the shipped config dir."""
-    raw = _path_text(path)
-    if raw is None or "config/" not in raw:
-        return None
-    try:
-        resolved = Path(raw).resolve()
-    except OSError:
-        return None
-    for root in _PROTECTED_WRITE_DIRS:
-        if resolved == root or root in resolved.parents:
-            return resolved
-    return None
+    return _resolved_under(path, _SHIPPED_CONFIG_DIRS)
+
+
+def _protected_write_path(path: object) -> Path | None:
+    """Return ``path`` resolved when a write to it would touch the config or the reports tree."""
+    return _resolved_under(path, _PROTECTED_WRITE_DIRS)
 
 
 def _state_tree_signature() -> dict[str, tuple[int, int]]:
-    """mtime/size of every entry under the production state dirs.
+    """mtime/size of every entry under the production state and config dirs.
 
     Walks with ``os.walk`` and ignores errors: a background thread that is
     still rotating files can remove a directory mid-walk, and that must not
     fail the test that happens to be running.
     """
     signature: dict[str, tuple[int, int]] = {}
-    for root in _PROTECTED_STATE_DIRS:
+    for root in _SIGNATURE_DIRS:
         for dirpath, dirnames, filenames in os.walk(root):
             for name in dirnames + filenames:
                 path = os.path.join(dirpath, name)
@@ -328,6 +374,25 @@ def _is_writing_flags(flags: object) -> bool:
     if not isinstance(flags, int):
         return True
     return bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+
+
+def child_process_env(src_dir: Path, tmp_path: Path) -> dict[str, str]:
+    """Environment for a test subprocess, which runs outside the in-process guards.
+
+    The child gets the session's credential and dotenv hygiene: no ALPACA_* or
+    PARAYABUCK_* variables, no CREDENTIALS_DIRECTORY or CONFIG_PATH, and an
+    ENV_PATH that names no file. ``src_dir`` comes first on the path.
+    """
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(_CREDENTIAL_ENV_PREFIXES) and key not in _CREDENTIAL_ENV_NAMES
+    }
+    env["ENV_PATH"] = str(tmp_path / "absent.env")
+    env["PYTHONPATH"] = str(src_dir)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTEST_ISOLATION"] = "1"
+    return env
 
 
 @pytest.fixture
@@ -477,7 +542,7 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def _check(path: object, *, writing: bool) -> None:
         hit = protected_state_path(path)
         if hit is None and writing:
-            hit = _protected_config_path(path)
+            hit = _protected_write_path(path)
         if hit is not None:
             _STATE_ACCESSES.append(_display(str(hit)))
             raise ProductionStateAccessError(
@@ -500,6 +565,31 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return orig_os_open(path, flags, *args, **kwargs)
 
     monkeypatch.setattr(os, "open", _guarded_os_open)
+
+    # Every write that does not go through open(): deletes, renames, directory
+    # creation and removal. pathlib's unlink/rename/replace/mkdir/rmdir and
+    # os.makedirs are thin wrappers over these os functions, and shutil.rmtree is
+    # wrapped directly, so one hook per entry point covers both spellings.
+    def _guard_paths(orig: object, indexes: tuple[int, ...]) -> object:
+        @functools.wraps(orig)  # type: ignore[arg-type]
+        def _guarded(*args, **kwargs):  # type: ignore[no-untyped-def]
+            for index in indexes:
+                if len(args) > index:
+                    _check(args[index], writing=True)
+            return orig(*args, **kwargs)  # type: ignore[operator]
+
+        return _guarded
+
+    for owner, name, indexes in (
+        (os, "unlink", (0,)),
+        (os, "remove", (0,)),
+        (os, "rmdir", (0,)),
+        (os, "mkdir", (0,)),
+        (os, "rename", (0, 1)),
+        (os, "replace", (0, 1)),
+        (shutil, "rmtree", (0,)),
+    ):
+        monkeypatch.setattr(owner, name, _guard_paths(getattr(owner, name), indexes))
 
     # RiskPeakService resolves its sidecar to the relative data/runtime default
     # when neither peak_state_path nor runtime_state_dir is given, so such a
@@ -661,6 +751,17 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # an engine; tests asserting the single-runner guard delete the variable.
     monkeypatch.setenv("PARAYABUCK_TRADING_HOST", "1")
 
+    # An explicit start clears the operator Stop record, which the default config
+    # resolves to the checkout's data/runtime. Every manager's record lives under
+    # this test's tmp dir instead (the same path the engine tests that check it use).
+    try:
+        from parayabuck.web.managers import engine as engine_manager_module
+
+        stop_marker = tmp_path / "runtime" / engine_manager_module.OPERATOR_STOP_MARKER_FILENAME
+        monkeypatch.setattr(engine_manager_module.EngineManager, "_operator_stop_marker", lambda self: stop_marker)
+    except ImportError:
+        pass
+
     # Redirect any direct sqlite3.connect to production files to isolated tmp
     import sqlite3 as _sqlite3
 
@@ -729,15 +830,15 @@ def _test_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 iso_journal_instance.stop(timeout=0.5)
             except Exception:
                 pass
-        # Restore old global if it was there
+        # A journal this test installed (other than the isolated one) is stopped;
+        # the global the session had before the test is restored untouched.
+        lingering = journal_module._global_journal
         journal_module._global_journal = old_global
-        # Also ensure any lingering global is cleared
-        if journal_module._global_journal is not None and journal_module._global_journal is not iso_journal_instance:
+        if lingering is not None and lingering is not old_global and lingering is not iso_journal_instance:
             try:
-                journal_module._global_journal.stop(timeout=0.5)
+                lingering.stop(timeout=0.5)
             except Exception:
                 pass
-            journal_module._global_journal = None
     except Exception:
         pass
 

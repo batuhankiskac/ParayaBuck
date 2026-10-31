@@ -64,7 +64,33 @@ def _order(
         strategy_version="1",
     )
     repo.record_order(order, "submitted")
+    _pin_order_time(repo, client_order_id, when)
     return client_order_id
+
+
+def _pin_order_time(repo: PortfolioStateRepository, client_order_id: str, when: datetime) -> None:
+    """``record_order`` stamps the wall clock; pin the row to the scenario's time.
+
+    The consumption rules compare an order's creation with an adjustment's, so a
+    clock tie or a slow loop must not decide which one came first.
+    """
+    with repo.store.lock, repo.store.connection:
+        repo.store.connection.execute(
+            "UPDATE portfolio_orders SET created_at = ? WHERE client_order_id = ?",
+            (when.isoformat(), client_order_id),
+        )
+
+
+def _clear_stale(repo: PortfolioStateRepository, when: datetime) -> float:
+    """``clear_stale_ownership`` at the scenario time ``when`` (its row is pinned, as _order's is)."""
+    quantity = repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY)
+    with repo.store.lock, repo.store.connection:
+        repo.store.connection.execute(
+            "UPDATE portfolio_ownership_adjustments SET created_at = ? "
+            "WHERE account_id = ? AND symbol = ? AND kind = 'stale_ownership_clear'",
+            (when.isoformat(), ACCOUNT, SYMBOL),
+        )
+    return quantity
 
 
 def _apply_fill(
@@ -212,7 +238,7 @@ def test_only_a_sell_older_than_the_adjustment_consumes_it(tmp_path: Path) -> No
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     early_exit = _order(repo, "sell", 100.0, ENTRY_PRICE, T0 + timedelta(minutes=1), "cid-early-exit")
-    assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
+    assert _clear_stale(repo, T0 + timedelta(minutes=1, seconds=30)) == 100.0
 
     _apply_fill(repo, early_exit, 100.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
 
@@ -227,7 +253,7 @@ def test_a_newer_sell_does_not_consume_a_stale_adjustment(tmp_path: Path) -> Non
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     _unfilled_exit(repo, T0 + timedelta(minutes=1))
-    assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
+    assert _clear_stale(repo, T0 + timedelta(minutes=1, seconds=30)) == 100.0
 
     _fill(repo, "sell", 30.0, ENTRY_PRICE, T0 + timedelta(minutes=5), client_order_id="cid-later-exit")
 
@@ -244,9 +270,9 @@ def test_foreign_liquidation_rebuy_and_partial_exit_stay_consistent(tmp_path: Pa
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     _unfilled_exit(repo, T0 + timedelta(minutes=1))
-    assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
-    _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=1))
-    _fill(repo, "sell", 30.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
+    assert _clear_stale(repo, T0 + timedelta(minutes=1, seconds=30)) == 100.0
+    _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
+    _fill(repo, "sell", 30.0, ENTRY_PRICE, T0 + timedelta(minutes=3))
 
     assert _owned(repo) == pytest.approx(50.0)
     assert [(row["kind"], row["outstanding_quantity"]) for row in repo.ownership_adjustments(ACCOUNT)] == [
@@ -261,9 +287,9 @@ def test_a_rebuy_does_not_resurrect_cleared_ownership(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     _fill(repo, "buy", 100.0, ENTRY_PRICE, T0)
     _unfilled_exit(repo, T0 + timedelta(minutes=1))
-    assert repo.clear_stale_ownership(ACCOUNT, SYMBOL, Market.EQUITY) == 100.0
+    assert _clear_stale(repo, T0 + timedelta(minutes=1, seconds=30)) == 100.0
 
-    _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=1))
+    _fill(repo, "buy", 80.0, ENTRY_PRICE, T0 + timedelta(minutes=2))
 
     assert _owned(repo) == pytest.approx(80.0)
     assert [row["kind"] for row in repo.ownership_adjustments(ACCOUNT)] == ["stale_ownership_clear"]
@@ -395,6 +421,10 @@ def _with_plan_digest(argv: tuple[str, ...]) -> tuple[str, ...]:
     with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
         main(["ops", "rebase-ownership", *flags])
     match = re.search(r"Plan digest : (\w+)", buffer.getvalue())
+    # A dry run that stops before the plan (a usage error, nothing to rebase) prints
+    # no digest; the placeholder then reaches the validation the test is about. A
+    # test whose refusal comes from the plan itself must call the dry run directly,
+    # because a placeholder there passes on the digest check instead.
     return (*argv, "--plan-digest", match.group(1) if match else "0" * 12)
 
 
@@ -540,21 +570,24 @@ def test_rebase_cli_refuses_while_orders_are_open(tmp_path: Path, capsys: pytest
         "submitted",
     )
 
-    exit_code = _cli(
-        tmp_path,
-        SYMBOL,
-        "--broker-qty",
-        "200",
-        "--db",
-        str(tmp_path / "runtime.sqlite3"),
-        "--account-id",
-        ACCOUNT,
-        "--confirm",
-        "100",
+    # The refusal is the plan's own (open orders), so it comes from the dry run:
+    # no digest exists to confirm, and a confirm run would only reach the digest check.
+    exit_code = main(
+        [
+            "ops",
+            "rebase-ownership",
+            SYMBOL,
+            "--broker-qty",
+            "200",
+            "--db",
+            str(tmp_path / "runtime.sqlite3"),
+            "--account-id",
+            ACCOUNT,
+        ]
     )
 
     assert exit_code == 1
-    assert "Refusing" in capsys.readouterr().err
+    assert "non-terminal portfolio order" in capsys.readouterr().err
     assert _owned(repo) == pytest.approx(100.0)
 
 

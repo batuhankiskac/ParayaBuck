@@ -43,7 +43,7 @@ class _Broker:
 
 
 def test_start_closes_an_account_broker_built_while_the_runtime_started(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """An /api/account poll that lands after runtime.start() but before the
     runtime broker is installed lazily builds a broker; the hand-over must
@@ -87,6 +87,9 @@ def test_start_closes_an_account_broker_built_while_the_runtime_started(
         lambda _path: SimpleNamespace(runtime=SimpleNamespace(mode=SimpleNamespace(value="paper"))),
     )
     monkeypatch.setattr(manager, "get_credentials", lambda: ("key", "secret"))
+    # The start clears the operator Stop record: keep it out of data/runtime.
+    stop_marker = tmp_path / "runtime" / engine_module.OPERATOR_STOP_MARKER_FILENAME
+    monkeypatch.setattr(manager, "_operator_stop_marker", lambda: stop_marker)
 
     manager.start_engine()
 

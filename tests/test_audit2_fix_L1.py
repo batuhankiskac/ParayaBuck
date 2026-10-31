@@ -381,6 +381,9 @@ def _settings(tmp_path: Path, *, raw_override: str | None = None) -> Path:
         return path
     raw = yaml.safe_load(REPO_SETTINGS.read_text(encoding="utf-8"))
     raw["runtime"]["decision_db_path"] = str(tmp_path / "runtime" / "parayabuck.sqlite3")
+    # The doctor also inspects the backup and backtest output trees: keep them in tmp_path.
+    raw["backup"]["path"] = str(tmp_path / "backups")
+    raw["backtest"]["output_dir"] = str(tmp_path / "reports")
     path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
     return path
 

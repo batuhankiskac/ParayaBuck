@@ -67,7 +67,7 @@ def test_execution_check_flags_ambiguous_orders(tmp_path: Path) -> None:
     check = _check_execution(str(db))
 
     assert check.status == HealthStatus.CRITICAL
-    assert check.summary == "1 ambiguous orders require manual intervention"
+    assert check.summary == "1 belirsiz emir elle müdahale gerektiriyor"
 
 
 def test_execution_check_flags_stale_submitting_orders(tmp_path: Path) -> None:
@@ -77,7 +77,7 @@ def test_execution_check_flags_stale_submitting_orders(tmp_path: Path) -> None:
     check = _check_execution(str(db))
 
     assert check.status == HealthStatus.DEGRADED
-    assert check.summary == "1 stuck submitting orders >10m"
+    assert check.summary == "1 emir 10 dakikadan uzun süredir gönderimde takılı"
 
 
 def test_execution_check_ok_for_fresh_submitting_order(tmp_path: Path) -> None:
@@ -87,7 +87,7 @@ def test_execution_check_ok_for_fresh_submitting_order(tmp_path: Path) -> None:
     check = _check_execution(str(db))
 
     assert check.status == HealthStatus.OK
-    assert check.summary == "no stuck/ambiguous orders"
+    assert check.summary == "takılı veya belirsiz emir yok"
 
 
 def test_forensic_readers_split_unresolved_orders(tmp_path: Path) -> None:

@@ -15,11 +15,21 @@
     if (meta) meta.content = controlToken;
   }
 
+  // A request that gets no response at all is reported in Turkish, not as the browser's raw network error text.
+  async function send(url, init) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      if (err && err.name === "AbortError") throw new Error("Sunucu zamanında yanıt vermedi");
+      throw new Error("Sunucuya ulaşılamadı; bağlantıyı kontrol edin");
+    }
+  }
+
   async function controlFetch(url, options) {
     options = options || {};
     // always add no-store for control-plane
     const headers = Object.assign({}, options.headers || {}, controlHeaders);
-    let response = await fetch(url, Object.assign({}, options, { headers, cache: "no-store" }));
+    let response = await send(url, Object.assign({}, options, { headers, cache: "no-store" }));
     if (response.status !== 403) return response;
     let detail = "";
     try {
@@ -32,7 +42,7 @@
     if (detail !== "Invalid local control token") return response;
     await refreshControlToken();
     const retryHeaders = Object.assign({}, options.headers || {}, controlHeaders);
-    response = await fetch(url, Object.assign({}, options, { headers: retryHeaders, cache: "no-store" }));
+    response = await send(url, Object.assign({}, options, { headers: retryHeaders, cache: "no-store" }));
     return response;
   }
 
@@ -51,7 +61,8 @@
       const parts = detail.map(function (item) {
         if (item && typeof item === "object") {
           const loc = Array.isArray(item.loc) ? item.loc.filter(function (p) { return p !== "body"; }).join(".") : "";
-          const msg = item.msg !== undefined ? String(item.msg) : JSON.stringify(item);
+          // Pydantic prefixes custom validator messages with "Value error, "; the operator reads only the text.
+          const msg = item.msg !== undefined ? String(item.msg).replace(/^Value error, /, "") : JSON.stringify(item);
           return loc ? loc + ": " + msg : msg;
         }
         return String(item);
@@ -65,7 +76,7 @@
   async function readJson(r) {
     if (!r.ok) {
       const payload = await responsePayload(r);
-      const err = new Error(detailText(payload, "istek ba\u015far\u0131s\u0131z"));
+      const err = new Error(detailText(payload, "\u0130stek ba\u015far\u0131s\u0131z"));
       err.status = r.status;
       err.payload = payload;
       throw err;
@@ -81,7 +92,7 @@
     const controller = typeof AbortController === "function" ? new AbortController() : null;
     const timer = controller ? global.setTimeout(function () { controller.abort(); }, READ_TIMEOUT_MS) : null;
     try {
-      return await readJson(await fetch(url, { cache: "no-store", signal: controller ? controller.signal : undefined }));
+      return await readJson(await send(url, { cache: "no-store", signal: controller ? controller.signal : undefined }));
     } finally {
       if (timer !== null) global.clearTimeout(timer);
     }

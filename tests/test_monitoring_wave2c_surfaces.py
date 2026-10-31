@@ -141,7 +141,7 @@ def test_recovered_journal_burst_does_not_pin_degraded(tmp_path: Path) -> None:
     )
 
     assert check["status"] == "OK"
-    assert "recovered" in check["summary"]
+    assert "kurtarıldı" in check["summary"]
 
 
 def test_currently_failing_journal_is_degraded(tmp_path: Path) -> None:

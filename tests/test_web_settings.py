@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -76,13 +77,22 @@ class _RestartFailureManagerStub(_CountingEngineManager):
         raise TimeoutError("Alpaca timed out")
 
 
-@pytest.mark.parametrize("state", ["warming_up", "degraded", "halted", "stop_failed"])
-def test_engine_manager_refuses_second_runtime(state: str) -> None:
+@pytest.mark.parametrize(
+    ("state", "label"),
+    [
+        ("warming_up", "ısınıyor"),
+        ("degraded", "kısıtlı çalışıyor"),
+        ("halted", "güvenlik kilidi devrede"),
+        ("stop_failed", "durdurma hatası"),
+    ],
+)
+def test_engine_manager_refuses_second_runtime(state: str, label: str) -> None:
     manager = EngineManager()
     manager.engine_state = state
     manager.runtime = object()
 
-    with pytest.raises(ValueError, match="Motor zaten"):
+    # The refusal names the state in Turkish; the label must match this state, not any state.
+    with pytest.raises(ValueError, match=re.escape(f"Motor zaten {label}.")):
         manager.start_engine()
 
 
@@ -292,7 +302,7 @@ def test_credential_save_rejects_read_only_storage_before_stopping_the_engine(tm
     manager = _prepare_credential_save(tmp_path, monkeypatch)
     manager.env_path = tmp_path / "missing_dir" / ".env"
 
-    with pytest.raises(ValueError, match="read-only"):
+    with pytest.raises(ValueError, match="salt okunur"):
         asyncio.run(SettingsService(manager).save_settings(_credential_payload()))
 
     assert manager.stop_calls == 0, "engine was stopped for a save that could never write"

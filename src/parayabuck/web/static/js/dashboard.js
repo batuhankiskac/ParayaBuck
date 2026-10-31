@@ -37,7 +37,34 @@
       not_attempted: "Henüz denenmedi", rebalance_complete: "Dengeleme tamamlandı",
       rebalance_waiting_for_slot: "Pozisyon yuvası bekleniyor", replan_snapshot_stale: "Hesap görüntüsü eski",
       stale_decision_buy_held: "Eski karar, alım tutuldu", submit_blocked: "Gönderim engellendi",
-      replan_sell_submitted: "Satış gönderildi, alım bekliyor", closed_unresolved: "Alım iptal, satış çözülmedi"
+      replan_sell_submitted: "Satış gönderildi, alım bekliyor", closed_unresolved: "Alım iptal, satış çözülmedi",
+      buy_phase_submitted: "Alım gönderildi", replan_order_in_flight: "Yeniden planlanan emir çözülmedi",
+      signal_cross_check_pending: "Sinyal çapraz kontrolü bekleniyor"
+    };
+    const RECOVERED_PREFIX = "recovered_session:";
+    const STRATEGY_NAMES = { equity_leveraged_trend_v1: "Kaldıraçlı endeks trendi v1" };
+    const SOURCE_LABELS = { broker: "broker", cache: "önbellek", unavailable: "yok" };
+    const SCANNER_LABELS = { static: "Sabit liste", disabled: "Kapalı" };
+    const OWNERSHIP_KIND_LABELS = {
+      stale_ownership_clear: "eski kayıt temizliği", split: "bölünme (split)",
+      operator_acquisition: "operatör alımı", foreign_sell: "harici satış"
+    };
+    const HEALTH_STATUS_LABELS = { OK: "Tamam", DEGRADED: "Kısıtlı", BLOCKED: "Engelli", CRITICAL: "Kritik", UNKNOWN: "Bilinmiyor" };
+    const CHECK_TITLES = {
+      workers: "İşçiler", queue: "Olay kuyruğu", account: "Hesap verisi", reconciliation: "Mutabakat",
+      signal_adjustment: "Sinyal düzeltmesi", operator_halt: "Operatör durdurması", market_halts: "Piyasa durdurmaları",
+      risk: "Risk kilidi", execution: "Emir yürütme", observability: "Günlükleme", intent_watchdog: "Niyet bekçisi"
+    };
+    // Event kinds shown as the feed label; the backend message stays in the tooltip.
+    const EVENT_KIND_LABELS = {
+      runtime_started: "Motor başladı", runtime_stopping: "Motor durduruluyor",
+      runtime_health_degraded: "Sağlık bozuldu", runtime_health_recovered: "Sağlık toparlandı",
+      account_became_stale: "Hesap verisi eskidi", account_recovered: "Hesap verisi geri geldi",
+      reconciliation_succeeded: "Mutabakat tamam", rebalance_phase_changed: "Dengeleme aşaması değişti",
+      decision_summary: "Karar özeti", portfolio_no_trade: "İşlem yapılmadı",
+      stale_ownership_clear: "Eski sahiplik kaydı temizlendi", circuit_breaker: "Güvenlik kilidi",
+      safety_lock_reset: "Güvenlik kilidi açıldı", intent_recovered: "Niyet kurtarıldı",
+      daily_summary: "Günlük özet", signal_source_mismatch: "Sinyal kaynağı uyuşmazlığı"
     };
     const STRATEGY_DESC = {
       equity_leveraged_trend_v1: "QQQ'da üç trend sinyalinden en az ikisi (200 günlük ortalamanın üzeri, 252 günlük getiri pozitif, 126 günlük kanal ortasının üzeri) olumluyken QLD (2x Nasdaq-100) tutar; trend kapalıyken QQQ 50 günlük ortalamanın üzerinde, 20 günlük oynaklığı 252 günlük medyanının altında ve 20 günlük getirisi pozitifse yarım ağırlıkla erken giriş yapar; piyasa dalgalandıkça payı küçültür, trend bozulunca nakde geçer. Her işlem günü kontrol eder."
@@ -115,7 +142,7 @@
           : "güncel · " + fmt.time(a.snapshot_at);
         fresh.replaceChildren(el("span", { className: "dot" + (stale ? "" : " running") }), el("span", { text: label }));
       }
-      setText("grossExposureSub", a.stale ? "eski veri (" + (a.source || "?") + ")" : "brüt maruziyet · dış pozisyonlar dahil");
+      setText("grossExposureSub", a.stale ? "eski veri (" + (SOURCE_LABELS[a.source] || a.source || "?") + ")" : "brüt maruziyet · dış pozisyonlar dahil");
       if (Array.isArray(a.positions)) renderPositions(a.positions, a.equity);
     }
 
@@ -323,7 +350,7 @@
     function renderStrategy(prefix, card) {
       if (!card || card.unavailable) { setText(prefix + "StrategyDesc", "Strateji bilgisi alınamadı."); return; }
       const strategy = card.strategy || {};
-      setText(prefix + "StrategyName", strategy.display_name || card.name || "—");
+      setText(prefix + "StrategyName", STRATEGY_NAMES[card.name] || strategy.display_name || card.name || "—");
       setText(prefix + "StrategyDesc", STRATEGY_DESC[card.name] || strategy.name || card.name || "—");
       setText(prefix + "StatusBadge", STRATEGY_STATUS[card.status] || card.status || "—", PB.badgeClass(card.status === "disabled" ? "" : card.status));
       setText(prefix + "Signal", cadence(strategy.signal_timeframe));
@@ -344,8 +371,8 @@
       if (cuEl) {
         // "blocked:<reason>" and "recovered_session:<status>" carry a nested status.
         const label = status.indexOf("blocked:") === 0 ? "Engelli: " + status.slice(8)
-          : status.indexOf("recovered_session:") === 0
-            ? "Eksik oturum kararı: " + (CATCH_UP[status.slice(19)] || status.slice(19))
+          : status.indexOf(RECOVERED_PREFIX) === 0
+            ? "Eksik oturum kararı: " + (CATCH_UP[status.slice(RECOVERED_PREFIX.length)] || status.slice(RECOVERED_PREFIX.length))
             : (CATCH_UP[status] || status);
         cuEl.textContent = label;
         cuEl.title = cu.at ? "Son deneme: " + fmt.dateTime(cu.at) : cu.next_boundary_after ? "Sıradaki sınır: " + fmt.dateTime(cu.next_boundary_after) : status;
@@ -515,8 +542,10 @@
       setText("riskEpoch", epoch ? fmt.date(epoch.session_date) + " · taban " + (isNum(epoch.peak_equity) ? fmt.money(epoch.peak_equity) : "—") : "—");
       const cap = risk.buy_capacity || {};
       const ready = !cap.unavailable;
+      // Reconciliation status and buy-capacity reasons are separate facts; each gets its own row.
       const reasons = Object.entries(cap.suppression_reasons || {}).concat(Object.entries(cap.halt_reasons || {})).map(function (e) { return e[0] + ": " + e[1]; }).join(", ");
-      setText("riskAdmission", ready ? ({ complete: "Tamam", pending: "Bekleniyor", failed: "Başarısız" }[cap.reconciliation_status] || cap.reconciliation_status || "—") + (reasons ? " · " + reasons : "") : "—");
+      setText("riskAdmission", ready ? ({ complete: "Tamam", pending: "Bekleniyor", failed: "Başarısız" }[cap.reconciliation_status] || cap.reconciliation_status || "—") : "—");
+      setText("riskCapacityReasons", ready ? (reasons || "Yok") : "—");
       setText("riskSlots", ready ? cap.positions_count + " / " + cap.effective_slots + " / " + cap.maximum_positions : "—");
       setText("riskWorking", ready ? String(cap.broker_working_order_count) : "—");
       setText("riskGrossHeadroom", ready ? fmt.money(cap.available_gross_buy_headroom) : "—");
@@ -561,7 +590,7 @@
         return el("tr", null, [
           cell(el("span", { className: "sym", text: o.symbol })), cell(sideBadge(o.side)), cell(fmt.num(o.quantity, 6), "r"),
           cell(fmt.price(o.reference_price), "r"), cell(el("span", { className: "badge", text: o.status || "—" })),
-          cell(lin.strategy ? lin.strategy + " · " + fmt.date(lin.decision_timestamp) : "—")
+          cell(lin.strategy ? (STRATEGY_NAMES[lin.strategy] || lin.strategy) + " · " + fmt.date(lin.decision_timestamp) : "—")
         ]);
       }));
     }
@@ -593,7 +622,7 @@
       const dataOk = markets.equity ? markets.equity.stream_healthy !== false : null;
       setText("healthData", dataOk === null ? "Bilinmiyor" : dataOk ? "Güncel" : "Gecikme var", dataOk === null ? "" : dataOk ? "pos" : "neg");
       const fresh = h.account_freshness || {};
-      setText("healthAccount", (fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
+      setText("healthAccount", (SOURCE_LABELS[fresh.source] || fresh.source || "—") + (isNum(fresh.age_seconds) ? " · " + fmt.duration(fresh.age_seconds) : ""));
       setText("healthHeartbeat", h.last_heartbeat ? fmt.relative(h.last_heartbeat) : "—");
       setText("healthRestarts", (h.restart_count || 0) + " kez");
       const db = h.database || {};
@@ -624,7 +653,7 @@
     function renderUniverse(u) {
       if (!u || u.unavailable) return;
       if (u.equity) {
-        const status = u.equity.scanner_status === "static" ? "Sabit liste" : (u.equity.scanner_status || "—");
+        const status = SCANNER_LABELS[u.equity.scanner_status] || u.equity.scanner_status || "—";
         setText("eqStatus", status + " · " + fmt.num(u.equity.observation_set_size, 0) + " sembol");
         chips("eqSymbols", u.equity.observation_set);
       }
@@ -641,7 +670,7 @@
       else box.replaceChildren.apply(box, checks.map(function (c) {
         const status = String(c.status || "").toLowerCase();
         const body = el("div", null, [
-          el("div", { className: "check-title", text: c.code }),
+          el("div", { className: "check-title", text: CHECK_TITLES[c.code] || c.code }),
           el("div", { className: "check-summary", text: c.summary || "—" }),
           c.action ? el("div", { className: "check-action", text: "→ " + c.action }) : null
         ]);
@@ -650,7 +679,8 @@
           try { text = typeof c.observed === "string" ? c.observed : JSON.stringify(c.observed, null, 2); } catch (_) { text = String(c.observed); }
           body.appendChild(el("pre", { text: text }));
         }
-        return el("div", { className: "check" }, [el("span", { className: "check-dot " + status }), body, el("span", { className: PB.badgeClass(status), text: c.status })]);
+        const statusText = HEALTH_STATUS_LABELS[String(c.status || "").toUpperCase()] || c.status;
+        return el("div", { className: "check" }, [el("span", { className: "check-dot " + status }), body, el("span", { className: PB.badgeClass(status), text: statusText })]);
       }));
       const events = data.events || [];
       const evBox = byId("opsRecentEvents");
@@ -658,7 +688,8 @@
       else if (!events.length) evBox.replaceChildren(el("li", { className: "empty-note", text: "Son olay yok" }));
       else evBox.replaceChildren.apply(evBox, events.slice(0, 12).map(function (ev) {
         const sev = { CRITICAL: "Kritik", WARNING: "Uyarı", INFO: "Bilgi", DEBUG: "Ayrıntı" }[String(ev.severity || "").toUpperCase()];
-        return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (sev ? "[" + sev + "] " : "") + (ev.message || ev.kind || "olay"), title: ev.kind || null })]);
+        const label = EVENT_KIND_LABELS[ev.kind] || ev.message || ev.kind || "olay";
+        return el("li", null, [el("time", { text: fmt.dateTime(ev.occurred_at) }), el("span", { text: (sev ? "[" + sev + "] " : "") + label, title: ev.message || ev.kind || null })]);
       }));
       const decision = data.decision;
       let text = data.decisionFailed ? "Karar açıklaması alınamadı" : "Karar açıklaması yok";
@@ -691,7 +722,7 @@
       box.replaceChildren.apply(box, rows.map(function (adj) {
         const qty = Number(adj.outstanding_quantity) || 0;
         return el("li", null, [
-          el("span", { text: adj.symbol + " · " + adj.market + " · " + adj.kind }),
+          el("span", { text: adj.symbol + " · " + adj.market + " · " + (OWNERSHIP_KIND_LABELS[adj.kind] || adj.kind) }),
           el("span", { className: qty >= 0 ? "pos" : "neg", text: (qty >= 0 ? "+" : "") + fmt.num(qty, 6) + " adet" }),
           el("small", { text: adj.note || "" })
         ]);

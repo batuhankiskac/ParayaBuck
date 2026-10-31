@@ -213,7 +213,7 @@ def test_live_prerequisites_live_config_static_checks(tmp_path: Path, monkeypatc
         assert by_id[required]["satisfied"] is True, (required, by_id[required])
     assert by_id["approval_binding"]["satisfied"] is False
     assert by_id["approval_binding"]["state"] == "unverifiable"
-    assert "account binding" in by_id["approval_binding"]["missing"]
+    assert "hesap bağı" in by_id["approval_binding"]["missing"]
     # The operator phrase confirmation is still required in this session.
     assert by_id["web_arm_token"]["satisfied"] is False
     assert config_path.exists()
@@ -256,7 +256,7 @@ def test_live_prerequisites_rejects_future_approval(tmp_path: Path, monkeypatch:
     result = _manager(root).live_prerequisites()
     by_id = {entry["id"]: entry for entry in result["items"]}
     assert by_id["approval_signature"]["satisfied"] is False
-    assert "not yet valid" in by_id["approval_signature"]["missing"]
+    assert "henüz geçerli değil" in by_id["approval_signature"]["missing"]
 
 
 def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkeypatch: Any) -> None:
@@ -272,7 +272,7 @@ def test_live_prerequisites_binding_rejects_wrong_account(tmp_path: Path, monkey
     by_id = {entry["id"]: entry for entry in result["items"]}
     assert by_id["approval_binding"]["satisfied"] is False
     assert by_id["approval_binding"]["state"] == "missing"
-    assert "different Alpaca account" in by_id["approval_binding"]["missing"]
+    assert "başka bir Alpaca hesabı" in by_id["approval_binding"]["missing"]
 
 
 def test_live_prerequisites_binding_rejects_stale_digests(tmp_path: Path, monkeypatch: Any) -> None:
@@ -288,7 +288,7 @@ def test_live_prerequisites_binding_rejects_stale_digests(tmp_path: Path, monkey
     by_id = {entry["id"]: entry for entry in result["items"]}
     assert by_id["approval_binding"]["satisfied"] is False
     assert by_id["approval_binding"]["state"] == "missing"
-    assert "configuration digests" in by_id["approval_binding"]["missing"]
+    assert "yapılandırma özetleri" in by_id["approval_binding"]["missing"]
 
 
 def test_live_prerequisites_route_returns_checklist(monkeypatch: Any) -> None:

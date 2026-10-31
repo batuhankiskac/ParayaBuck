@@ -146,7 +146,7 @@ def _alert_live_rearm_required(reason: str) -> None:
 _START_ENGINE_BLOCKING_STATES: frozenset[str] = _ACTIVE_ENGINE_STATES - {"starting"}
 # Reported instead of a probe error when the live gates are closed, so the
 # operator sees why the account binding cannot be verified yet.
-_LIVE_PROBE_SKIPPED_REASON = "live account probe skipped: live.enabled=false or PARAYABUCK_ENABLE_LIVE is not YES"
+_LIVE_PROBE_SKIPPED_REASON = "canlı hesap yoklaması atlandı: live.enabled=false veya PARAYABUCK_ENABLE_LIVE YES değil"
 
 
 def _yaml_block(raw: dict[str, Any], name: str) -> dict[str, Any]:
@@ -1817,16 +1817,16 @@ class EngineManager:
         live_enabled = bool(live_cfg.get("enabled", False))
         item(
             "config_live_enabled",
-            "Config: live.enabled=true",
+            "Yapılandırma: live.enabled=true",
             live_enabled,
-            "live.enabled is false in settings.yaml" if not live_enabled else None,
+            "settings.yaml içinde live.enabled false" if not live_enabled else None,
         )
         mode_live = str(runtime_cfg.get("mode", "paper")).lower() == "live"
         item(
             "runtime_mode_live",
-            "Config: runtime.mode=live",
+            "Yapılandırma: runtime.mode=live",
             mode_live,
-            "runtime.mode is not 'live' in settings.yaml" if not mode_live else None,
+            "settings.yaml içinde runtime.mode 'live' değil" if not mode_live else None,
         )
         try:
             cap = float(live_cfg.get("hard_dollar_cap", 0) or 0)
@@ -1835,16 +1835,16 @@ class EngineManager:
         cap_ok = cap > 0
         item(
             "live_cap",
-            "Config: live.hard_dollar_cap > 0",
+            "Yapılandırma: live.hard_dollar_cap > 0",
             cap_ok,
-            f"live.hard_dollar_cap must be greater than 0 (currently {cap:g})" if not cap_ok else None,
+            f"live.hard_dollar_cap 0'dan büyük olmalı (şu an {cap:g})" if not cap_ok else None,
         )
         env_ok = self._live_env_enabled()
         item(
             "enable_live_env",
             "PARAYABUCK_ENABLE_LIVE=YES",
             env_ok,
-            "PARAYABUCK_ENABLE_LIVE=YES is not set; restart the application with it" if not env_ok else None,
+            "PARAYABUCK_ENABLE_LIVE=YES ayarlı değil; uygulamayı bu ayarla yeniden başlatın" if not env_ok else None,
         )
 
     def _check_approval_signature(
@@ -1860,12 +1860,12 @@ class EngineManager:
         file_ok = bool(approval_path) and Path(approval_path).is_file()
         item(
             "approval_file",
-            "Operator approval file present",
+            "Operatör onay dosyası mevcut",
             file_ok,
             (
-                "live.operator_approval_path is not configured"
+                "live.operator_approval_path ayarlanmamış"
                 if not approval_path
-                else f"operator approval file not found: {approval_path}"
+                else f"operatör onay dosyası bulunamadı: {approval_path}"
             )
             if not file_ok
             else None,
@@ -1873,19 +1873,19 @@ class EngineManager:
         key_ok = len(hmac_key) >= 32
         item(
             "approval_key",
-            "Operator approval HMAC key configured",
+            "Operatör onay HMAC anahtarı tanımlı",
             key_ok,
-            f"approval key env {key_env_name} is missing or shorter than 32 characters" if not key_ok else None,
+            f"onay anahtarı ortam değişkeni {key_env_name} yok veya 32 karakterden kısa" if not key_ok else None,
         )
         approval: LiveOperatorApproval | None = None
         approval_error: str | None = None
         if file_ok and key_ok:
             try:
                 if Path(approval_path).stat().st_size > _APPROVAL_FILE_MAX_BYTES:
-                    raise _ApprovalFileError(f"larger than {_APPROVAL_FILE_MAX_BYTES} bytes")
+                    raise _ApprovalFileError(f"{_APPROVAL_FILE_MAX_BYTES} bayttan büyük")
                 parsed = json.loads(Path(approval_path).read_text(encoding="utf-8"))
                 if not isinstance(parsed, dict):
-                    raise _ApprovalFileError("not a JSON object")
+                    raise _ApprovalFileError("bir JSON nesnesi değil")
                 approval = LiveOperatorApproval(
                     operator_id=str(parsed.get("operator_id", "")),
                     account_id=str(parsed.get("account_id", "")),
@@ -1901,23 +1901,23 @@ class EngineManager:
                 expected = approval.calculated_signature(hmac_key)
                 current = datetime.now(UTC)
                 if not hmac.compare_digest(approval.signature, expected):
-                    approval_error = "approval file signature does not match the operator approval key"
+                    approval_error = "onay dosyasının imzası operatör onay anahtarıyla eşleşmiyor"
                 elif approval.approved_at > current:
-                    approval_error = "approval file is not yet valid"
+                    approval_error = "onay dosyası henüz geçerli değil"
                 elif approval.expires_at <= current:
-                    approval_error = "approval file has expired"
+                    approval_error = "onay dosyasının süresi dolmuş"
             except _ApprovalFileError as exc:
-                approval_error = f"approval file is {exc}"
+                approval_error = f"onay dosyası {exc}"
             except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 # The exception type only: parse errors echo the file's own values,
                 # and this text reaches the dashboard.
-                approval_error = f"approval file is unreadable or invalid ({type(exc).__name__})"
+                approval_error = f"onay dosyası okunamıyor veya geçersiz ({type(exc).__name__})"
         signature_ok = approval is not None and approval_error is None
         if not signature_ok and approval_error is None:
-            approval_error = "approval file or operator approval HMAC key is missing (see checks above)"
+            approval_error = "onay dosyası veya operatör onay HMAC anahtarı eksik (yukarıdaki kontrollere bakın)"
         item(
             "approval_signature",
-            "Approval signature and expiry valid",
+            "Onay imzası ve süresi geçerli",
             signature_ok,
             approval_error if not signature_ok else None,
         )
@@ -1942,7 +1942,7 @@ class EngineManager:
             # The text stays in the log only: the endpoint is read by the dashboard
             # and the SDK error may carry request details.
             log.warning("Live account probe failed during preflight: %s", exc)
-            return None, "live account probe failed; see the application log"
+            return None, "canlı hesap yoklaması başarısız; uygulama günlüğüne bakın"
 
     def _resolve_live_configuration_digests(
         self,
@@ -2001,26 +2001,26 @@ class EngineManager:
         binding_missing: str | None = None
         if approval is None:
             binding_state = "missing"
-            binding_missing = "approval file is not loadable (see approval checks above)"
+            binding_missing = "onay dosyası yüklenemiyor (yukarıdaki onay kontrollerine bakın)"
         elif account_id is None:
             binding_state = "unverifiable"
             binding_missing = (
-                f"cannot verify the live account binding: {account_probe_error}"
+                f"canlı hesap bağı doğrulanamıyor: {account_probe_error}"
                 if account_probe_error is not None
-                else "cannot verify the live account binding without reachable live credentials"
+                else "canlı hesap bağı, ulaşılabilir canlı kimlik bilgisi olmadan doğrulanamıyor"
             )
         elif expected_digests is None:
             binding_state = "unverifiable"
-            binding_missing = f"cannot verify the configuration binding: {digest_error}"
+            binding_missing = f"yapılandırma bağı doğrulanamıyor: {digest_error}"
         elif approval.account_id != account_id:
             binding_state = "missing"
-            binding_missing = "approval file was issued for a different Alpaca account"
+            binding_missing = "onay dosyası başka bir Alpaca hesabı için düzenlenmiş"
         elif set(approval.configuration_digests) != set(expected_digests):
             binding_state = "missing"
-            binding_missing = "approval file configuration digests do not match the current settings"
+            binding_missing = "onay dosyasındaki yapılandırma özetleri mevcut ayarlarla eşleşmiyor"
         item(
             "approval_binding",
-            "Approval binds this account and configuration",
+            "Onay bu hesabı ve yapılandırmayı bağlıyor",
             binding_state == "ok",
             binding_missing,
             binding_state,
@@ -2035,25 +2035,23 @@ class EngineManager:
         armed = bool(self._live_armed and self._live_arm_token is not None)
         item(
             "web_arm_token",
-            "Live confirmation phrase verified in this session",
+            "Canlı onay ifadesi bu oturumda doğrulanmış",
             armed,
-            ("complete the LIVE <account-suffix> phrase confirmation (mode chip) before starting")
-            if not armed
-            else None,
+            ("başlatmadan önce LIVE <hesap-son-dört> onay ifadesini tamamlayın (mod çipi)") if not armed else None,
         )
         creds_ok = bool(key and secret)
         item(
             "credentials",
-            "Alpaca LIVE credentials configured",
+            "Alpaca CANLI kimlik bilgileri tanımlı",
             creds_ok,
-            f"{LIVE_API_KEY_ENV} and {LIVE_SECRET_KEY_ENV} are required in the host .env" if not creds_ok else None,
+            f"{LIVE_API_KEY_ENV} ve {LIVE_SECRET_KEY_ENV} sunucudaki .env dosyasında zorunlu" if not creds_ok else None,
         )
         engine_idle = not self.has_active_runtime()
         item(
             "engine_stopped",
-            "Trading engine is stopped",
+            "İşlem motoru durmuş",
             engine_idle,
-            "stop the engine before arming live mode" if not engine_idle else None,
+            "CANLI modu etkinleştirmeden önce motoru durdurun" if not engine_idle else None,
         )
 
     def _require_valid_live_arm(self, key: str, secret: str, *, consume: bool = False) -> LiveArmToken:

@@ -108,7 +108,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.UNKNOWN,
-            summary="no health snapshot found — runtime may not have started",
+            summary="sağlık anlık görüntüsü bulunamadı — çalışma zamanı başlamamış olabilir",
             observed=None,
             threshold=heartbeat_tolerance_s,
             action="Botun çalışan bir süreci olup olmadığını kontrol edin.",
@@ -119,7 +119,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.UNKNOWN,
-            summary=f"snapshot unreadable: {exc}",
+            summary=f"anlık görüntü okunamadı: {exc}",
             observed="corrupt",
             threshold=heartbeat_tolerance_s,
             action="data/runtime/health_snapshot.json dosyasını inceleyin; bozuk olabilir.",
@@ -129,7 +129,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.UNKNOWN,
-            summary="snapshot missing written_at",
+            summary="anlık görüntüde written_at alanı yok",
             observed=data.get("written_at"),
             threshold=heartbeat_tolerance_s,
         )
@@ -141,7 +141,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.BLOCKED,
-            summary=f"runtime stopped (state={state})",
+            summary=f"çalışma zamanı durdu (durum={state})",
             observed=state,
             threshold=heartbeat_tolerance_s,
             since=written_at,
@@ -150,7 +150,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
         return HealthCheck(
             code="runtime_heartbeat",
             status=HealthStatus.CRITICAL,
-            summary=f"heartbeat stale {age:.0f}s ago (state={state})",
+            summary=f"kalp atışı {age:.0f} sn önce eski (durum={state})",
             observed=age,
             threshold=heartbeat_tolerance_s,
             since=written_at,
@@ -159,7 +159,7 @@ def _check_runtime_heartbeat(snapshot_path: Path, now: datetime, heartbeat_toler
     return HealthCheck(
         code="runtime_heartbeat",
         status=HealthStatus.OK,
-        summary=f"alive {age:.0f}s ago (state={state})",
+        summary=f"canlı; son kalp atışı {age:.0f} sn önce (durum={state})",
         observed=age,
         threshold=heartbeat_tolerance_s,
         since=written_at,
@@ -205,10 +205,10 @@ def _worker_stale(
 
 def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
-        return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no runtime health available")
+        return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="çalışma zamanı sağlık verisi yok")
     workers = health_snapshot.get("workers") or {}
     if not workers:
-        return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="no worker data")
+        return HealthCheck(code="workers", status=HealthStatus.UNKNOWN, summary="işçi verisi yok")
     ttl = max(30.0, config.engine.account_poll_interval_seconds * 3)
     # Judge ages as of the snapshot, as the runtime did when it wrote it; the
     # snapshot's own age is the runtime_heartbeat check's job. Measuring from
@@ -230,7 +230,7 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
         return HealthCheck(
             code="workers",
             status=HealthStatus.CRITICAL,
-            summary=f"dead workers: {', '.join(dead)}",
+            summary=f"ölü işçiler: {', '.join(dead)}",
             observed=dead,
             threshold=ttl,
             action="İşçi günlüklerini kontrol edin; takılı kalmışsa botu yeniden başlatın.",
@@ -239,16 +239,16 @@ def _check_workers(health_snapshot: dict[str, Any] | None, now: datetime, config
         return HealthCheck(
             code="workers",
             status=HealthStatus.DEGRADED,
-            summary=f"stale heartbeat: {', '.join(stale)}",
+            summary=f"eski kalp atışı: {', '.join(stale)}",
             observed=stale,
             threshold=ttl,
         )
-    return HealthCheck(code="workers", status=HealthStatus.OK, summary=f"{len(workers)} workers alive")
+    return HealthCheck(code="workers", status=HealthStatus.OK, summary=f"{len(workers)} işçi canlı")
 
 
 def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> HealthCheck:
     if health_snapshot is None:
-        return HealthCheck(code="queue", status=HealthStatus.UNKNOWN, summary="no queue metrics")
+        return HealthCheck(code="queue", status=HealthStatus.UNKNOWN, summary="kuyruk ölçümü yok")
     qsize = health_snapshot.get("queue_size")
     qage = health_snapshot.get("queue_age_seconds")
     dropped = health_snapshot.get("dropped_events")
@@ -257,7 +257,7 @@ def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> Heal
         qage_n = float(qage) if qage is not None else 0.0
         dropped_n = int(dropped) if dropped is not None else 0
     except Exception:
-        return HealthCheck(code="queue", status=HealthStatus.UNKNOWN, summary="queue metrics corrupt")
+        return HealthCheck(code="queue", status=HealthStatus.UNKNOWN, summary="kuyruk ölçümleri bozuk")
     cap = int(config.engine.event_queue_capacity)
     max_age = float(config.engine.maximum_queue_age_seconds)
     if qsize_n >= cap * 0.9 or qage_n > max_age or dropped_n > 0:
@@ -266,21 +266,21 @@ def _check_queue(health_snapshot: dict[str, Any] | None, config: Config) -> Heal
             return HealthCheck(
                 code="queue",
                 status=HealthStatus.CRITICAL,
-                summary=f"queue pressure size={qsize_n}/{cap} age={qage_n:.1f}s dropped={dropped_n}",
+                summary=f"kuyruk baskısı: boyut={qsize_n}/{cap}, yaş={qage_n:.1f} sn, düşen={dropped_n}",
                 observed={"size": qsize_n, "age": qage_n, "dropped": dropped_n},
                 threshold={"cap": cap, "max_age": max_age},
             )
         return HealthCheck(
             code="queue",
             status=HealthStatus.DEGRADED,
-            summary=f"queue elevated size={qsize_n}/{cap} age={qage_n:.1f}s",
+            summary=f"kuyruk yüksek: boyut={qsize_n}/{cap}, yaş={qage_n:.1f} sn",
             observed={"size": qsize_n, "age": qage_n},
             threshold={"cap": cap, "max_age": max_age},
         )
     return HealthCheck(
         code="queue",
         status=HealthStatus.OK,
-        summary=f"queue {qsize_n}/{cap} age {qage_n:.1f}s",
+        summary=f"kuyruk {qsize_n}/{cap}, yaş {qage_n:.1f} sn",
         observed={"size": qsize_n, "age": qage_n},
         threshold={"cap": cap},
     )
@@ -321,7 +321,7 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
     # account freshness is not persisted directly; infer from reconciliation / health
     # Use last_reconciliation as proxy if no direct account timestamp.
     if health_snapshot is None:
-        return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="no health snapshot")
+        return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="sağlık anlık görüntüsü yok")
     # Check market health entry halt but account itself: use account_poll_interval
     # For offline diagnosis, we treat stale if last_reconciliation is too old? Instead UNKNOWN.
     # Simpler: check if any market entry_halt due to stale account
@@ -331,24 +331,24 @@ def _check_account(health_snapshot: dict[str, Any] | None, now: datetime, config
     max_age = _account_stale_seconds(config)
     age = _age_seconds(last_rec, now) if isinstance(last_rec, str) else None
     if age is None:
-        return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="no reconciliation timestamp")
+        return HealthCheck(code="account", status=HealthStatus.UNKNOWN, summary="mutabakat zaman damgası yok")
     if age > max_age:
         return HealthCheck(
             code="account",
             status=HealthStatus.DEGRADED,
-            summary=f"account/reconciliation stale {age:.0f}s ago",
+            summary=f"hesap/mutabakat verisi {age:.0f} sn önce eski",
             observed=age,
             threshold=max_age,
             action="Alpaca bağlantısını kontrol edin.",
         )
     return HealthCheck(
-        code="account", status=HealthStatus.OK, summary=f"fresh {age:.0f}s ago", observed=age, threshold=max_age
+        code="account", status=HealthStatus.OK, summary=f"güncel; {age:.0f} sn önce", observed=age, threshold=max_age
     )
 
 
 def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime, config: Config) -> HealthCheck:
     if health_snapshot is None:
-        return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="no runtime health")
+        return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="çalışma zamanı sağlığı yok")
     # Freshness is judged on the last CLEAN reconcile: a drift result refreshes
     # last_reconciliation_at while the drift halt persists (R9-4). Snapshots
     # written before the clean stamp existed fall back to the old field.
@@ -357,12 +357,10 @@ def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime,
     else:
         last = health_snapshot.get("last_reconciliation_at")
     if not isinstance(last, str) or not last:
-        return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="no reconciliation timestamp")
+        return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="mutabakat zaman damgası yok")
     age = _age_seconds(last, now)
     if age is None:
-        return HealthCheck(
-            code="reconciliation", status=HealthStatus.UNKNOWN, summary="reconciliation timestamp corrupt"
-        )
+        return HealthCheck(code="reconciliation", status=HealthStatus.UNKNOWN, summary="mutabakat zaman damgası bozuk")
     # Derive threshold from account poll + event grace: poll 15s, allow 5* poll
     threshold = max(300.0, config.engine.account_poll_interval_seconds * 20)
     # Also check runtime metrics persisted risk? For now simple age
@@ -370,30 +368,32 @@ def _check_reconciliation(health_snapshot: dict[str, Any] | None, now: datetime,
         return HealthCheck(
             code="reconciliation",
             status=HealthStatus.CRITICAL,
-            summary=f"reconciliation stale {age:.0f}s ago",
+            summary=f"mutabakat {age:.0f} sn önce eski",
             observed=age,
             threshold=threshold,
             action="Alpaca bağlantısını ve defter kilitlerini kontrol edin.",
         )
     # check if last failure exists via journal? Offline we can't; just OK if recent success
     return HealthCheck(
-        code="reconciliation", status=HealthStatus.OK, summary=f"{age:.0f}s ago", observed=age, threshold=threshold
+        code="reconciliation", status=HealthStatus.OK, summary=f"{age:.0f} sn önce", observed=age, threshold=threshold
     )
 
 
 def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCheck:
     if health_snapshot is None:
-        return HealthCheck(code="signal_adjustment", status=HealthStatus.UNKNOWN, summary="no signal data")
+        return HealthCheck(code="signal_adjustment", status=HealthStatus.UNKNOWN, summary="sinyal verisi yok")
     sa = health_snapshot.get("signal_adjustment") or {}
     if not isinstance(sa, dict) or not sa:
-        return HealthCheck(code="signal_adjustment", status=HealthStatus.UNKNOWN, summary="no signal_adjustment data")
+        return HealthCheck(
+            code="signal_adjustment", status=HealthStatus.UNKNOWN, summary="sinyal düzeltmesi verisi yok"
+        )
     healthy = sa.get("healthy")
     stale = sa.get("stale")
     if stale:
         return HealthCheck(
             code="signal_adjustment",
             status=HealthStatus.DEGRADED,
-            summary="signal adjustment stale — entries may be blocked",
+            summary="sinyal düzeltmesi eski — girişler engellenmiş olabilir",
             observed=sa,
             action="Düzeltme doğrulayıcısının günlüklerini kontrol edin.",
         )
@@ -401,10 +401,10 @@ def _check_signal_adjustment(health_snapshot: dict[str, Any] | None) -> HealthCh
         return HealthCheck(
             code="signal_adjustment",
             status=HealthStatus.DEGRADED,
-            summary=f"signal adjustment unhealthy: {sa.get('last_error')}",
+            summary=f"sinyal düzeltmesi sağlıksız: {sa.get('last_error')}",
             observed=sa,
         )
-    return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="verified")
+    return HealthCheck(code="signal_adjustment", status=HealthStatus.OK, summary="doğrulandı")
 
 
 def _check_operator_halt(runtime_dir: Path) -> HealthCheck:
@@ -416,13 +416,13 @@ def _check_operator_halt(runtime_dir: Path) -> HealthCheck:
     """
     marker = operator_halt_marker_path(runtime_dir)
     if not operator_halt_active(marker):
-        return HealthCheck(code="operator_halt", status=HealthStatus.OK, summary="no operator halt marker")
+        return HealthCheck(code="operator_halt", status=HealthStatus.OK, summary="operatör durdurma işareti yok")
     record = read_operator_halt(marker) or {}
     reason = str(record.get("reason") or "unknown")
     return HealthCheck(
         code="operator_halt",
         status=HealthStatus.BLOCKED,
-        summary=f"operator halt marker present (reason: {reason})",
+        summary=f"operatör durdurma işareti var (neden: {reason})",
         observed=reason,
         since=_parse_iso(record.get("created_at") if isinstance(record.get("created_at"), str) else None),
         action="Durdurma nedenini inceleyin; işaretçiyi yalnızca operatör `parayabuck resume` ile kaldırır.",
@@ -433,7 +433,7 @@ def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
     # A market entry halt (protection failure, ambiguous exit, unreconciled
     # rebalance, invalid universe, ...) stops that market's entries: never OK.
     if health_snapshot is None:
-        return HealthCheck(code="market_halts", status=HealthStatus.UNKNOWN, summary="no market data")
+        return HealthCheck(code="market_halts", status=HealthStatus.UNKNOWN, summary="piyasa verisi yok")
     markets = health_snapshot.get("markets")
     halts = (
         {
@@ -448,11 +448,11 @@ def _check_market_halts(health_snapshot: dict[str, Any] | None) -> HealthCheck:
         return HealthCheck(
             code="market_halts",
             status=HealthStatus.DEGRADED,
-            summary="entries halted: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
+            summary="alımlar durduruldu: " + ", ".join(f"{m}={reason}" for m, reason in sorted(halts.items())),
             observed=halts,
-            action="Durdurma nedenini giderin; ardından “Kilidi doğrula” ile kilit sistem kontrolünden sonra açılır.",
+            action="Durdurma nedenini giderin. Bu durdurma “Kilidi doğrula” ile açılmaz ve düğme bu durumda görünmez; nedeni giderdikten sonra motor durumunu izleyin.",
         )
-    return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="no market entry halts")
+    return HealthCheck(code="market_halts", status=HealthStatus.OK, summary="piyasa alım durdurması yok")
 
 
 def _ledger_tables(db_path: str | Path) -> frozenset[str] | None:
@@ -495,29 +495,29 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
         return HealthCheck(
             code="risk",
             status=HealthStatus.BLOCKED,
-            summary=f"entry latch active: {latch}",
+            summary=f"yeni alım kilidi aktif: {latch}",
             observed=latch,
-            action="Risk kilidi yeni alımları engelliyor; zirveden düşüşü ve günlük zararı kontrol edin.",
+            action="Yeni alım kilidi yeni alımları engelliyor; zirveden düşüşü ve günlük zararı kontrol edin.",
         )
     # Fail closed: with no explicitly configured, readable ledger the persisted
     # incidents are unknown — never "no risk block". runtime_metrics(None) would
     # otherwise fall back to a cwd-relative ledger, and it answers an unreadable
     # one with the empty shape.
     if db_path is None or not Path(str(db_path)).exists():
-        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="no decision DB")
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="karar veritabanı yok")
     tables = _ledger_tables(db_path)
     if tables is None:
-        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary="karar veritabanı okunamıyor")
     if "safety_incidents" not in tables:
         return HealthCheck(
-            code="risk", status=HealthStatus.UNKNOWN, summary="decision DB has no safety_incidents table"
+            code="risk", status=HealthStatus.UNKNOWN, summary="karar veritabanında safety_incidents tablosu yok"
         )
     # One strict ledger read of the persisted incidents.
     # strict: a failed incidents read is UNKNOWN, never an empty "no incidents"
     try:
         snapshot: dict[str, Any] = metrics.runtime_metrics(database_path=db_path, strict=True)
     except Exception as exc:
-        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary=f"risk check failed: {exc}")
+        return HealthCheck(code="risk", status=HealthStatus.UNKNOWN, summary=f"risk kontrolü başarısız: {exc}")
     # Check persisted incidents
     try:
         incidents = snapshot.get("incidents") or {}
@@ -529,7 +529,7 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
             return HealthCheck(
                 code="risk",
                 status=HealthStatus.BLOCKED,
-                summary=f"{len(active)} active safety incidents",
+                summary=f"{len(active)} aktif güvenlik olayı",
                 observed=active[:3],
                 action="Güvenlik olayı kayıtlarını (safety_incidents) inceleyin.",
             )
@@ -537,19 +537,21 @@ def _check_risk(db_path: str | Path | None, health_snapshot: dict[str, Any] | No
         pass
     # A drawdown halt (entry_block_duration_seconds) is its own active
     # portfolio_drawdown_halt incident, already reported above.
-    return HealthCheck(code="risk", status=HealthStatus.OK, summary="no risk block")
+    return HealthCheck(code="risk", status=HealthStatus.OK, summary="risk engeli yok")
 
 
 def _check_execution(db_path: str | Path | None) -> HealthCheck:
     try:
         if db_path is None or not Path(str(db_path)).exists():
-            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="no decision DB")
+            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="karar veritabanı yok")
         tables = _ledger_tables(db_path)
         if tables is None:
-            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="decision DB unreadable")
+            return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary="karar veritabanı okunamıyor")
         if "portfolio_orders" not in tables:
             return HealthCheck(
-                code="execution", status=HealthStatus.UNKNOWN, summary="decision DB has no portfolio_orders table"
+                code="execution",
+                status=HealthStatus.UNKNOWN,
+                summary="karar veritabanında portfolio_orders tablosu yok",
             )
         from parayabuck.monitoring import forensics
 
@@ -561,7 +563,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
             return HealthCheck(
                 code="execution",
                 status=HealthStatus.CRITICAL,
-                summary=f"{len(ambiguous)} ambiguous orders require manual intervention",
+                summary=f"{len(ambiguous)} belirsiz emir elle müdahale gerektiriyor",
                 observed=len(ambiguous),
                 action="İşlem devam etmeden önce belirsiz emirleri çözümleyin.",
             )
@@ -579,7 +581,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
             return HealthCheck(
                 code="execution",
                 status=HealthStatus.DEGRADED,
-                summary=f"{len(stuck)} stuck submitting orders >10m",
+                summary=f"{len(stuck)} emir 10 dakikadan uzun süredir gönderimde takılı",
                 observed=len(stuck),
             )
         stuck_rb = forensics.find_stuck_rebalances(db_path, threshold_seconds=3600, strict=True)
@@ -587,7 +589,7 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
             return HealthCheck(
                 code="execution",
                 status=HealthStatus.DEGRADED,
-                summary=f"{len(stuck_rb)} stuck rebalance executions >1h",
+                summary=f"{len(stuck_rb)} dengeleme yürütmesi 1 saatten uzun süredir takılı",
                 observed=len(stuck_rb),
             )
         # A rebalance closed with an unsettled SELL leg discards its BUYs; without
@@ -597,13 +599,13 @@ def _check_execution(db_path: str | Path | None) -> HealthCheck:
             return HealthCheck(
                 code="execution",
                 status=HealthStatus.DEGRADED,
-                summary=f"{len(closed_unresolved)} rebalance(s) closed with an unsettled SELL leg; deferred BUYs discarded",
+                summary=f"{len(closed_unresolved)} dengeleme, çözülmemiş bir satış bacağıyla kapandı; ertelenen alımlar atıldı",
                 observed=len(closed_unresolved),
                 action="Kapanan rebalance için son satış emrini ve pozisyonu inceleyin.",
             )
-        return HealthCheck(code="execution", status=HealthStatus.OK, summary="no stuck/ambiguous orders")
+        return HealthCheck(code="execution", status=HealthStatus.OK, summary="takılı veya belirsiz emir yok")
     except Exception as exc:
-        return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary=f"execution check failed: {exc}")
+        return HealthCheck(code="execution", status=HealthStatus.UNKNOWN, summary=f"yürütme kontrolü başarısız: {exc}")
 
 
 def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
@@ -612,7 +614,7 @@ def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
         return HealthCheck(
             code="observability",
             status=HealthStatus.UNKNOWN,
-            summary="no journal state persisted by the engine",
+            summary="motor tarafından kaydedilmiş günlük durumu yok",
         )
     failed = int(journal_state.get("event_journal_failed", 0) or 0)
     dropped = int(journal_state.get("event_journal_dropped", 0) or 0)
@@ -625,14 +627,14 @@ def _check_observability(journal_state: dict[str, Any] | None) -> HealthCheck:
         return HealthCheck(
             code="observability",
             status=HealthStatus.DEGRADED,
-            summary=f"journal failing (failed={failed} dropped={dropped}; last failure {last_failure.isoformat()})",
+            summary=f"günlük yazımı başarısız (hata={failed}, düşen={dropped}; son hata {last_failure.isoformat()})",
             observed=journal_state,
             action="data/runtime klasörünün disk alanını ve izinlerini kontrol edin; `parayabuck ops doctor` çalıştırın.",
         )
     summary = (
-        "journal healthy"
+        "günlük sağlıklı"
         if not (failed or dropped)
-        else f"journal healthy (recovered; failed={failed} dropped={dropped})"
+        else f"günlük sağlıklı (kurtarıldı; hata={failed}, düşen={dropped})"
     )
     return HealthCheck(code="observability", status=HealthStatus.OK, summary=summary)
 
@@ -649,25 +651,25 @@ def _check_intent_watchdog(health_snapshot: dict[str, Any] | None) -> HealthChec
         return HealthCheck(
             code="intent_watchdog",
             status=HealthStatus.UNKNOWN,
-            summary="no intent watchdog state in the health snapshot",
+            summary="sağlık anlık görüntüsünde niyet bekçisi durumu yok",
         )
     if watchdog.get("enabled") is False:
-        return HealthCheck(code="intent_watchdog", status=HealthStatus.OK, summary="watchdog disabled")
+        return HealthCheck(code="intent_watchdog", status=HealthStatus.OK, summary="bekçi kapalı")
     if not watchdog.get("evaluated_at"):
         return HealthCheck(
             code="intent_watchdog",
             status=HealthStatus.UNKNOWN,
-            summary="watchdog has not evaluated yet",
+            summary="bekçi henüz değerlendirme yapmadı",
         )
     codes = [str(code) for code in (watchdog.get("degraded_reasons") or [])]
     if not codes:
         return HealthCheck(
             code="intent_watchdog",
             status=HealthStatus.OK,
-            summary=f"no alarms (evaluated {watchdog.get('evaluated_at')})",
+            summary=f"alarm yok (değerlendirme: {watchdog.get('evaluated_at')})",
         )
     critical = sorted(code for code in codes if code in _INTENT_CRITICAL_CODES)
-    summary = "active alarms: " + ", ".join(codes)
+    summary = "aktif alarmlar: " + ", ".join(codes)
     if critical:
         return HealthCheck(
             code="intent_watchdog",

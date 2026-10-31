@@ -650,6 +650,14 @@ def test_shutdown_wait_for_a_stuck_start_is_bounded(tmp_path: Path, monkeypatch:
     asyncio.run(asyncio.wait_for(run(), 10))
 
     assert exit_elapsed[0] < 1.2  # did not wait for the stuck start
+    # The attempt runs on a daemon thread that asyncio.run no longer joins (R3-4-3):
+    # wait for it, bounded, to finish the stop it was interrupted into.
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline and (
+        manager.engine_state != "stopped"
+        or any(t.name == "pb-auto-start" and t.is_alive() for t in threading.enumerate())
+    ):
+        time.sleep(0.02)
     assert manager.engine_state == "stopped"  # the late attempt was interrupted and stopped
 
 

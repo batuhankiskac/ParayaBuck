@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -29,6 +30,7 @@ DEFAULT_OPERATOR_APPROVAL_KEY_ENV = "PARAYABUCK_OPERATOR_APPROVAL_KEY"
 # name is accepted, so PATH, HOME or a broker credential can never become the key.
 _APPROVAL_KEY_ENV_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*_(KEY|SECRET)")
 _BENCHMARK_SYMBOL_PATTERN = re.compile(r"[A-Z][A-Z0-9.]{0,9}")
+_config_log = logging.getLogger("parayabuck.config")
 
 
 class RuntimeMode(StrEnum):
@@ -54,6 +56,8 @@ class RuntimeConfig:
     per_symbol_drift_lock: bool = False
 
     def __post_init__(self) -> None:
+        _require_bool(self.stale_account_sell_only, "runtime.stale_account_sell_only")
+        _require_bool(self.per_symbol_drift_lock, "runtime.per_symbol_drift_lock")
         # LIVE and PAPER state must never mix: the PAPER default ledger path
         # (explicit or implicit) resolves to the separate LIVE default in
         # live mode. A different explicit path is kept as configured.
@@ -83,14 +87,20 @@ def _same_path(first: str, second: str) -> bool:
     return same_ledger_path(first, second)
 
 
-def _require_bool(value: object, name: str) -> None:
-    """Refuse a non-boolean ``enabled`` flag.
+def strict_bool(value: object, name: str) -> bool:
+    """Return ``value`` when it is a real boolean; refuse anything else.
 
-    YAML ``enabled: "false"`` is a truthy string, so a loose truth test would
-    read a disabled block as enabled. Only a real YAML boolean is accepted.
+    YAML ``"false"`` (quoted) is a truthy string, so a loose truth test reads a
+    disabled flag as enabled. Only a real YAML boolean is accepted (D3-5-3).
     """
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be a boolean (true or false), not {value!r}")
+    return value
+
+
+def _require_bool(value: object, name: str) -> None:
+    """Refuse a non-boolean flag (see :func:`strict_bool`)."""
+    strict_bool(value, name)
 
 
 @dataclass(frozen=True)
@@ -214,6 +224,7 @@ class EmailAlertConfig:
 
     def __post_init__(self) -> None:
         _require_bool(self.enabled, "alerting.email.enabled")
+        _require_bool(self.daily_summary, "alerting.email.daily_summary")
         raw_to = self.to_addresses
         if isinstance(raw_to, str):
             raw_to = (raw_to,)
@@ -258,6 +269,7 @@ class AlertingConfig:
     email: EmailAlertConfig = field(default_factory=EmailAlertConfig)
 
     def __post_init__(self) -> None:
+        _require_bool(self.daily_summary, "alerting.daily_summary")
         if isinstance(self.email, dict):
             object.__setattr__(self, "email", EmailAlertConfig(**self.email))
         elif self.email is None or self.email is False:  # type: ignore[comparison-overlap]
@@ -288,6 +300,7 @@ class BacktestConfig:
     ranking_metric: str = "risk_adjusted"
 
     def __post_init__(self) -> None:
+        _require_bool(self.equity_use_effective_dated_fees, "backtest.equity_use_effective_dated_fees")
         costs = (
             self.initial_cash,
             self.slippage_bps,
@@ -427,8 +440,7 @@ class DrawdownLiquidationConfig:
     cooldown_sessions: int = 5
 
     def __post_init__(self) -> None:
-        if not isinstance(self.enabled, bool):
-            raise ValueError("risk.drawdown_liquidation.enabled must be a boolean")
+        _require_bool(self.enabled, "risk.drawdown_liquidation.enabled")
         if not math.isfinite(self.threshold_pct) or not 0 < self.threshold_pct < 1:
             raise ValueError("risk.drawdown_liquidation.threshold_pct must be in (0, 1)")
         if not math.isfinite(self.rearm_recovery_pct) or not 0 <= self.rearm_recovery_pct < self.threshold_pct:
@@ -463,8 +475,7 @@ class RiskLimits:
     def __post_init__(self) -> None:
         if not isinstance(self.drawdown_liquidation, DrawdownLiquidationConfig):
             raise ValueError("risk.drawdown_liquidation must be a mapping")
-        if not isinstance(self.adjust_for_cash_flows, bool):
-            raise ValueError("risk.adjust_for_cash_flows must be a boolean")
+        _require_bool(self.adjust_for_cash_flows, "risk.adjust_for_cash_flows")
         ratios = (
             self.max_position_pct,
             self.max_gross_exposure_pct,
@@ -574,6 +585,8 @@ class AppConfig:
     benchmark_symbol: str = "VOO"
 
     def __post_init__(self) -> None:
+        _require_bool(self.open_browser, "app.open_browser")
+        _require_bool(self.auto_start_engine, "app.auto_start_engine")
         if self.host not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("Web UI must bind to a loopback host")
         if not 1 <= self.port <= 65535:
@@ -596,6 +609,7 @@ class AlpacaConfig:
     stock_historical_feed: str = "sip"
 
     def __post_init__(self) -> None:
+        _require_bool(self.data_delayed, "alpaca.data_delayed")
         for name in ("stock_stream_feed", "stock_historical_feed"):
             if getattr(self, name) not in {"iex", "sip", "delayed_sip"}:
                 raise ValueError(f"alpaca.{name} must be iex, sip, or delayed_sip")
@@ -799,6 +813,7 @@ class IntentWatchdogConfig:
 
     def __post_init__(self) -> None:
         _require_bool(self.enabled, "intent_watchdog.enabled")
+        _require_bool(self.fail_readiness, "intent_watchdog.fail_readiness")
         for name in ("equity_decision_grace_minutes", "equity_fill_grace_minutes"):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0:
@@ -1300,6 +1315,12 @@ def load_config(config_path: str | None = None) -> Config:
             if not isinstance(_eq_block, dict) or not str(_eq_block.get("name", "")).strip():
                 raise ValueError("strategy.equity block with name is required when universe.equity.enabled is true")
     default_strategy = StrategyConfig()
+    if (_block(strategy_raw.get("equity")).get("parameters")) is None:
+        # Values are unchanged; the warning makes the silent substitution visible.
+        _config_log.warning(
+            "strategy.equity.parameters is not set in the config; using the packaged defaults for strategy %s",
+            default_strategy.equity.name,
+        )
     equity_strategy = _strategy_from_raw(
         default_strategy.equity,
         default_strategy.equity.enabled if "equity" in strategy_raw else equity.enabled,

@@ -19,6 +19,7 @@ from uvicorn.server import HANDLED_SIGNALS
 
 from parayabuck.logger import setup_logging
 from parayabuck.trading_host import trading_host_authorized
+from parayabuck.utils import sd_notify
 
 # Bound on draining open connections (websockets stay open indefinitely)
 # at shutdown. It must stay well below the unit's TimeoutStopSec (180 s) so systemd
@@ -52,6 +53,14 @@ class _ExitingServer(uvicorn.Server):
         finally:
             for sig, handler in original_handlers.items():
                 signal.signal(sig, handler)
+
+    async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+        await super().startup(sockets=sockets)
+        # systemd Type=notify: READY=1 only once the listening socket is bound.
+        # uvicorn runs the lifespan startup before it binds, so the lifespan must
+        # not send it (R3-4-5). A failed lifespan start is not serving.
+        if not self.lifespan.should_exit:
+            sd_notify.ready()
 
     async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
         request_shutdown = getattr(getattr(self.config.app, "state", None), "engine_request_shutdown", None)
@@ -104,8 +113,16 @@ def main(config_path: str | os.PathLike[str] | None = None) -> None:
     instead of silently falling back to the default one.
     """
     # Every file the web process creates is owner-only whatever the caller's
-    # umask, including a plain `python -m parayabuck` (S2-4-2).
-    os.umask(0o077)
+    # umask, including a plain `python -m parayabuck` (S2-4-2). The caller's
+    # umask is restored on return, so an in-process caller (tests) keeps its own (Q3-3-5).
+    previous_umask = os.umask(0o077)
+    try:
+        _serve(config_path)
+    finally:
+        os.umask(previous_umask)
+
+
+def _serve(config_path: str | os.PathLike[str] | None) -> None:
     if config_path is not None:
         os.environ["CONFIG_PATH"] = str(config_path)
     settings_path = Path(os.getenv("CONFIG_PATH") or "config/settings.yaml")

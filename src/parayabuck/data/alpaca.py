@@ -171,6 +171,9 @@ class AlpacaHistoricalData:
     ) -> None:
         self._stock_client = StockHistoricalDataClient(api_key, secret_key)
         patch_session_timeout(self._stock_client._session, timeout=30.0)
+        # A quoted "false" is truthy: refuse anything but a real boolean (D3-5-3).
+        if not isinstance(data_delayed, bool):
+            raise ValueError(f"alpaca.data_delayed must be a boolean (true or false), not {data_delayed!r}")
         feed = "delayed_sip" if data_delayed else stock_feed
         try:
             self._stock_feed = DataFeed(feed)

@@ -21,6 +21,11 @@ class LiveApprovalError(RuntimeError):
     pass
 
 
+# The next step a refused LIVE approval needs (D3-5-4): the refusal names the command.
+_REAUTHORIZE_HINT = " Next: on the trading host run `parayabuck authorize-live`, then re-arm LIVE in the console."
+_STANDING_HINT = " Next: on the trading host run `parayabuck authorize-live --standing-days N` to renew it."
+
+
 # The approval HMAC key is public while it still holds the tracked template
 # value from .env.example (or any other "replace_with..." template text), so
 # such a key can never sign or verify a LIVE approval.
@@ -44,6 +49,13 @@ def check_approval_key(secret: str) -> None:
         raise ValueError(
             f"Operator approval HMAC key must use at least {APPROVAL_KEY_MIN_DISTINCT_CHARACTERS} distinct characters"
         )
+    # A key that is one ten-character block repeated (for example "0123456789" * 4)
+    # passes the distinct-character floor with only the entropy of that block (S3-1-4).
+    # Shorter blocks already fail the floor; longer periods are left alone because
+    # operator-chosen hex keys with repeated 16-character blocks exist in the tests.
+    period = APPROVAL_KEY_MIN_DISTINCT_CHARACTERS
+    if len(secret) % period == 0 and len(secret) > period and secret == secret[:period] * (len(secret) // period):
+        raise ValueError("Operator approval HMAC key is a repeated block; use a random key")
 
 
 def _read_regular_bytes(path: str | os.PathLike[str]) -> bytes:
@@ -202,6 +214,20 @@ def operator_halt_marker_path(runtime_dir: str | os.PathLike[str]) -> Path:
     return Path(runtime_dir) / HALT_MARKER_FILENAME
 
 
+def marker_present(path: str | os.PathLike[str]) -> bool:
+    """True while a marker file exists; any lstat error other than ENOENT counts as present.
+
+    ``os.path.lexists`` returns False on EACCES, which fails open (S3-3-1).
+    """
+    try:
+        os.lstat(os.fspath(path))
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
 def operator_halt_active(marker: str | os.PathLike[str]) -> bool:
     """True while the halt marker exists (a broken symlink counts too).
 
@@ -272,6 +298,10 @@ def clear_operator_halt(marker: str | os.PathLike[str]) -> bool:
     if path.is_dir() and not path.is_symlink():
         raise IsADirectoryError(f"{path} is a directory, not a halt marker; remove it by hand (rmdir) and retry")
     path.unlink()
+    from parayabuck.utils.io import _fsync_directory
+
+    # Without a directory fsync a power loss can bring the cleared marker back (S3-3-6).
+    _fsync_directory(path.parent)
     return True
 
 
@@ -406,22 +436,24 @@ class LiveOperatorApproval:
         except ValueError as exc:
             raise LiveApprovalError(f"Live operator approval key is unusable: {exc}") from exc
         if not _signatures_equal(approval.signature, expected):
-            raise LiveApprovalError("Live operator approval signature is invalid")
+            raise LiveApprovalError("Live operator approval signature is invalid" + _REAUTHORIZE_HINT)
         if approval.account_id != account_id:
-            raise LiveApprovalError("Live operator approval account does not match")
+            raise LiveApprovalError("Live operator approval account does not match" + _REAUTHORIZE_HINT)
         if set(approval.configuration_digests) != set(configuration_digests):
-            raise LiveApprovalError("Live operator approval configuration does not match")
+            raise LiveApprovalError("Live operator approval configuration does not match" + _REAUTHORIZE_HINT)
         # The strategy digests do not cover every setting that changes what LIVE
         # trades; the whole trading-relevant fingerprint must match too (R2-8-1).
         if not config_fingerprint or not _signatures_equal(approval.config_fingerprint, config_fingerprint):
-            raise LiveApprovalError("Live operator approval does not match the current settings")
+            raise LiveApprovalError("Live operator approval does not match the current settings" + _REAUTHORIZE_HINT)
         if trading_host is not None and not _signatures_equal(approval.trading_host, trading_host):
-            raise LiveApprovalError("Live operator approval was issued for a different trading host")
+            raise LiveApprovalError(
+                "Live operator approval was issued for a different trading host" + _REAUTHORIZE_HINT
+            )
         current = now or datetime.now(UTC)
         if approval.approved_at > current:
-            raise LiveApprovalError("Live operator approval is not yet valid")
+            raise LiveApprovalError("Live operator approval is not yet valid" + _REAUTHORIZE_HINT)
         if approval.expires_at <= current:
-            raise LiveApprovalError("Live operator approval has expired")
+            raise LiveApprovalError("Live operator approval has expired" + _REAUTHORIZE_HINT)
         return approval
 
 
@@ -561,7 +593,7 @@ def revoke_standing_authorization(path: str | os.PathLike[str]) -> bool:
     from parayabuck.utils.io import atomic_write
 
     target = Path(path)
-    if not os.path.lexists(os.fspath(target)):
+    if not marker_present(target):
         return False
     digest = hashlib.sha256(_read_regular_bytes(target)).hexdigest()
     revoked = sorted(_revoked_standing_digests(target) | {digest})
@@ -659,13 +691,13 @@ class StandingLiveAuthorization:
         except ValueError as exc:
             raise LiveApprovalError(f"Operator approval key is unusable: {exc}") from exc
         if not _signatures_equal(authorization.signature, expected):
-            raise LiveApprovalError("Standing LIVE authorization signature is invalid")
+            raise LiveApprovalError("Standing LIVE authorization signature is invalid" + _STANDING_HINT)
         try:
             revoked = _revoked_standing_digests(path)
         except (OSError, ValueError) as exc:
             raise LiveApprovalError("Standing LIVE authorization revocation record is unreadable") from exc
         if hashlib.sha256(raw_bytes).hexdigest() in revoked:
-            raise LiveApprovalError("Standing LIVE authorization was revoked")
+            raise LiveApprovalError("Standing LIVE authorization was revoked" + _STANDING_HINT)
         return authorization
 
     def verify_binding(
@@ -681,19 +713,23 @@ class StandingLiveAuthorization:
         """Raise ``LiveApprovalError`` unless every binding still holds."""
         current = now or datetime.now(UTC)
         if self.approved_at > current:
-            raise LiveApprovalError("Standing LIVE authorization is not yet valid")
+            raise LiveApprovalError("Standing LIVE authorization is not yet valid" + _STANDING_HINT)
         if self.expires_at <= current:
-            raise LiveApprovalError("Standing LIVE authorization has expired")
+            raise LiveApprovalError("Standing LIVE authorization has expired" + _STANDING_HINT)
         if set(self.configuration_digests) != set(configuration_digests):
-            raise LiveApprovalError("Standing LIVE authorization does not match the strategy configuration")
+            raise LiveApprovalError(
+                "Standing LIVE authorization does not match the strategy configuration" + _STANDING_HINT
+            )
         if not _signatures_equal(self.config_fingerprint, config_fingerprint):
-            raise LiveApprovalError("Standing LIVE authorization does not match the current settings")
+            raise LiveApprovalError("Standing LIVE authorization does not match the current settings" + _STANDING_HINT)
         if not math.isclose(self.maximum_dollar_exposure, float(hard_dollar_cap), rel_tol=0.0, abs_tol=1e-9):
-            raise LiveApprovalError("Standing LIVE authorization does not match live.hard_dollar_cap")
+            raise LiveApprovalError("Standing LIVE authorization does not match live.hard_dollar_cap" + _STANDING_HINT)
         if not _signatures_equal(self.trading_host, trading_host):
-            raise LiveApprovalError("Standing LIVE authorization was issued for a different trading host")
+            raise LiveApprovalError(
+                "Standing LIVE authorization was issued for a different trading host" + _STANDING_HINT
+            )
         if account_id is not None and self.account_id != account_id:
-            raise LiveApprovalError("Standing LIVE authorization account does not match")
+            raise LiveApprovalError("Standing LIVE authorization account does not match" + _STANDING_HINT)
 
     @classmethod
     def load_verified(

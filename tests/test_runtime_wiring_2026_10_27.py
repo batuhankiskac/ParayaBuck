@@ -25,6 +25,7 @@ import socket
 import tempfile
 import time
 from collections.abc import Iterator
+from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -217,7 +218,8 @@ def _serve_lifespan(manager: Any) -> None:
     asyncio.run(run())
 
 
-def test_lifespan_sends_ready_when_no_engine_starts(notify_socket: socket.socket) -> None:
+def test_lifespan_does_not_send_ready_before_the_socket_is_bound(notify_socket: socket.socket) -> None:
+    # READY=1 is sent by the server after bind (web/app.py, R3-4-5); the lifespan runs before bind.
     server = notify_socket
     manager = SimpleNamespace(
         configure_alert_delivery=lambda: None,
@@ -226,10 +228,15 @@ def test_lifespan_sends_ready_when_no_engine_starts(notify_socket: socket.socket
         stop_engine=lambda: None,
     )
     _serve_lifespan(manager)
-    assert server.recv(64) == b"READY=1"
+    server.settimeout(0.2)
+    seen: list[bytes] = []
+    with suppress(socket.timeout):
+        while True:
+            seen.append(server.recv(64))
+    assert b"READY=1" not in seen
 
 
-def test_lifespan_sends_ready_even_when_the_engine_gate_is_unhealthy(notify_socket: socket.socket) -> None:
+def test_lifespan_sends_no_watchdog_when_the_engine_gate_is_unhealthy(notify_socket: socket.socket) -> None:
     server = notify_socket
     manager = SimpleNamespace(
         configure_alert_delivery=lambda: None,
@@ -238,8 +245,7 @@ def test_lifespan_sends_ready_even_when_the_engine_gate_is_unhealthy(notify_sock
         stop_engine=lambda: None,
     )
     _serve_lifespan(manager)
-    assert server.recv(64) == b"READY=1"
-    # The unhealthy gate suppresses every WATCHDOG datagram.
+    # The unhealthy gate suppresses every WATCHDOG datagram (and READY now comes from the server).
     server.settimeout(0.2)
     with pytest.raises(socket.timeout):
         server.recv(64)

@@ -430,8 +430,8 @@ Every parayabuck command uses the same five codes. Scripts, the unit's
 |------|---------|
 | 0 | Success, OK health, or nothing to do. |
 | 1 | Refused or failed: a rebase or halt refusal, a failed backup or bundle, a `doctor` blocker (and `--strict` warnings), DEGRADED, BLOCKED or UNKNOWN health, an unknown `ops explain` decision id. |
-| 2 | CRITICAL health (`ops status`, `ops doctor`) only. A cleanly stopped engine is BLOCKED (exit 1), and `parayabuck tax` with no subcommand is a usage error (64). |
-| 3 | A file or database the command needs does not exist: the `backup --verify-only` target, the runtime database for `backup`, the halt directory, the decision database for `ops rebase-ownership`. Nothing was created. |
+| 2 | CRITICAL health (`ops status`, `ops doctor`) only. A cleanly stopped engine is BLOCKED (exit 1). |
+| 3 | A file or database the command needs does not exist: the `backup --verify-only` target, the runtime database for `backup`, the halt directory, the decision database for `ops rebase-ownership`, the ledger for `tax import-activities` and `tax export`. Nothing was created. |
 | 64 | Usage error: an unknown or malformed argument, a bad `--since`/`--until` value, a bad `--broker-qty`, `--broker-average-cost` or `--acquisition-unit-cost`; for `parayabuck tax`, a bad `--start`/`--end`/`--since` date, a `--year` out of range, or no subcommand. |
 
 WARNING and other log lines go to stderr, so `--json` output on stdout stays

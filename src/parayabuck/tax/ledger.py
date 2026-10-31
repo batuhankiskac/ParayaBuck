@@ -27,6 +27,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
 from parayabuck.core.models import Market
+from parayabuck.monitoring.operational_event import mask_account_number
 from parayabuck.tax.errors import LedgerError
 from parayabuck.tax.rates import RateBook, prior_month_key
 from parayabuck.tax.rules import INDEXATION_MIN_RISE
@@ -49,6 +50,10 @@ class Fill:
     # False when the broker reported no fee for this fill. ``fee`` is then a
     # 0.0 placeholder, which the ledger must not book as a free fill.
     fee_observed: bool = True
+    # True when the fee is unobserved only because the trade stream never carries a
+    # commission field. Alpaca equity orders are commission-free, so 0.0 is the expected
+    # value there, not a gap in the broker data (F3-1-5).
+    fee_stream_norm: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,6 +101,28 @@ def parse_instant(text: str) -> datetime:
     return value
 
 
+def _stream_only_fee_gaps(connection: sqlite3.Connection) -> set[str]:
+    """Fill activity ids whose unobserved fee was journaled only by the trade stream.
+
+    The execution journal keys each event by ``dedup_identity``, which is the fill's
+    ``activity_id``. An id that also has a journaled unobserved fee from another source
+    is a real gap, so it is not listed here.
+    """
+    present = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'portfolio_execution_events'"
+    ).fetchone()
+    if present is None:
+        return set()
+    stream: set[str] = set()
+    other: set[str] = set()
+    rows = connection.execute(
+        "SELECT dedup_identity, source FROM portfolio_execution_events WHERE fee_observed = 0"
+    ).fetchall()
+    for identity, source in rows:
+        (stream if str(source) == "stream" else other).add(str(identity))
+    return stream - other
+
+
 def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
     """Every bot equity fill of ``account_id``, oldest first (read-only query)."""
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(portfolio_fills)")}
@@ -116,11 +143,13 @@ def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
            WHERE s.account_id = ? AND o.market = ? AND f.quantity > 0""",
         (account_id, Market.EQUITY.value),
     ).fetchall()
+    stream_only_gaps = _stream_only_fee_gaps(connection)
     fills: list[Fill] = []
     for fill_id, symbol, side, occurred_at, quantity, price, fee, fee_observed in rows:
         normalized = str(side).lower()
         if normalized not in {"buy", "sell"}:
             raise LedgerError(f"fill {fill_id} has unknown side {side!r}")
+        observed = bool(fee_observed)
         fills.append(
             Fill(
                 fill_id=str(fill_id),
@@ -130,7 +159,8 @@ def read_fills(connection: sqlite3.Connection, account_id: str) -> list[Fill]:
                 quantity=float(quantity),
                 price=float(price),
                 fee=float(fee or 0.0),
-                fee_observed=bool(fee_observed),
+                fee_observed=observed,
+                fee_stream_norm=not observed and str(fill_id) in stream_only_gaps,
             )
         )
     fills.sort(key=lambda fill: (fill.occurred_at, fill.fill_id))
@@ -168,8 +198,10 @@ def assert_no_ownership_adjustments(
         recorded = ", ".join(
             f"{symbol} {first[:10]}..{last[:10]}" for symbol, _count, first, last in rows if str(symbol) in adjusted
         )
+        # The account id is masked: this text reaches the dashboard and the CLI (F3-1-1).
         raise LedgerError(
-            f"ownership adjustment(s) recorded for {', '.join(sorted(adjusted))} in account {account_id} "
+            f"ownership adjustment(s) recorded for {', '.join(sorted(adjusted))} in account "
+            f"{mask_account_number(account_id)} "
             f"({sum(adjusted.values())} row(s), created {recorded}); the fill-based TL ledger does not model "
             "splits or rebases, so no figure is produced for those symbols. Reconcile the lots manually first."
         )
@@ -186,6 +218,21 @@ def unobserved_fee_symbols(disposals: Sequence[LotDisposal], fills: Sequence[Fil
     return sorted(
         {item.symbol for item in disposals if item.buy_fill_id in unobserved or item.sell_fill_id in unobserved}
     )
+
+
+def fee_gap_symbols(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> list[str]:
+    """Symbols whose disposals rest on an unobserved fee that is a real broker-data gap.
+
+    Stream fills without a commission field (the zero-commission norm) are excluded, so
+    a note built from this list points at data the operator can actually check (F3-1-5).
+    """
+    gaps = {fill.fill_id for fill in fills if not fill.fee_observed and not fill.fee_stream_norm}
+    return sorted({item.symbol for item in disposals if item.buy_fill_id in gaps or item.sell_fill_id in gaps})
+
+
+def stream_zero_fee_symbols(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> list[str]:
+    """Symbols whose unobserved fees are all trade-stream fills with no commission field."""
+    return sorted(set(unobserved_fee_symbols(disposals, fills)) - set(fee_gap_symbols(disposals, fills)))
 
 
 def assert_fees_observed(disposals: Sequence[LotDisposal], fills: Sequence[Fill]) -> None:
@@ -311,9 +358,11 @@ __all__ = [
     "assert_fees_observed",
     "assert_no_ownership_adjustments",
     "build_disposals",
+    "fee_gap_symbols",
     "match_disposals",
     "parse_instant",
     "read_fills",
+    "stream_zero_fee_symbols",
     "turkey_date",
     "unobserved_fee_symbols",
 ]

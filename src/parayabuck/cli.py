@@ -74,6 +74,19 @@ def _retention_days_arg(value: str) -> float:
     return days
 
 
+def _backup_label_arg(value: str) -> str:
+    """--label: a filesystem-safe label, refused as a usage error (F3-5-8)."""
+    from parayabuck.backup import _validate_label
+
+    try:
+        label = _validate_label(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if label is None:
+        raise argparse.ArgumentTypeError("--label must not be empty")
+    return label
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = _UsageParser(prog="parayabuck", description="ParayaBuck trading bot")
     parser.add_argument("--config", default=None, help="configuration YAML path")
@@ -97,7 +110,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     backup.add_argument(
         "--label",
-        type=str,
+        type=_backup_label_arg,
         default=None,
         help="label this snapshot (e.g. predeploy) so retention pruning never deletes it",
     )
@@ -330,12 +343,21 @@ def main(argv: list[str] | None = None) -> int:
         from parayabuck.tax.cli import run_tax
 
         return run_tax(args)
+    if args.command in {"backtest", "optimize"}:
+        # F3-5-7: a malformed date or --grid is a usage error, refused before the
+        # bars are fetched (a download costs time and provider quota).
+        problem = _backtest_argument_problem(args)
+        if problem is not None:
+            print(f"{args.command}: {problem}", file=sys.stderr)
+            return EXIT_USAGE
     try:
         config = load_config(args.config)
     except Exception as exc:
         # The backup timer runs unattended: an invalid settings file must be
         # a clear ERROR in the journal, not a bare traceback.
         log.error("parayabuck %s: configuration could not be loaded: %s", args.command, exc)
+        # F3-5-3: a missing settings file is "missing input" (3), any other failure is 1.
+        missing = isinstance(exc, FileNotFoundError)
         if args.command == "backup":
             _emit_ops_alert(
                 "backup_failed",
@@ -349,10 +371,10 @@ def main(argv: list[str] | None = None) -> int:
             # operator assume the halt took effect.
             print(
                 f"Operator halt NOT changed: the configuration could not be loaded ({exc}). "
-                "Fix config/settings.yaml or pass --config; no marker was written or removed.",
+                "Fix config/settings.yaml or pass --config before the command; no marker was written or removed.",
                 file=sys.stderr,
             )
-        return EXIT_FAILURE
+        return EXIT_MISSING if missing else EXIT_FAILURE
     if args.command == "authorize-live":
         return _authorize_live(config, args)
     if args.command in {"halt", "resume"}:
@@ -429,8 +451,10 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
             "A LIVE engine that is already running keeps trading. Stop it with `systemctl stop parayabuck` if it must stop."
         )
         return EXIT_OK
+    # F3-5-6 / D3-5-12: a bad argument is a usage error (64), not a refusal (1).
     if not args.operator or not str(args.operator).strip():
-        raise SystemExit("--operator is required")
+        print("authorize-live: --operator is required", file=sys.stderr)
+        return EXIT_USAGE
     if not config.live.enabled or config.live.hard_dollar_cap <= 0:
         raise SystemExit("live.enabled=true and a positive live.hard_dollar_cap are required")
     if not config.live.operator_approval_path:
@@ -440,9 +464,14 @@ def _authorize_live(config: Config, args: argparse.Namespace) -> int:
         from parayabuck.live_safety import STANDING_AUTHORIZATION_MAX_DAYS
 
         if not 1 <= standing_days <= STANDING_AUTHORIZATION_MAX_DAYS:
-            raise SystemExit(f"--standing-days must be between 1 and {STANDING_AUTHORIZATION_MAX_DAYS}")
+            print(
+                f"authorize-live: --standing-days must be between 1 and {STANDING_AUTHORIZATION_MAX_DAYS}",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
     elif not 1 <= args.expires_minutes <= 1440:
-        raise SystemExit("--expires-minutes must be between 1 and 1440")
+        print("authorize-live: --expires-minutes must be between 1 and 1440", file=sys.stderr)
+        return EXIT_USAGE
     from parayabuck.config import load_env_file
     from parayabuck.live_safety import LIVE_API_KEY_ENV, LIVE_SECRET_KEY_ENV, mode_credentials
 
@@ -572,9 +601,23 @@ def _emit_ops_alert(kind: str, message: str, **fields: Any) -> None:
 
 
 # Upper bound for the one-shot backup process to hand a queued backup_failed
-# e-mail to the SMTP server before it exits (one send is at most three
-# attempts of at most 60 s each, plus the retry backoff).
-_EMAIL_FLUSH_SECONDS = 60.0
+# e-mail to the SMTP server before it exits. One send is four attempts
+# (email_alerts._DELIVERY_ATTEMPTS), each bounded by the socket timeout (10 s by
+# default), plus the retry backoff of 5, 15 and 45 s: about 105 s in the worst
+# case, so 120 s leaves a margin (D3-3-6).
+_EMAIL_FLUSH_SECONDS = 120.0
+
+
+class _BackupTerminated(BaseException):
+    """SIGTERM reached the one-shot backup process (a unit stop or a start timeout).
+
+    A BaseException, so the ``except Exception`` in ``_run_backup`` does not also
+    record a write failure for the same stop.
+    """
+
+
+def _raise_backup_terminated(signum: int, frame: object) -> None:
+    raise _BackupTerminated(f"signal {signum}")
 
 
 def _disk_cost_line(directory: Path, pattern: str, what: str) -> str:
@@ -598,12 +641,33 @@ def _run_backup_with_email(config: Config, args: argparse.Namespace) -> int:
     daemon thread, so after the backup the queued mail gets a bounded time to
     leave before the process exits.
     """
+    import signal
+
     from parayabuck.monitoring.email_alerts import configure_email_alerts, current_sink
 
     configure_email_alerts(config.alerting.email, mode=config.runtime.mode.value)
+    handler_installed = False
+    previous_handler: Any = None
+    try:
+        previous_handler = signal.signal(signal.SIGTERM, _raise_backup_terminated)
+        handler_installed = True
+    except ValueError:
+        # Not the main thread: no handler, the run keeps its default behaviour.
+        pass
     try:
         return _run_backup(config, args)
+    except _BackupTerminated:
+        # R3-3-6: a SIGTERM used to end the run with no alert at all.
+        print("Backup terminated (SIGTERM) before it finished", file=sys.stderr)
+        _emit_ops_alert(
+            "backup_failed",
+            "Backup terminated by SIGTERM before it finished; this run did not publish a verified set",
+            reason="terminated",
+        )
+        return EXIT_FAILURE
     finally:
+        if handler_installed:
+            signal.signal(signal.SIGTERM, previous_handler if previous_handler is not None else signal.SIG_DFL)
         sink = current_sink()
         if sink is not None:
             sink.close()
@@ -623,7 +687,7 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
     the ``backup_failed`` alert: the timer runs unattended, so a silent
     failure would only surface when a restore is already needed.
     """
-    from parayabuck.backup import KEEP_PREFIX, backup_database, verify_backup_set
+    from parayabuck.backup import KEEP_PREFIX, backup_database, discard_backup_set, verify_backup_set
 
     if args.verify_only:
         target = Path(args.verify_only).absolute()
@@ -676,6 +740,9 @@ def _run_backup(config: Config, args: argparse.Namespace) -> int:
         )
         raise
     if not verified:
+        # R3-3-5: a set that fails its post-publication check is removed, so the
+        # freshness check does not count it as the newest backup.
+        discard_backup_set(destination)
         _emit_ops_alert(
             "backup_failed",
             f"Backup failed integrity check: {destination}",
@@ -759,6 +826,10 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
             fields={"mode": mode, "marker": str(marker), "user": record["user"]},
         )
         return EXIT_OK
+    if not marker.parent.is_dir():
+        # F3-5-3: the same missing-input exit as `halt` on this directory.
+        print(f"Operator halt NOT cleared: directory {marker.parent} does not exist", file=sys.stderr)
+        return EXIT_MISSING
     previous = read_operator_halt(marker)
     try:
         cleared = clear_operator_halt(marker)
@@ -771,8 +842,8 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
         print(f"Operator halt cleared: {marker} (was: {previous.get('reason') if previous else 'n/a'})")
         # resume never touches the persisted operator_halt incident (the runbook covers it).
         print("A persisted operator_halt incident is not removed by resume. If the engine refuses to start,")
-        print("clear it with the safety-lock reset (dashboard, or POST /api/engine/reset-safety-lock) once")
-        print("reconciliation passes.")
+        print("start the engine first, then clear it with the safety-lock reset (dashboard, or")
+        print("POST /api/engine/reset-safety-lock) once reconciliation passes.")
     else:
         print(f"No operator halt present at {marker}; nothing to clear.")
     # resume removes only the marker. A persisted operator_halt incident row still
@@ -783,7 +854,9 @@ def _run_halt(config: Config, args: argparse.Namespace) -> int:
         print(f"Persisted operator_halt incident: could not be read from {database}. Check it before a start.")
     elif rows:
         print(f"A persisted operator_halt incident row still exists in {database}: the engine still starts halted.")
-        print("Release it from the operator console (safety reset) once the marker is gone.")
+        # D3-5-9: the console reset is refused while the engine is stopped, so start first.
+        print("Start the engine, then release it from the operator console (safety reset). The reset is")
+        print("refused while the engine is stopped.")
     else:
         print(f"No persisted operator_halt incident row in {database}.")
     if cleared:
@@ -1038,6 +1111,50 @@ def _credential_permission_row(warning: str | None, *, strict: bool) -> tuple[st
     return ("FAIL" if strict else "WARN", warning)
 
 
+# One line per blocker row that has a known fix (D3-5-6). Rows not listed here
+# print only their detail.
+_DOCTOR_FIX_HINTS: dict[str, str] = {
+    "credential file owner-only": "chmod 600 on the credential file; it must be owner-only",
+    "no tracked .env": "git rm --cached .env and commit; credentials must never be tracked",
+    "unit-only keys not in env file": "move the named keys into the systemd unit drop-in, not the env file",
+    "sqlite integrity_check": "restore the newest verified backup (docs/operations.md, restore) before starting",
+    "config parses": "fix config/settings.yaml, then run doctor again",
+    "e-mail alerts valid": "fix alerting.email in config/settings.yaml; `parayabuck ops test-email` checks it",
+    "alpaca PAPER reachable": "check the PAPER keys in the credential file and the network",
+}
+
+
+def _alert_doctor_blocker(config: Config | None, failing: list[str]) -> None:
+    """Mail one ``runtime_start_failed`` for a ``doctor --strict`` blocker (D3-3-5).
+
+    ExecStartPre runs doctor --strict, so a blocker stops the engine start before
+    Python runs the engine. Nothing else reports it. Never raises; with no loadable
+    configuration there is no mail channel and nothing is sent.
+    """
+    if config is None:
+        return
+    from parayabuck.monitoring.email_alerts import configure_email_alerts, current_sink
+
+    names = ", ".join(failing) or "unknown"
+    try:
+        configure_email_alerts(config.alerting.email, mode=config.runtime.mode.value)
+        _emit_ops_alert(
+            "runtime_start_failed",
+            f"Engine start refused by doctor --strict: {names}",
+            reason="doctor_blocker",
+            failed_checks=names,
+        )
+    except Exception:  # pragma: no cover - the alert must never change the doctor result
+        log.exception("Could not send the doctor blocker alert")
+    finally:
+        sink = current_sink()
+        if sink is not None:
+            sink.close()
+            worker = getattr(sink, "_worker", None)
+            if worker is not None:
+                worker.join(timeout=_EMAIL_FLUSH_SECONDS)
+
+
 def _run_doctor(args: argparse.Namespace) -> int:
     """Read-only deployment preflight. No orders."""
     import importlib.metadata
@@ -1156,9 +1273,16 @@ def _run_doctor(args: argparse.Namespace) -> int:
                     else:
                         add(label, False, f"{p}: not readable")
                 else:
-                    test = p / ".doctor_write_test"
-                    test.write_text("ok")
-                    test.unlink()
+                    # S3-3-4: a random name created with O_EXCL, never a fixed name, so a
+                    # planted symlink in the directory is not written through.
+                    import tempfile
+
+                    probe_fd, probe_name = tempfile.mkstemp(prefix=".doctor_write_test.", dir=p)
+                    try:
+                        os.write(probe_fd, b"ok")
+                    finally:
+                        os.close(probe_fd)
+                    Path(probe_name).unlink()
                     add(label, True, str(p))
             except Exception as exc:
                 if label == "reports path writable" and not p.exists():
@@ -1360,12 +1484,21 @@ def _run_doctor(args: argparse.Namespace) -> int:
     print("=== ParayaBuck Doctor ===")
     for name, status, detail in checks:
         print(f"{status:4} {name}: {detail}")
+        if status == "FAIL" and name in _DOCTOR_FIX_HINTS:
+            # D3-5-6: a blocker row says what to do, not only what failed.
+            print(f"     fix: {_DOCTOR_FIX_HINTS[name]}")
     total_fail = sum(1 for _, s, _ in checks if s == "FAIL")
-    if blocker:
-        print(f"\nDoctor: {total_fail} failure(s) — BLOCKER", file=sys.stderr)
-        return 1
-    if warning and args.strict:
-        print("\nDoctor: warnings present with --strict — BLOCKER", file=sys.stderr)
+    failing = [name for name, status, _ in checks if status == "FAIL"]
+    if blocker or (warning and args.strict):
+        names = ", ".join(failing) or "see the rows above"
+        print(f"\nDoctor: {total_fail} failure(s) — BLOCKER: {names}", file=sys.stderr)
+        if args.strict:
+            # D3-5-6: after a failed start the unit stays in the failed state until it is reset.
+            print(
+                "After a failed start, run `systemctl reset-failed parayabuck` before starting again.", file=sys.stderr
+            )
+            # D3-3-5: the unit's ExecStartPre stops the start without any alert; mail it.
+            _alert_doctor_blocker(config, failing)
         return 1
     print(f"\nDoctor: {len(checks) - total_fail}/{len(checks)} checks passed — READY")
     return 0
@@ -1754,7 +1887,10 @@ def _ops_doctor(args: argparse.Namespace) -> int:
                 journal_path = cfg.observability.journal_path
             except Exception:
                 pass
-    except Exception:
+    except Exception as exc:
+        # F3-5-2: the default paths are used only when the database, snapshot and journal are all named.
+        if not (getattr(args, "db", None) and getattr(args, "snapshot", None) and getattr(args, "journal", None)):
+            return _ops_settings_failure("ops doctor", exc, json_output=bool(getattr(args, "json", False)))
         if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     try:
@@ -1779,7 +1915,25 @@ def _ops_doctor(args: argparse.Namespace) -> int:
     return _health_exit_code(result.get("overall", "UNKNOWN"))
 
 
+def _ops_settings_failure(command: str, exc: Exception, *, json_output: bool) -> int:
+    """A read-only ops command whose settings file cannot be loaded (F3-5-2).
+
+    The command used to fall back to the default paths in silence, so a broken
+    file looked like a fresh install. Now it says so on stderr (and as a JSON
+    object with --json) and exits with the missing-input or failure code.
+    """
+    message = (
+        f"{command}: the settings could not be loaded ({exc}); pass --config before the command, "
+        "or give every path the command reads (--journal, --db, --snapshot) explicitly"
+    )
+    print(message, file=sys.stderr)
+    if json_output:
+        print(json.dumps({"error": message}, indent=2))
+    return EXIT_MISSING if isinstance(exc, FileNotFoundError) else EXIT_FAILURE
+
+
 def _ops_events(args: argparse.Namespace) -> int:
+    json_output = bool(getattr(args, "json", False))
     since = _parse_time_arg(getattr(args, "since", None))
     until = _parse_time_arg(getattr(args, "until", None))
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
@@ -1791,19 +1945,20 @@ def _ops_events(args: argparse.Namespace) -> int:
                 journal_path = cfg.observability.journal_path
             except Exception:
                 pass
-    except Exception:
-        pass
+    except Exception as exc:
+        if not getattr(args, "journal", None):
+            return _ops_settings_failure("ops events", exc, json_output=json_output)
     from parayabuck.monitoring.journal import EventJournal
 
     # Handle missing DB gracefully
     if not Path(journal_path).exists():
-        if getattr(args, "json", False):
+        if json_output:
             print(json.dumps([], indent=2))
         else:
             print("No event journal found — fresh install (no events)")
         return 0
-    j = EventJournal.open_readonly(journal_path)
     try:
+        j = EventJournal.open_readonly(journal_path)
         events = _strict_events_query(
             j,
             since=since,
@@ -1817,10 +1972,13 @@ def _ops_events(args: argparse.Namespace) -> int:
             limit=int(getattr(args, "limit", 50) or 50),
         )
     except Exception as exc:
-        # A failed read is not "no events" (D2-6-2).
-        print(f"Event journal could not be read: {exc}", file=sys.stderr)
+        # A failed read is not "no events" (D2-6-2), and a bad journal is not a traceback (F3-5-5).
+        message = f"Event journal could not be read: {exc}"
+        print(message, file=sys.stderr)
+        if json_output:
+            print(json.dumps({"error": message}, indent=2))
         return EXIT_FAILURE
-    if getattr(args, "json", False):
+    if json_output:
         print(json.dumps([e.to_dict() for e in events], indent=2, default=str))
     else:
         if not events:
@@ -1831,7 +1989,8 @@ def _ops_events(args: argparse.Namespace) -> int:
             if e.decision_id:
                 corr += f" decision={e.decision_id[:8]}"
             if e.client_order_id:
-                corr += f" order={e.client_order_id[:8]}"
+                # P3-4-5: the full id. Every bot order id shares the same first eight characters.
+                corr += f" order={e.client_order_id}"
             print(f"{ts} {e.severity:8} {e.kind:30} {e.message}{corr}")
     return 0
 
@@ -1842,6 +2001,7 @@ def _ops_timeline(args: argparse.Namespace) -> int:
     incident_id = getattr(args, "incident", None)
     journal_path = getattr(args, "journal", None) or "data/runtime/observability.sqlite3"
     db_path = getattr(args, "db", None)
+    json_output = bool(getattr(args, "json", False))
     # allow config override
     try:
         cfg = load_config(getattr(args, "config", None))
@@ -1852,27 +2012,37 @@ def _ops_timeline(args: argparse.Namespace) -> int:
                 pass
         if not db_path:
             db_path = cfg.runtime.decision_db_path
-    except Exception:
+    except Exception as exc:
+        # F3-5-2: the defaults are used only when every path this command reads is explicit.
+        explicit = bool(getattr(args, "journal", None)) and (bool(db_path) or not decision_id)
+        if not explicit:
+            return _ops_settings_failure("ops timeline", exc, json_output=json_output)
         if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     limit = int(getattr(args, "limit", 100) or 100)
     events: list[Any] = []
-    # Query journal
+    # Query journal. A failed read is an error, not an empty timeline (F3-5-1).
+    failure: str | None = None
     try:
         from parayabuck.monitoring.journal import EventJournal
 
         if Path(journal_path).exists():
             j = EventJournal.open_readonly(journal_path)
             if decision_id:
-                events = j.query(decision_id=decision_id, limit=limit)
+                events = _strict_events_query(j, decision_id=decision_id, limit=limit)
             elif order_id:
-                events = j.query(client_order_id=order_id, limit=limit)
+                events = _strict_events_query(j, client_order_id=order_id, limit=limit)
             elif incident_id:
-                events = j.query(incident_id=incident_id, limit=limit)
+                events = _strict_events_query(j, incident_id=incident_id, limit=limit)
             else:
-                events = j.query(limit=limit)
+                events = _strict_events_query(j, limit=limit)
     except Exception as exc:
-        print(f"timeline journal query failed: {exc}", file=sys.stderr)
+        failure = f"timeline journal query failed: {exc}"
+        print(failure, file=sys.stderr)
+    if failure is not None:
+        if json_output:
+            print(json.dumps({"error": failure, "events": [], "reconstruction": None}, indent=2))
+        return EXIT_FAILURE
     # Also reconstruct decision if decision_id
     reconstruction = None
     if decision_id:
@@ -2170,7 +2340,10 @@ def _ops_bundle(args: argparse.Namespace) -> int:
                 pass
         if not getattr(args, "db", None):
             db_path = cfg.runtime.decision_db_path
-    except Exception:
+    except Exception as exc:
+        # F3-5-2: a support bundle built from defaults is refused unless all three paths are named.
+        if not (getattr(args, "snapshot", None) and getattr(args, "journal", None) and getattr(args, "db", None)):
+            return _ops_settings_failure("ops bundle", exc, json_output=False)
         if not db_path:
             db_path = "data/runtime/parayabuck.sqlite3"
     try:
@@ -2358,7 +2531,10 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
         # A write must never fall back to the default config: that could
         # rebase ownership in a different database than the engine's, and the
         # symbol and account checks below need the configuration.
-        print(f"Cannot load the configuration ({exc}); fix it or pass --config explicitly.", file=sys.stderr)
+        print(
+            f"Cannot load the configuration ({exc}); fix it or pass --config before the command name.",
+            file=sys.stderr,
+        )
         return EXIT_FAILURE
     db_path = getattr(args, "db", None) or config.runtime.decision_db_path
     if not Path(db_path).is_file():
@@ -2366,9 +2542,11 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
         return EXIT_MISSING
     if confirmed and _engine_may_be_running(config):
         # F2-9-3: a write while the engine runs races its ledger and its open orders.
+        # D3-5-8: the console runs in the same unit, so a stopped engine behind an active
+        # console still refuses. Stopping the unit is the step that clears it.
         print(
-            "Refusing: the engine heartbeat is live (or cannot be read). Stop the engine first "
-            "(`systemctl stop parayabuck`), wait for a 'stopped' health snapshot, then confirm.",
+            "Refusing: the parayabuck unit is active (the console and the engine share it), or its heartbeat "
+            "cannot be read. Run `systemctl stop parayabuck`, wait for a 'stopped' health snapshot, then confirm.",
             file=sys.stderr,
         )
         return EXIT_FAILURE
@@ -2382,7 +2560,9 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
             )
             return 1
         pinned_account = config.broker.expected_account_id
-        if pinned_account and account_id != pinned_account:
+        # F3-5-10: a PA-number pin is always verified, even when --account-id repeats it.
+        # The ledger keys accounts by UUID, so the pin is checked against the broker.
+        if pinned_account and (account_id != pinned_account or pinned_account.strip().upper().startswith("PA")):
             mismatch = _pinned_account_mismatch(config, account_id, pinned_account)
             if mismatch:
                 print(f"Refusing: {mismatch}", file=sys.stderr)
@@ -2495,7 +2675,8 @@ def _ops_rebase_ownership(args: argparse.Namespace) -> int:
                 "database": str(db_path),
             },
         )
-        print("Ownership rebased. Reset the safety lock once reconciliation is clean.")
+        # D3-5-8: the engine must be started again before the reset, which is refused while it is stopped.
+        print("Ownership rebased. Start the engine, then reset the safety lock once reconciliation is clean.")
         return EXIT_OK
     finally:
         repository.close()
@@ -2686,6 +2867,35 @@ def _parse_grid(items: list[str]) -> dict[str, list[object]]:
             raise SystemExit(f"Invalid --grid {item!r}")
         grid[name] = parsed
     return grid
+
+
+def _backtest_argument_problem(args: argparse.Namespace) -> str | None:
+    """The first malformed date or ``--grid`` of a backtest/optimize call, or None (F3-5-7).
+
+    Checked before the configuration loads and before any bar is fetched, so a typo
+    costs no provider request and no traceback.
+    """
+    for option, attribute in (
+        ("--start", "start"),
+        ("--end", "end"),
+        ("--train-start", "train_start"),
+        ("--train-end", "train_end"),
+        ("--oos-start", "oos_start"),
+        ("--oos-end", "oos_end"),
+    ):
+        value = getattr(args, attribute, None)
+        if value:
+            try:
+                _date(value)
+            except ValueError:
+                return f"{option} must be an ISO date (YYYY-MM-DD) or datetime, got {value!r}"
+    grid_items = getattr(args, "grid", None)
+    if grid_items:
+        try:
+            _parse_grid(grid_items)
+        except SystemExit as exc:
+            return str(exc.code)
+    return None
 
 
 def _date(value: str, *, end_of_day: bool = False) -> datetime:

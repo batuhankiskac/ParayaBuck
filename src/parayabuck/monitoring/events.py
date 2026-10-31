@@ -22,9 +22,11 @@ ALERT_KINDS_ORDERED: tuple[str, ...] = (
     # Engine start failed: permanent error, a startup guard (secret scan /
     # live arming) blocking the start, or N transient auto-start retries.
     "runtime_start_failed",
-    # A verified backup could not be written/verified, or the newest backup is
-    # older than the freshness bound (the backup timer stopped working).
+    # A verified backup could not be written/verified, or copied off-host.
     "backup_failed",
+    # The newest automatic backup is past the freshness bound. Raised by the
+    # engine's periodic pass, so it fires even when the backup timer is dead.
+    "backup_stale",
     # Warning-level data-provider outage (paper_incident.emit_incident_record
     # maps a non-critical PROVIDER_UNAVAILABLE incident here).
     "data_provider_unavailable",
@@ -105,6 +107,7 @@ WARNING_KINDS: frozenset[str] = frozenset(
         "live_authorization_expiring",
         "live_authorization_expired",
         "alert_delivery_failed",
+        "backup_stale",
     }
 )
 
@@ -151,6 +154,8 @@ EMAIL_ALERT_KINDS: frozenset[str] = frozenset(
         "market_data_degraded",
         "data_provider_unavailable",
         "backup_failed",
+        # The backup set has gone stale: the timer is dead or failing silently.
+        "backup_stale",
     }
 )
 

@@ -734,8 +734,10 @@ class BackupConfig:
     def __post_init__(self) -> None:
         if not self.path.strip():
             raise ValueError("backup.path must not be empty")
-        if not math.isfinite(self.retention_days) or self.retention_days <= 0:
-            raise ValueError("backup.retention_days must be positive")
+        # At least one day, as the --retention-days flag enforces (R3-3-7): a shorter
+        # window prunes every older automatic set and leaves a single backup.
+        if not math.isfinite(self.retention_days) or self.retention_days < 1.0:
+            raise ValueError("backup.retention_days must be a finite number of at least 1 day")
 
 
 @dataclass(frozen=True)

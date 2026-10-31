@@ -282,6 +282,18 @@ def _file_mtime(path: Path) -> float | None:
         return None
 
 
+def discard_backup_set(snapshot: str | Path) -> None:
+    """Remove a published snapshot and every set member it carries (best effort).
+
+    Used when a published set fails its post-publication verification, so a
+    rejected set is not counted as the newest backup by the freshness check.
+    """
+    candidate = Path(snapshot)
+    _remove_candidate(candidate)
+    for name in SET_SIDECAR_NAMES:
+        _remove_candidate(_set_sidecar_path(candidate, name))
+
+
 def _set_sidecars(snapshot: Path) -> list[Path]:
     """The set members that exist next to ``snapshot`` (regular files only)."""
     return [path for path in (_set_sidecar_path(snapshot, name) for name in SET_SIDECAR_NAMES) if path.is_file()]
@@ -411,7 +423,13 @@ def backup_database(
                 continue
             destination = candidate
             break
-        stage.unlink()
+        try:
+            # The hard link above is the commit point: a failure to drop the
+            # staging name must not remove the snapshot just published (R3-5-3).
+            # A leftover staging name is an orphan that the next run sweeps.
+            stage.unlink()
+        except OSError as exc:
+            log.warning("Could not remove the staging name %s: %s", stage.name, exc)
         try:
             _fsync_directory(target_dir)
         except OSError as exc:
@@ -691,6 +709,27 @@ def latest_backup_age_hours(backup_dir: str | Path, *, now: datetime | None = No
     return max(0.0, (reference - newest) / 3600.0)
 
 
+def backup_stale_reason(
+    backup_dir: str | Path,
+    *,
+    now: datetime | None = None,
+    max_age_hours: float = MAX_BACKUP_AGE_HOURS,
+) -> str | None:
+    """The ``backup_stale`` alert text when the newest automatic backup is past ``max_age_hours``.
+
+    None when the set is fresh, and None when the directory holds no automatic
+    backup at all: that case is the doctor's WARN, not an engine alert, so a host
+    whose timer was never installed does not mail on every start.
+    """
+    age = latest_backup_age_hours(backup_dir, now=now)
+    if age is None or age <= max_age_hours:
+        return None
+    return (
+        f"The newest automatic backup in {backup_dir} is {age:.1f} h old (limit {max_age_hours:g} h): "
+        "the backup timer has stopped producing verified backups. Check parayabuck-backup.timer and its journal."
+    )
+
+
 __all__ = [
     "AUTO_BACKUP_GLOB",
     "BACKUP_PREFIX",
@@ -704,7 +743,9 @@ __all__ = [
     "BackupVerificationError",
     "OffhostCopyError",
     "backup_database",
+    "backup_stale_reason",
     "copy_offhost",
+    "discard_backup_set",
     "latest_backup_age_hours",
     "offhost_command",
     "prune_backups",

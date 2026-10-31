@@ -47,9 +47,11 @@ if TYPE_CHECKING:
 # An explicit set, not the e-mail routing list: adding an e-mailed kind must not
 # silently move it onto the caller's thread. Kinds that short-lived CLI processes
 # emit (backup_failed, safety_lock_reset, risk_epoch_reset, ...) stay here, since
-# an async queue would drop them when the process exits. Decision (2026-10-28): the
-# set equals the EMAIL_ALERT_KINDS membership as of this audit, so today's durability
-# is unchanged.
+# an async queue would drop them when the process exits. The set holds the
+# EMAIL_ALERT_KINDS membership (decision 2026-10-28) plus the operator audit rows
+# that short-lived CLI commands write (halt set/cleared, ownership rebase): those
+# rows are the only record of the action, so they must be committed before the
+# command returns (F3-5-4).
 SAFETY_JOURNAL_KINDS: frozenset[str] = frozenset(
     {
         "runtime_stopped_unexpected",
@@ -74,6 +76,10 @@ SAFETY_JOURNAL_KINDS: frozenset[str] = frozenset(
         "market_data_degraded",
         "data_provider_unavailable",
         "backup_failed",
+        "backup_stale",
+        "operator_halt_set",
+        "operator_halt_cleared",
+        "ownership_rebased",
     }
 )
 

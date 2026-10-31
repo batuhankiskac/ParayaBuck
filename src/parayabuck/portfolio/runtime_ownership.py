@@ -8,6 +8,8 @@ The repository still owns persistence; this module owns the pure math.
 
 from __future__ import annotations
 
+from parayabuck.portfolio.ownership_rebase import QUANTITY_TOLERANCE
+
 
 class OwnershipInconsistency(RuntimeError):
     """Net ownership is negative for one or more symbols (an invariant violation).
@@ -45,18 +47,27 @@ def net_owned_quantities(
     Filters out near-zero dust (|qty| <= 1e-12).
     """
     net: dict[str, float] = {}
+    gross: dict[str, float] = {}
     for symbol, side, filled in order_rows:
         if filled <= 0:
             continue
         net[symbol] = net.get(symbol, 0.0) + (filled if side == "buy" else -filled)
+        gross[symbol] = gross.get(symbol, 0.0) + filled
     for symbol, adjusted in adjustments:
         net[symbol] = net.get(symbol, 0.0) + float(adjusted or 0.0)
 
-    negative = {s: q for s, q in net.items() if q < -1e-9}
+    # The same tolerance the lot band uses (F3-4-2): float noise that the band
+    # absorbs must not trip the net guard, so a negative is measured against
+    # the symbol's gross filled quantity, relative to QUANTITY_TOLERANCE, with
+    # the 1e-9 absolute floor.
+    def below_zero(symbol: str) -> bool:
+        return net[symbol] < -max(1e-9, gross.get(symbol, 0.0) * QUANTITY_TOLERANCE)
+
+    negative = {s: q for s, q in net.items() if below_zero(s)}
     if negative and not allow_negative:
         raise OwnershipInconsistency(negative)
     if allow_negative:
-        return {s: q for s, q in net.items() if q > 1e-12 or q < -1e-9}
+        return {s: q for s, q in net.items() if q > 1e-12 or below_zero(s)}
     return {s: q for s, q in net.items() if q > 1e-12}
 
 

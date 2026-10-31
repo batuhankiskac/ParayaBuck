@@ -6,7 +6,6 @@ import math
 from pathlib import Path
 from typing import Any
 
-from parayabuck.execution.alerting import emit_execution_alert
 from parayabuck.execution.alpaca_models import RiskStatePersistenceError  # noqa: E402
 from parayabuck.logger import get_logger
 from parayabuck.monitoring.operational_event import mask_account_number
@@ -409,7 +408,10 @@ class RiskPeakService:
                     "Failed to reconcile peak sidecar to account %s", mask_account_number(account_id), exc_info=True
                 )
 
-    def save_peak_equity(self, account_id: str | None = None) -> None:
+    def save_peak_equity(self, account_id: str | None = None) -> tuple[str, float] | None:
+        """Persist the peak. Returns the ``(account_id, baseline)`` of a bootstrap
+        announcement that this save completed, for the caller to emit once it
+        has released the peak lock (C3-1-2); the alert is not raised here."""
         if not math.isfinite(self._peak_equity) or self._peak_equity < 0:
             raise ValueError(f"Cannot persist non-finite or negative peak: {self._peak_equity!r}")
         epoch = int(self._peak_epoch or 0)
@@ -424,13 +426,8 @@ class RiskPeakService:
             raise
         if self._bootstrap_pending and self._peak_equity > 0:
             self._bootstrap_pending = False
-            emit_execution_alert(
-                "paper_incident",
-                message=f"Drawdown baseline bootstrapped at {self._peak_equity:.2f}: no peak sidecar or persisted high-water existed",
-                category="peak_bootstrap",
-                account_id=resolved,
-                baseline_equity=self._peak_equity,
-            )
+            return resolved, self._peak_equity
+        return None
 
     def reset_peak_equity(
         self, equity: float, account_id: str | None = None, *, expected_epoch: int | None = None

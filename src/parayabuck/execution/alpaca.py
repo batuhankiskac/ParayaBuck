@@ -855,10 +855,10 @@ class AlpacaBroker:
         svc = self._get_peak_service()
         svc.ensure_reconciled(account_id)
 
-    def _save_peak_equity(self) -> None:
+    def _save_peak_equity(self) -> tuple[str, float] | None:
         svc = self._get_peak_service()
         acct = svc.peak_account_id or self._account_id
-        svc.save_peak_equity(str(acct) if acct else None)
+        return svc.save_peak_equity(str(acct) if acct else None)
 
     def reset_peak_equity(self, equity: float) -> None:
         # Same lock as the account() peak read-modify-write: an operator reset
